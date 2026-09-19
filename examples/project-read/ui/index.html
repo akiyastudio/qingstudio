@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>项目文件读取示例</title>
+  <style>body{font:14px system-ui;margin:0;padding:24px}button{padding:8px 12px}pre{white-space:pre-wrap;word-break:break-word}</style>
+</head>
+<body>
+  <main>
+    <h1>项目文件读取</h1>
+    <p>通过 <code>project.files.page</code> 分页读取当前授权范围内的非媒体文件与 sidecar。</p>
+    <button id="load" type="button">读取第一页</button>
+    <pre id="result">等待操作</pre>
+  </main>
+  <script>
+    const button = document.querySelector('#load');
+    const result = document.querySelector('#result');
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      result.textContent = '读取中…';
+      try {
+        const page = await window.photoFlowComponent.rpc('sample.project-files.v1', { cursor: null });
+        result.textContent = JSON.stringify(page, null, 2);
+      } catch (error) {
+        result.textContent = `${error.code || 'ERROR'}: ${error.message}`;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

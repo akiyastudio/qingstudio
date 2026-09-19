@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hello Component</title>
+<style>body{font:14px system-ui;margin:0;padding:24px;background:#111827;color:#f9fafb}button{padding:8px 12px}pre{white-space:pre-wrap}</style>
+<h1>Hello Component</h1>
+<button id="load">读取项目媒体</button>
+<pre id="result">等待操作</pre>
+<script>
+  const result = document.querySelector('#result');
+  document.querySelector('#load').addEventListener('click', async () => {
+    try { result.textContent = JSON.stringify(await window.photoFlowComponent.rpc('sample.media-page.v1', {}), null, 2); }
+    catch (error) { result.textContent = `${error.code || 'ERROR'}: ${error.message}`; }
+  });
+</script>
+</html>

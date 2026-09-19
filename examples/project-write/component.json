@@ -1,0 +1,39 @@
+{
+  "apiVersion": 1,
+  "id": "project-write",
+  "version": "0.1.0",
+  "componentHost": {
+    "contractVersion": 2,
+    "contributions": [
+      {
+        "type": "workspace.toolbarAction",
+        "id": "open",
+        "label": "写入示例",
+        "pageId": "main"
+      },
+      {
+        "type": "component.fullPage",
+        "id": "main",
+        "title": "写入示例",
+        "entry": "ui/index.html"
+      }
+    ],
+    "service": {
+      "protocolVersion": 1,
+      "runtime": "node",
+      "entrypoints": {
+        "default": "service.cjs"
+      },
+      "rpcMethods": [
+        "project-write.rate.v1"
+      ],
+      "capabilities": [
+        "project.media.ratings.write"
+      ],
+      "permissions": [
+        "project.media.ratings.write"
+      ],
+      "events": []
+    }
+  }
+}

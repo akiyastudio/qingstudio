@@ -3,5 +3,5 @@ Copyright 2026 成都市金牛区拾玖寻铃摄影工作室
 
 Original code in this repository is licensed under the Apache License, Version 2.0.
 Third-party dependencies retain their respective licenses.
-This source distribution excludes optional plugin implementations and private backend services.
+This source distribution includes educational plugin examples and excludes official optional plugin implementations and private backend services.
 The license does not grant trademark rights.

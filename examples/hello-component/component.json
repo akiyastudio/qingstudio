@@ -1,0 +1,40 @@
+{
+  "apiVersion": 1,
+  "id": "hello-component",
+  "version": "1.0.0",
+  "componentHost": {
+    "contractVersion": 2,
+    "contributions": [
+      {
+        "type": "workspace.toolbarAction",
+        "id": "open",
+        "label": "Hello Component",
+        "pageId": "main"
+      },
+      {
+        "type": "component.fullPage",
+        "id": "main",
+        "title": "Hello Component",
+        "entry": "ui/index.html"
+      }
+    ],
+    "service": {
+      "protocolVersion": 1,
+      "runtime": "node",
+      "entrypoints": {
+        "default": "service.cjs"
+      },
+      "rpcMethods": [
+        "sample.context.v1",
+        "sample.media-page.v1"
+      ],
+      "capabilities": [
+        "project.media.page"
+      ],
+      "permissions": [
+        "project.media.read"
+      ],
+      "events": []
+    }
+  }
+}

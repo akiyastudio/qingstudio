@@ -1,0 +1,15 @@
+{
+  "name": "@qingstudio-example/project-read",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "photoflowComponent": {
+    "manifest": "component.json",
+    "development": {
+      "files": {
+        "service.cjs": "service.cjs",
+        "ui/index.html": "ui/index.html"
+      }
+    }
+  }
+}

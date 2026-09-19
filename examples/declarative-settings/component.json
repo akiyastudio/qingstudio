@@ -1,0 +1,108 @@
+{
+  "apiVersion": 1,
+  "id": "declarative-settings-example",
+  "version": "1.0.0",
+  "displayName": "声明式设置示例",
+  "description": "由照片流原生渲染的统一组件设置",
+  "entrypoints": {
+    "default": "service.cjs"
+  },
+  "componentHost": {
+    "contractVersion": 2,
+    "contributions": [
+      {
+        "type": "workspace.toolbarAction",
+        "id": "open",
+        "label": "设置示例",
+        "pageId": "main"
+      },
+      {
+        "type": "component.fullPage",
+        "id": "main",
+        "title": "声明式设置示例",
+        "entry": "ui/index.html"
+      },
+      {
+        "type": "application.settingsForm",
+        "id": "settings",
+        "label": "设置示例",
+        "title": "声明式设置示例",
+        "form": {
+          "schemaVersion": 1,
+          "groups": [
+            {
+              "id": "general",
+              "title": "常规",
+              "description": "这些控件由照片流统一渲染和保存。",
+              "fields": [
+                {
+                  "id": "enabled",
+                  "type": "toggle",
+                  "label": "启用自动处理",
+                  "description": "导入素材后自动运行组件。",
+                  "default": true
+                },
+                {
+                  "id": "mode",
+                  "type": "select",
+                  "label": "处理模式",
+                  "description": "选择速度与质量的平衡。",
+                  "default": "balanced",
+                  "options": [
+                    {
+                      "value": "fast",
+                      "label": "快速"
+                    },
+                    {
+                      "value": "balanced",
+                      "label": "均衡"
+                    },
+                    {
+                      "value": "quality",
+                      "label": "高质量"
+                    }
+                  ]
+                },
+                {
+                  "id": "displayName",
+                  "type": "text",
+                  "label": "显示名称",
+                  "default": "",
+                  "placeholder": "可选名称",
+                  "maxLength": 80
+                },
+                {
+                  "id": "quality",
+                  "type": "range",
+                  "label": "输出质量",
+                  "default": 85,
+                  "min": 1,
+                  "max": 100,
+                  "step": 1,
+                  "suffix": "%"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "service": {
+      "protocolVersion": 1,
+      "runtime": "node",
+      "entrypoints": {
+        "default": "service.cjs"
+      },
+      "rpcMethods": [
+        "example.ping.v1"
+      ],
+      "capabilities": [
+        "component.settings"
+      ],
+      "permissions": [
+        "component.settings"
+      ],
+      "events": []
+    }
+  }
+}

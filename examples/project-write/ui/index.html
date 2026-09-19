@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>项目评分写入示例</title>
+  <style>body{font:14px system-ui;margin:0;padding:24px}form{display:grid;gap:12px;max-width:520px}label{display:grid;gap:6px}input,select,button{box-sizing:border-box;padding:8px 10px}button{justify-self:start}pre{white-space:pre-wrap;word-break:break-word}</style>
+</head>
+<body>
+  <main>
+    <h1>项目评分写入</h1>
+    <p>演示带预期 revision 和幂等键的单项评分写入。请填写宿主返回的项目相对路径。</p>
+    <form id="rating-form">
+      <label>项目相对路径<input id="relative-path" required placeholder="images/example.jpg"></label>
+      <label>预期 revision<input id="revision" type="number" min="0" step="1" value="0" required></label>
+      <label>评分<select id="rating"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5" selected>5</option></select></label>
+      <button type="submit">写入评分</button>
+    </form>
+    <pre id="result">等待操作</pre>
+  </main>
+  <script>
+    const form = document.querySelector('#rating-form');
+    const result = document.querySelector('#result');
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = form.querySelector('button');
+      button.disabled = true;
+      result.textContent = '写入中…';
+      const relativePath = document.querySelector('#relative-path').value.trim();
+      const expectedRevision = Number(document.querySelector('#revision').value);
+      const rating = Number(document.querySelector('#rating').value);
+      const idempotencyKey = `rating-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      try {
+        const response = await window.photoFlowComponent.rpc('project-write.rate.v1', {
+          idempotencyKey,
+          items: [{ relativePath, rating, expectedRevision }],
+        });
+        result.textContent = JSON.stringify(response, null, 2);
+      } catch (error) {
+        result.textContent = `${error.code || 'ERROR'}: ${error.message}`;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

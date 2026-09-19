@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>面板插件示例</title>
+  <style>
+    :root{font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color-scheme:light;background:#fff;color:#1e293b}html.dark{color-scheme:dark;background:#0b1220;color:#e2e8f0}body{margin:0}main{padding:22px}section{margin-top:16px;border:1px solid #cbd5e1;border-radius:12px;padding:16px}button{border:0;border-radius:8px;background:#2563eb;color:#fff;padding:9px 14px;font-weight:700;cursor:pointer}pre{white-space:pre-wrap;word-break:break-word;color:#64748b}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>面板插件</h1>
+    <p>这个组件只贡献文件页面板，不创建新的组件标签页。</p>
+    <button id="inspect" type="button">读取面板上下文</button>
+    <section><strong>当前上下文</strong><pre id="output">尚未读取</pre></section>
+  </main>
+  <script>
+    const output = document.querySelector('#output');
+    const applyTheme = value => document.documentElement.classList.toggle('dark', value.resolvedTheme === 'dark');
+    photoFlowComponent.getContext().then(context => { applyTheme(context); output.textContent = JSON.stringify(context, null, 2); });
+    photoFlowComponent.onThemeChange(applyTheme);
+    photoFlowComponent.onContextChange(context => { applyTheme(context); output.textContent = JSON.stringify(context, null, 2); });
+    document.querySelector('#inspect').addEventListener('click', async () => { output.textContent = JSON.stringify(await photoFlowComponent.rpc('panel-example.inspect.v1', {}), null, 2); });
+  </script>
+</body>
+</html>

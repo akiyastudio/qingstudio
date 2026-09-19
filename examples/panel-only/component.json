@@ -1,0 +1,39 @@
+{
+  "apiVersion": 1,
+  "id": "panel-only-example",
+  "version": "0.1.0",
+  "componentHost": {
+    "contractVersion": 2,
+    "contributions": [
+      {
+        "type": "component.fullPage",
+        "id": "panel-ui",
+        "title": "面板插件示例",
+        "entry": "ui/index.html"
+      },
+      {
+        "type": "component.sidePanel",
+        "id": "panel",
+        "label": "面板示例",
+        "title": "面板插件示例",
+        "pageId": "panel-ui",
+        "rpcMethods": [
+          "panel-example.inspect.v1"
+        ]
+      }
+    ],
+    "service": {
+      "protocolVersion": 1,
+      "runtime": "node",
+      "entrypoints": {
+        "default": "service.cjs"
+      },
+      "rpcMethods": [
+        "panel-example.inspect.v1"
+      ],
+      "capabilities": [],
+      "permissions": [],
+      "events": []
+    }
+  }
+}

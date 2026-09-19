@@ -1,0 +1,39 @@
+{
+  "apiVersion": 1,
+  "id": "project-read",
+  "version": "1.0.0",
+  "componentHost": {
+    "contractVersion": 2,
+    "contributions": [
+      {
+        "type": "workspace.toolbarAction",
+        "id": "open",
+        "label": "Project Read",
+        "pageId": "main"
+      },
+      {
+        "type": "component.fullPage",
+        "id": "main",
+        "title": "Project Read",
+        "entry": "ui/index.html"
+      }
+    ],
+    "service": {
+      "protocolVersion": 1,
+      "runtime": "node",
+      "entrypoints": {
+        "default": "service.cjs"
+      },
+      "rpcMethods": [
+        "sample.project-files.v1"
+      ],
+      "capabilities": [
+        "project.files.page"
+      ],
+      "permissions": [
+        "project.files.read"
+      ],
+      "events": []
+    }
+  }
+}

@@ -24,11 +24,13 @@
     "preview": "vite preview",
     "electron": "npm run build:shell-thumbnail && npm run build:recycle-bin-service && npm run build:file-clipboard-service && npm run build:file-publication-service && npm run build:video-surface-host && npm run build:job-object-launcher && node scripts/launch-electron-dev.cjs",
     "electron:dev": "cross-env PHOTOFLOW_DEV_SERVER_URL=http://localhost:5173 concurrently -k \"cross-env BROWSER=none npm run dev\" \"npm run electron\"",
-    "preelectron:dev": "node scripts/prepare-development-python.cjs",
+    "preelectron:dev": "node scripts/prepare-development-python.cjs && npm run prepare:components:dev",
     "build:native": "npm run build:shell-thumbnail && npm run build:recycle-bin-service && npm run build:file-clipboard-service && npm run build:file-publication-service && npm run build:video-surface-host && npm run build:job-object-launcher",
     "electron:build": "npm run generate:icon && npm run build && npm run build:python && npm run build:native && node scripts/build-electron.cjs",
-    "test": "node scripts/test-public-source.cjs && node scripts/test-file-publication-platform.cjs && node scripts/test-component-status-refresh-policy.cjs",
-    "test:smoke": "node scripts/test-public-smoke.cjs"
+    "test": "node scripts/test-public-source.cjs && node scripts/test-file-publication-platform.cjs && node scripts/test-component-status-refresh-policy.cjs && npm run test:examples",
+    "test:smoke": "node scripts/test-public-smoke.cjs",
+    "test:examples": "node scripts/test-component-examples.cjs && node scripts/mock-component-service.cjs examples/hello-component/service.cjs",
+    "prepare:components:dev": "node scripts/prepare-development-components.cjs"
   },
   "build": {
     "appId": "cn.qingstudio.opensource",

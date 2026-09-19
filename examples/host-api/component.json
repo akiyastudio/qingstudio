@@ -1,0 +1,89 @@
+{
+  "apiVersion": 1,
+  "id": "host-api-example",
+  "version": "0.1.0",
+  "componentHost": {
+    "contractVersion": 2,
+    "contributions": [
+      {
+        "type": "workspace.toolbarAction",
+        "id": "open",
+        "label": "Host 入口示例",
+        "pageId": "main"
+      },
+      {
+        "type": "component.fullPage",
+        "id": "main",
+        "title": "Host 入口示例",
+        "entry": "ui/index.html"
+      },
+      {
+        "type": "component.sidePanel",
+        "id": "panel",
+        "label": "示例面板",
+        "pageId": "main",
+        "rpcMethods": [
+          "example.run.v1"
+        ]
+      },
+      {
+        "type": "media.contextAction",
+        "id": "media",
+        "label": "处理所选媒体",
+        "pageId": "main",
+        "rpcMethods": [
+          "example.run.v1"
+        ]
+      },
+      {
+        "type": "project.contextAction",
+        "id": "project",
+        "label": "处理项目",
+        "pageId": "main",
+        "rpcMethods": [
+          "example.run.v1"
+        ]
+      },
+      {
+        "type": "project.importProvider",
+        "id": "import",
+        "label": "示例导入",
+        "pageId": "main",
+        "rpcMethods": [
+          "example.run.v1"
+        ]
+      },
+      {
+        "type": "project.exportProvider",
+        "id": "export",
+        "label": "示例导出",
+        "pageId": "main",
+        "rpcMethods": [
+          "example.run.v1"
+        ]
+      },
+      {
+        "type": "application.command",
+        "id": "command",
+        "label": "Host 入口示例命令",
+        "pageId": "main",
+        "rpcMethods": [
+          "example.run.v1"
+        ]
+      }
+    ],
+    "service": {
+      "protocolVersion": 1,
+      "runtime": "node",
+      "entrypoints": {
+        "default": "service.cjs"
+      },
+      "rpcMethods": [
+        "example.run.v1"
+      ],
+      "capabilities": [],
+      "permissions": [],
+      "events": []
+    }
+  }
+}

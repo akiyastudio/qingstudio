@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://photoflow.local/schemas/media-playback-backend-v1.schema.json",
+  "title": "PhotoFlow Media Playback Backend V1 Contribution",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocolVersion", "backendId", "displayName", "backendVersion", "transport", "priority", "probe", "features"],
+  "properties": {
+    "type": { "const": "media.playbackBackend" },
+    "protocolVersion": { "const": 1 },
+    "backendId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$" },
+    "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "backendVersion": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$" },
+    "transport": { "const": "media-playback-backend-v1" },
+    "priority": { "type": "integer", "minimum": -1000, "maximum": 1000 },
+    "probe": {
+      "type": "object", "additionalProperties": false,
+      "required": ["containers", "codecs", "extensions"],
+      "properties": {
+        "containers": { "$ref": "#/$defs/tokens" },
+        "extensions": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "pattern": "^\\.[a-z0-9]{1,12}$" } },
+        "codecs": {
+          "type": "object", "additionalProperties": false, "required": ["video", "audio"],
+          "properties": { "video": { "$ref": "#/$defs/optionalTokens" }, "audio": { "$ref": "#/$defs/optionalTokens" } }
+        }
+      }
+    },
+    "features": {
+      "type": "object", "additionalProperties": false,
+      "required": ["transforms", "hdr", "statistics", "subtitles", "hardwareDecoding", "capture"],
+      "properties": {
+        "transforms": { "type":"object","additionalProperties":false,"required":["aspectModes","rotation","flip","crop"],"properties":{"aspectModes":{"type":"array","minItems":1,"uniqueItems":true,"items":{"enum":["source","contain","cover","16:9","4:3","1:1"]}},"rotation":{"type":"boolean"},"flip":{"type":"boolean"},"crop":{"type":"boolean"}} },
+        "hdr": { "type":"object","additionalProperties":false,"required":["passthrough","toneMapping","algorithms","targetPeakControl"],"properties":{"passthrough":{"type":"boolean"},"toneMapping":{"type":"boolean"},"algorithms":{"type":"array","minItems":1,"uniqueItems":true,"items":{"enum":["auto","bt2390","reinhard","mobius","hable"]}},"targetPeakControl":{"type":"boolean"}} },
+        "statistics": { "type":"object","additionalProperties":false,"required":["basic","decode","hdr","timing","cache","gpu","maxUpdateHz"],"properties":{"basic":{"type":"boolean"},"decode":{"type":"boolean"},"hdr":{"type":"boolean"},"timing":{"type":"boolean"},"cache":{"type":"boolean"},"gpu":{"type":"boolean"},"maxUpdateHz":{"type":"number","minimum":0.2,"maximum":4}} },
+        "subtitles": { "type":"object","additionalProperties":false,"required":["embedded","external","ass","styles"],"properties":{"embedded":{"type":"boolean"},"external":{"type":"boolean"},"ass":{"type":"boolean"},"styles":{"type":"boolean"}} },
+        "hardwareDecoding": { "type":"object","additionalProperties":false,"required":["supported","selectable","softwareFallback"],"properties":{"supported":{"type":"boolean"},"selectable":{"type":"boolean"},"softwareFallback":{"type":"boolean"}} },
+        "capture": { "type":"object","additionalProperties":false,"required":["sourceFrame","displayedFrame"],"properties":{"sourceFrame":{"type":"boolean"},"displayedFrame":{"type":"boolean"}} }
+      }
+    }
+  },
+  "$defs": {
+    "tokens": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$" } },
+    "optionalTokens": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$" } }
+  }
+}

@@ -1,0 +1,186 @@
+/* PhotoFlow component UI contract.
+ * Stable, framework-free tokens and primitives shared by the host and isolated
+ * component renderers. Components must not import host React implementation.
+ */
+:root {
+  color-scheme: light;
+  --pf-canvas: #f8fafc;
+  --pf-surface: #ffffff;
+  --pf-subtle: #f1f5f9;
+  --pf-elevated: #ffffff;
+  --pf-border: #cbd5e1;
+  --pf-border-subtle: #e2e8f0;
+  --pf-text: #1e293b;
+  --pf-text-strong: #0f172a;
+  --pf-muted: #64748b;
+  --pf-primary: #2563eb;
+  --pf-primary-hover: #1d4ed8;
+  --pf-primary-soft: #eff6ff;
+  --pf-focus: #3b82f6;
+  --pf-success: #047857;
+  --pf-success-soft: #ecfdf5;
+  --pf-warn: #b45309;
+  --pf-warn-soft: #fffbeb;
+  --pf-danger: #dc2626;
+  --pf-danger-soft: #fef2f2;
+  --pf-scrollbar-thumb: #cbd5e1;
+  --pf-scrollbar-thumb-hover: #94a3b8;
+  --pf-panel-body: #ffffff;
+  --pf-control-bg: #ffffff;
+  --pf-overlay: rgb(15 23 42 / 55%);
+  --pf-radius-sm: 8px;
+  --pf-radius-md: 10px;
+  --pf-radius-lg: 12px;
+  --pf-shadow-sm: 0 1px 2px rgb(15 23 42 / 8%);
+  --pf-shadow-lg: 0 18px 46px rgb(15 23 42 / 18%);
+  --pf-space-1: 4px;
+  --pf-space-2: 8px;
+  --pf-space-3: 12px;
+  --pf-space-4: 16px;
+  --pf-space-5: 20px;
+  --pf-space-6: 24px;
+  --pf-space-8: 32px;
+  --pf-font-sans: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  --pf-font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --pf-text-xs: 12px;
+  --pf-text-sm: 14px;
+  --pf-text-md: 16px;
+  --pf-text-lg: 20px;
+  --pf-leading: 1.5;
+  --pf-transition: 140ms ease;
+  --pf-control-sm: 30px;
+  --pf-control-md: 36px;
+  --pf-control-lg: 40px;
+}
+
+html.dark {
+  color-scheme: dark;
+  --pf-canvas: #030407;
+  --pf-surface: #090c12;
+  --pf-subtle: #111827;
+  --pf-elevated: #0d1119;
+  --pf-border: #374151;
+  --pf-border-subtle: #1f2937;
+  --pf-text: #e2e8f0;
+  --pf-text-strong: #f8fafc;
+  --pf-muted: #9ca3af;
+  --pf-primary: #2563eb;
+  --pf-primary-hover: #3b82f6;
+  --pf-primary-soft: #071a3d;
+  --pf-focus: #3b82f6;
+  --pf-success: #6ee7b7;
+  --pf-success-soft: #052e2b;
+  --pf-warn: #fcd34d;
+  --pf-warn-soft: #291b05;
+  --pf-danger: #fca5a5;
+  --pf-danger-soft: #2b0b0d;
+  --pf-scrollbar-thumb: #374151;
+  --pf-scrollbar-thumb-hover: #4b5563;
+  --pf-panel-body: #0b1220;
+  --pf-control-bg: #080e19;
+  --pf-overlay: rgb(2 6 23 / 72%);
+  --pf-shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+  --pf-shadow-lg: 0 22px 54px rgb(0 0 0 / 48%);
+}
+
+.pf-canvas { background: var(--pf-canvas); color: var(--pf-text); }
+.pf-surface { background: var(--pf-surface); border-color: var(--pf-border-subtle); color: var(--pf-text); }
+.pf-card { border: 1px solid var(--pf-border-subtle); border-radius: var(--pf-radius-lg); background: var(--pf-surface); color: var(--pf-text); box-shadow: var(--pf-shadow-sm); }
+.pf-panel-card, .pf-panel-section { border: 1px solid var(--pf-border-subtle); border-radius: var(--pf-radius-lg); background: var(--pf-canvas); color: var(--pf-text); }
+.pf-panel-section { padding: 16px; }
+.pf-form-label { color: var(--pf-muted); font-size: 12px; font-weight: 700; }
+.pf-form-input { min-height: var(--pf-control-md); border: 1px solid var(--pf-border); border-radius: var(--pf-radius-sm); background: var(--pf-control-bg); color: var(--pf-text); padding: .55rem .7rem; outline: none; }
+.pf-form-input:focus { border-color: var(--pf-focus); box-shadow: 0 0 0 2px color-mix(in srgb, var(--pf-focus) 15%, transparent); }
+.pf-toolbar { border-bottom: 1px solid var(--pf-border-subtle); background: var(--pf-surface); color: var(--pf-text); }
+.pf-modal-backdrop { background: var(--pf-overlay); }
+.pf-modal { border: 1px solid var(--pf-border); border-radius: var(--pf-radius-lg); background: var(--pf-elevated); color: var(--pf-text); box-shadow: var(--pf-shadow-lg); }
+.pf-button { min-height: var(--pf-control-md); border-radius: var(--pf-radius-sm); border: 1px solid var(--pf-border); background: var(--pf-surface); color: var(--pf-text); padding: .55rem .9rem; font-size: .875rem; font-weight: 700; transition: background .15s, color .15s; cursor: pointer; }
+.pf-button:hover:not(:disabled) { background: var(--pf-subtle); }
+.pf-button-primary { border-color: var(--pf-primary); background: var(--pf-primary); color: #fff; }
+.pf-button-primary:hover:not(:disabled) { border-color: var(--pf-primary-hover); background: var(--pf-primary-hover); }
+.pf-button-danger { border-color: color-mix(in srgb, var(--pf-danger) 45%, var(--pf-border)); color: var(--pf-danger); }
+.pf-button-danger:hover:not(:disabled) { background: var(--pf-danger-soft); }
+.pf-input { min-height: var(--pf-control-md); border: 1px solid var(--pf-border); border-radius: var(--pf-radius-sm); background: var(--pf-control-bg); color: var(--pf-text); padding: .55rem .7rem; outline: none; }
+.pf-input:focus { border-color: var(--pf-focus); box-shadow: 0 0 0 2px color-mix(in srgb, var(--pf-focus) 15%, transparent); }
+.pf-button:disabled, .pf-button-primary:disabled, .pf-input:disabled { cursor: not-allowed; opacity: .48; }
+.pf-icon-tile { display: inline-flex; align-items: center; justify-content: center; border-radius: var(--pf-radius-sm); background: var(--pf-primary-soft); color: var(--pf-primary); }
+.pf-banner { border: 1px solid var(--pf-border); border-radius: var(--pf-radius-md); background: var(--pf-elevated); color: var(--pf-text); box-shadow: var(--pf-shadow-sm); }
+.pf-banner[data-tone="warning"] { border-color: color-mix(in srgb, var(--pf-warn) 42%, var(--pf-border)); background: var(--pf-warn-soft); color: var(--pf-warn); }
+.pf-banner[data-tone="danger"] { border-color: color-mix(in srgb, var(--pf-danger) 42%, var(--pf-border)); background: var(--pf-danger-soft); color: var(--pf-danger); }
+.pf-status { border-radius: 999px; background: var(--pf-subtle); color: var(--pf-muted); }
+.pf-status[data-tone="primary"] { background: var(--pf-primary-soft); color: var(--pf-primary); }
+.pf-status[data-tone="success"] { background: var(--pf-success-soft); color: var(--pf-success); }
+.pf-status[data-tone="warning"] { background: var(--pf-warn-soft); color: var(--pf-warn); }
+.pf-status[data-tone="danger"] { background: var(--pf-danger-soft); color: var(--pf-danger); }
+
+/* Keep isolated component surfaces visually consistent with the Host. */
+::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-track-piece, ::-webkit-scrollbar-corner { background: transparent; box-shadow: none; }
+::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 9999px; background-color: var(--pf-scrollbar-thumb); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--pf-scrollbar-thumb-hover); }
+
+/* Settings-page primitives. Custom component pages can use these directly;
+ * standard settings should prefer application.settingsForm so the Host renders
+ * the same structure without loading component HTML. */
+.pf-settings-page { height: 100%; min-height: 0; overflow-x: hidden; overflow-y: auto; background: var(--pf-canvas); color: var(--pf-text); font-family: var(--pf-font-sans); font-size: var(--pf-text-sm); line-height: var(--pf-leading); }
+.pf-settings-page, .pf-settings-page *, .pf-settings-page *::before, .pf-settings-page *::after { box-sizing: border-box; }
+.pf-settings-container { width: 100%; max-width: 72rem; margin: 0 auto; padding: 2.5rem 2rem; }
+.pf-settings-header { margin-bottom: 2.5rem; }
+.pf-settings-title { margin: 0; color: var(--pf-text); font-size: 1.5rem; line-height: 2rem; font-weight: 700; }
+.pf-settings-subtitle { margin: var(--pf-space-1) 0 0; color: var(--pf-muted); font-size: var(--pf-text-xs); }
+.pf-settings-group { margin-top: 2.5rem; }
+.pf-settings-group:first-of-type { margin-top: 0; }
+.pf-settings-group-title { margin: 0 0 var(--pf-space-3); color: var(--pf-text); font-size: var(--pf-text-sm); font-weight: 700; }
+.pf-settings-group-description { margin: calc(var(--pf-space-3) * -1 + var(--pf-space-1)) 0 var(--pf-space-3); color: var(--pf-muted); font-size: var(--pf-text-xs); }
+.pf-settings-card { overflow: hidden; border: 1px solid var(--pf-border-subtle); border-radius: var(--pf-radius-lg); background: var(--pf-surface); }
+.pf-settings-row { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.25fr); align-items: center; gap: var(--pf-space-4); padding: 14px var(--pf-space-4); border-top: 1px solid var(--pf-border-subtle); }
+.pf-settings-row[data-align="start"] { align-items: start; }
+.pf-settings-row:first-child { border-top: 0; }
+.pf-settings-copy, .pf-settings-control { min-width: 0; }
+.pf-settings-row-title { margin: 0; color: var(--pf-text); font-size: var(--pf-text-sm); font-weight: 700; }
+.pf-settings-description { margin: var(--pf-space-1) 0 0; color: var(--pf-muted); font-size: var(--pf-text-xs); line-height: 1.65; }
+.pf-settings-control { justify-self: stretch; }
+.pf-control-cluster { display: flex; align-items: center; justify-content: flex-end; gap: var(--pf-space-2); width: 100%; }
+.pf-control-cluster input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; accent-color: var(--pf-primary); }
+.pf-settings-field { width: 100%; max-width: 24rem; margin-left: auto; }
+.pf-path-field { display: flex; min-width: 0; align-items: center; gap: var(--pf-space-2); }
+.pf-path-field .pf-input { min-width: 0; width: 100%; flex: 1 1 auto; font-family: var(--pf-font-mono); font-size: var(--pf-text-xs); }
+.pf-path-field .pf-button { flex: 0 0 auto; }
+.pf-select, .pf-textarea { width: 100%; border: 1px solid var(--pf-border); border-radius: var(--pf-radius-sm); background: var(--pf-control-bg); color: var(--pf-text); font: inherit; transition: border-color var(--pf-transition), box-shadow var(--pf-transition); }
+.pf-select { min-height: var(--pf-control-md); padding: 0 var(--pf-space-3); }
+.pf-textarea { min-height: 96px; padding: var(--pf-space-3); resize: vertical; }
+.pf-switch { position: relative; display: inline-flex; width: 36px; height: 20px; flex: none; cursor: pointer; }
+.pf-switch > input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.pf-switch-track { width: 100%; height: 100%; border-radius: 999px; background: var(--pf-border); transition: background var(--pf-transition); }
+.pf-switch-thumb { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: var(--pf-shadow-sm); transition: transform var(--pf-transition); }
+.pf-switch > input:checked + .pf-switch-track { background: var(--pf-primary); }
+.pf-switch > input:checked ~ .pf-switch-thumb { transform: translateX(16px); }
+.pf-switch > input:focus-visible + .pf-switch-track { outline: 2px solid var(--pf-focus); outline-offset: 2px; }
+.pf-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid color-mix(in srgb, var(--pf-primary) 22%, transparent); border-top-color: var(--pf-primary); border-radius: 50%; animation: pf-spin .7s linear infinite; }
+.pf-callout { padding: var(--pf-space-3) var(--pf-space-4); border: 1px solid var(--pf-border); border-radius: var(--pf-radius-md); background: var(--pf-elevated); color: var(--pf-text); font-size: var(--pf-text-xs); line-height: 1.65; }
+.pf-callout[data-tone="info"] { border-color: color-mix(in srgb, var(--pf-primary) 35%, var(--pf-border)); background: var(--pf-primary-soft); }
+.pf-callout[data-tone="warning"] { border-color: color-mix(in srgb, var(--pf-warn) 42%, var(--pf-border)); background: var(--pf-warn-soft); color: var(--pf-warn); }
+.pf-callout[data-tone="danger"] { border-color: color-mix(in srgb, var(--pf-danger) 42%, var(--pf-border)); background: var(--pf-danger-soft); color: var(--pf-danger); }
+.pf-path-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--pf-space-2); }
+.pf-path-value { overflow: hidden; min-height: var(--pf-control-md); padding: 8px var(--pf-space-3); border: 1px solid var(--pf-border); border-radius: var(--pf-radius-sm); background: var(--pf-control-bg); color: var(--pf-text); font-family: var(--pf-font-mono); font-size: var(--pf-text-xs); text-overflow: ellipsis; white-space: nowrap; }
+@keyframes pf-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 720px) {
+  .pf-settings-container { padding: var(--pf-space-6) var(--pf-space-4); }
+  .pf-settings-row { grid-template-columns: 1fr; gap: var(--pf-space-3); }
+  .pf-control-cluster { justify-content: flex-start; }
+  .pf-settings-field { max-width: none; margin-left: 0; }
+}
+
+@media (min-width: 1024px) {
+  .pf-settings-container { padding-right: 3rem; padding-left: 3rem; }
+}
+
+:where(button, [role="button"], input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--pf-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

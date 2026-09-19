@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://photoflow.local/schemas/media-playback-backend-wire-v1.schema.json",
+  "title": "PhotoFlow Media Playback Backend Wire Envelope V1",
+  "type": "object", "additionalProperties": false,
+  "required": ["protocol", "protocolVersion", "sessionId", "sequence", "timestamp", "event", "payload"],
+  "properties": {
+    "protocol": { "const": "media-playback-backend-v1" },
+    "protocolVersion": { "const": 1 },
+    "sessionId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,96}$" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "timestamp": { "type": "number" },
+    "event": { "type": "string", "pattern": "^(command|event)\\.[a-z][a-z0-9.-]{0,95}$" },
+    "payload": { "type": "object" }
+  }
+}

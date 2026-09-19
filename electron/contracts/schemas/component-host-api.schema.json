@@ -1,0 +1,5683 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://photoflow.local/schemas/component-host-api.schema.json",
+  "title": "PhotoFlow Host Capability Calls",
+  "description": "A method-discriminated request/result pair used for contract validation and SDK generation.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/mediaPage"
+    },
+    {
+      "$ref": "#/$defs/mediaVariants"
+    },
+    {
+      "$ref": "#/$defs/inputTokens"
+    },
+    {
+      "$ref": "#/$defs/storage"
+    },
+    {
+      "$ref": "#/$defs/settings"
+    },
+    {
+      "$ref": "#/$defs/output"
+    },
+    {
+      "$ref": "#/$defs/versionCreate"
+    },
+    {
+      "$ref": "#/$defs/tasks"
+    },
+    {
+      "$ref": "#/$defs/dialogs"
+    },
+    {
+      "$ref": "#/$defs/events"
+    },
+    {
+      "$ref": "#/$defs/lifecycle"
+    },
+    {
+      "$ref": "#/$defs/componentMedia"
+    },
+    {
+      "$ref": "#/$defs/componentRuntimeExecute"
+    },
+    {
+      "$ref": "#/$defs/projectProgress"
+    },
+    {
+      "$ref": "#/$defs/notifications"
+    },
+    {
+      "$ref": "#/$defs/projectFilesPage"
+    },
+    {
+      "$ref": "#/$defs/projectFilesSearch"
+    },
+    {
+      "$ref": "#/$defs/projectMediaMetadata"
+    },
+    {
+      "$ref": "#/$defs/projectVersionsPage"
+    },
+    {
+      "$ref": "#/$defs/projectVersionGraph"
+    },
+    {
+      "$ref": "#/$defs/projectMediaRatings"
+    },
+    {
+      "$ref": "#/$defs/projectMediaRatingsWrite"
+    },
+    {
+      "$ref": "#/$defs/projectVersionUpdate"
+    },
+    {
+      "$ref": "#/$defs/projectVersionDelete"
+    },
+    {
+      "$ref": "#/$defs/projectProgressManage"
+    },
+    {
+      "$ref": "#/$defs/projectImport"
+    },
+    {
+      "$ref": "#/$defs/projectFilesMutate"
+    },
+    {
+      "$ref": "#/$defs/projectMediaProcess"
+    },
+    {
+      "$ref": "#/$defs/componentSecrets"
+    },
+    {
+      "$ref": "#/$defs/networkFetch"
+    },
+    {
+      "$ref": "#/$defs/projectFileInput"
+    },
+    {
+      "$ref": "#/$defs/projectFilesWatch"
+    },
+    {
+      "$ref": "#/$defs/componentTransfer"
+    },
+    {
+      "$ref": "#/$defs/projectPreview"
+    },
+    {
+      "$ref": "#/$defs/componentPanel"
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$"
+    },
+    "componentId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,79}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9-]{36}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "not": {
+        "pattern": "(^[\\/]|^[A-Za-z]:|(^|[\\/])\\.\\.([\\/]|$))"
+      }
+    },
+    "jsonObject": {
+      "type": "object"
+    },
+    "runtimeInputPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extensions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "maxLength": 32
+          }
+        },
+        "prefixArgumentCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 256
+        },
+        "directoryArgument": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "runtimeTaskPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "runningMessage": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "completeMessage": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "concurrencyGroup": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "concurrencyLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "concurrencyWriteLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        }
+      }
+    },
+    "runtimeControlPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cancelArgument": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "pauseArgument": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "versionSourceMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "componentId": {
+          "$ref": "#/$defs/componentId"
+        },
+        "parentCapability": {
+          "enum": [
+            "structural",
+            "workflow-input",
+            "none"
+          ]
+        }
+      }
+    },
+    "componentRuntimeExecute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "component.runtime.execute"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "runtimeCapability",
+                "arguments"
+              ],
+              "properties": {
+                "action": {
+                  "const": "execute"
+                },
+                "runtimeCapability": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "inputGrants": {
+                  "type": "array", "maxItems": 120,
+                  "items": { "type": "string", "pattern": "^grant-[a-f0-9-]{36}$" }
+                },
+                "output": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["relativeDirectory", "argument"],
+                  "properties": {
+                    "relativeDirectory": { "$ref": "#/$defs/relativePath" },
+                    "argument": { "type": "string", "pattern": "^--[a-z][a-z0-9-]*$" }
+                  }
+                },
+                "arguments": {
+                  "type": "array",
+                  "maxItems": 256,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "relativePaths": {
+                  "type": "array",
+                  "maxItems": 120,
+                  "items": {
+                    "$ref": "#/$defs/relativePath"
+                  }
+                },
+                "inputTokens": {
+                  "type": "array",
+                  "maxItems": 120,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                },
+                "input": {
+                  "$ref": "#/$defs/runtimeInputPolicy"
+                },
+                "operationKey": {
+                  "$ref": "#/$defs/id"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                },
+                "eventName": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "timeoutMs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 14400000
+                },
+                "task": {
+                  "$ref": "#/$defs/runtimeTaskPolicy"
+                },
+                "control": {
+                  "$ref": "#/$defs/runtimeControlPolicy"
+                },
+                "projectArtifacts": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "mode",
+                    "mediaKind"
+                  ],
+                  "properties": {
+                    "mode": {
+                      "enum": [
+                        "preview",
+                        "transcode"
+                      ]
+                    },
+                    "mediaKind": {
+                      "enum": [
+                        "image",
+                        "video"
+                      ]
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "if": {
+                        "properties": {
+                          "mode": {
+                            "const": "transcode"
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "mediaKind": {
+                            "const": "video"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "input"
+              ],
+              "properties": {
+                "action": {
+                  "const": "inputs.preview"
+                },
+                "relativePaths": {
+                  "type": "array",
+                  "maxItems": 120,
+                  "items": {
+                    "$ref": "#/$defs/relativePath"
+                  }
+                },
+                "inputTokens": {
+                  "type": "array",
+                  "maxItems": 120,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                },
+                "input": {
+                  "$ref": "#/$defs/runtimeInputPolicy"
+                }
+              }
+            },
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["action", "inputTokens", "input"],
+              "properties": {
+                "action": { "const": "inputs.retain" },
+                "inputTokens": { "type": "array", "maxItems": 120, "items": { "type": "string", "maxLength": 256 } },
+                "input": { "$ref": "#/$defs/runtimeInputPolicy" }
+              }
+            },
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["action", "inputGrants"],
+              "properties": {
+                "action": { "const": "inputs.revoke" },
+                "inputGrants": { "type": "array", "maxItems": 120, "items": { "type": "string", "pattern": "^grant-[a-f0-9-]{36}$" } }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "runtimeCapability",
+                "operationKey",
+                "idempotencyKey"
+              ],
+              "properties": {
+                "action": {
+                  "enum": [
+                    "status",
+                    "cancel",
+                    "pause",
+                    "resume"
+                  ]
+                },
+                "runtimeCapability": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "operationKey": {
+                  "$ref": "#/$defs/id"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object", "additionalProperties": false, "required": ["grants"],
+              "properties": { "grants": { "type": "array", "maxItems": 120,
+                "items": { "type": "object", "additionalProperties": false, "required": ["id", "name", "kind"],
+                  "properties": { "id": { "type": "string", "pattern": "^grant-[a-f0-9-]{36}$" }, "name": { "type": "string" }, "kind": { "enum": ["file", "directory"] } }
+                }
+              } }
+            },
+            { "type": "object", "additionalProperties": false, "required": ["revoked"], "properties": { "revoked": { "const": true } } },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sourcePreviews"
+              ],
+              "properties": {
+                "sourcePreviews": {
+                  "type": "array",
+                  "maxItems": 120,
+                  "items": {
+                    "$ref": "#/$defs/jsonObject"
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "operationId",
+                "result"
+              ],
+              "properties": {
+                "operationId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "result": {
+                  "$ref": "#/$defs/jsonObject"
+                },
+                "task": {
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "operationId",
+                "task"
+              ],
+              "properties": {
+                "operationId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "task": {
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "operationId",
+                "cancelled",
+                "task"
+              ],
+              "properties": {
+                "operationId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "cancelled": {
+                  "type": "boolean"
+                },
+                "task": {
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "mediaPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.media.page"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pageSize": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kinds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "image",
+                  "raw",
+                  "video"
+                ]
+              }
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "items",
+            "page"
+          ],
+          "properties": {
+            "items": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mediaRef",
+                  "relativePath",
+                  "name",
+                  "kind",
+                  "extension",
+                  "size",
+                  "updatedAt"
+                ],
+                "properties": {
+                  "mediaRef": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "relativePath"
+                    ],
+                    "properties": {
+                      "relativePath": {
+                        "$ref": "#/$defs/relativePath"
+                      }
+                    }
+                  },
+                  "relativePath": {
+                    "$ref": "#/$defs/relativePath"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "image",
+                      "raw",
+                      "video"
+                    ]
+                  },
+                  "extension": {
+                    "type": "string"
+                  },
+                  "size": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "updatedAt": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "viaExternalLink": {
+                    "const": true
+                  }
+                }
+              }
+            },
+            "page": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "hasMore",
+                "cursor",
+                "pageSize"
+              ],
+              "properties": {
+                "hasMore": {
+                  "type": "boolean"
+                },
+                "cursor": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "pageSize": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 200
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mediaVariants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.media.variants"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "photoId": {
+              "type": "string"
+            },
+            "versionId": {
+              "type": "string"
+            },
+            "relativePath": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "variants": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "thumbnail",
+                  "preview",
+                  "original"
+                ]
+              }
+            }
+          },
+          "anyOf": [
+            {
+              "required": [
+                "photoId"
+              ]
+            },
+            {
+              "required": [
+                "relativePath"
+              ]
+            }
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mediaRef",
+            "metadata",
+            "variants"
+          ],
+          "properties": {
+            "mediaRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "photoId": {
+                  "type": "string"
+                },
+                "versionId": {
+                  "type": "string"
+                },
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                }
+              }
+            },
+            "metadata": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "photoId",
+                "versionId",
+                "currentVersionId",
+                "displayName",
+                "originalName",
+                "relativePath",
+                "isCurrent",
+                "fileMissing"
+              ],
+              "properties": {
+                "photoId": {
+                  "type": "string"
+                },
+                "versionId": {
+                  "type": "string"
+                },
+                "currentVersionId": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "originalName": {
+                  "type": "string"
+                },
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "isCurrent": {
+                  "type": "boolean"
+                },
+                "fileMissing": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "variants": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "thumbnail": {
+                  "$ref": "#/$defs/derivedVariant"
+                },
+                "preview": {
+                  "$ref": "#/$defs/derivedVariant"
+                },
+                "original": {
+                  "$ref": "#/$defs/originalVariant"
+                }
+              }
+            },
+            "input": {
+              "$ref": "#/$defs/inputGrant"
+            }
+          }
+        }
+      }
+    },
+    "derivedVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "maxEdge",
+        "derived"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "maxEdge": {
+          "enum": [
+            320,
+            1600
+          ]
+        },
+        "derived": {
+          "const": true
+        }
+      }
+    },
+    "originalVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "byteLength",
+        "derived"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "byteLength": {
+          "type": "number",
+          "minimum": 0
+        },
+        "derived": {
+          "const": false
+        }
+      }
+    },
+    "inputGrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "token",
+        "expiresAt"
+      ],
+      "properties": {
+        "token": {
+          "type": "string",
+          "pattern": "^component-input:"
+        },
+        "expiresAt": {
+          "type": "integer"
+        }
+      }
+    },
+    "inputTokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.input.tokens"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "token"
+              ],
+              "properties": {
+                "action": {
+                  "const": "materialize"
+                },
+                "token": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "tokens"
+              ],
+              "properties": {
+                "action": {
+                  "const": "materializeBatch"
+                },
+                "tokens": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 256,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/materializedInput"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "items"
+              ],
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 256,
+                  "items": {
+                    "$ref": "#/$defs/materializedInput"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "materializedInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputId",
+        "privatePath",
+        "byteLength",
+        "expiresAt"
+      ],
+      "properties": {
+        "inputId": {
+          "type": "string"
+        },
+        "privatePath": {
+          "type": "string"
+        },
+        "byteLength": {
+          "type": "number",
+          "minimum": 0
+        },
+        "expiresAt": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "component.storage"
+        },
+        "payload": {
+          "type": "object",
+          "maxProperties": 0
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "projectId",
+                "ownership",
+                "adoption"
+              ],
+              "properties": {
+                "projectId": {
+                  "type": "string"
+                },
+                "ownership": {
+                  "const": "component-private"
+                },
+                "adoption": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "kind",
+                    "state",
+                    "componentId",
+                    "startedAt"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "kind": {
+                      "const": "component-storage-adoption"
+                    },
+                    "componentId": {
+                      "$ref": "#/$defs/componentId"
+                    },
+                    "state": {
+                      "const": "pending"
+                    },
+                    "startedAt": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "dataPath",
+                "databasePath",
+                "projectId",
+                "ownership"
+              ],
+              "properties": {
+                "dataPath": {
+                  "type": "string"
+                },
+                "databasePath": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "ownership": {
+                  "const": "component-private"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "dataPath",
+                "databasePath",
+                "projectId",
+                "ownership",
+                "adoption"
+              ],
+              "properties": {
+                "dataPath": {
+                  "type": "string"
+                },
+                "databasePath": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "ownership": {
+                  "const": "component-private"
+                },
+                "adoption": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "kind",
+                    "state",
+                    "componentId",
+                    "adoptedDataRoot",
+                    "adoptedDatabase",
+                    "legacyDataRoot",
+                    "legacyDatabasePath",
+                    "databaseSha256",
+                    "copiedFileCount",
+                    "copiedByteCount"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "kind": {
+                      "const": "component-storage-adoption"
+                    },
+                    "componentId": {
+                      "$ref": "#/$defs/componentId"
+                    },
+                    "state": {
+                      "const": "committed"
+                    },
+                    "adoptedDataRoot": {
+                      "type": "boolean"
+                    },
+                    "adoptedDatabase": {
+                      "type": "boolean"
+                    },
+                    "legacyDataRoot": {
+                      "type": "string"
+                    },
+                    "legacyDatabasePath": {
+                      "type": "string"
+                    },
+                    "databaseSha256": {
+                      "type": "string"
+                    },
+                    "copiedFileCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "copiedByteCount": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "component.settings"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "const": "get"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "settings"
+              ],
+              "properties": {
+                "action": {
+                  "enum": [
+                    "replace",
+                    "merge"
+                  ]
+                },
+                "settings": {
+                  "$ref": "#/$defs/jsonObject"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "revision",
+            "settings"
+          ],
+          "properties": {
+            "revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "settings": {
+              "$ref": "#/$defs/jsonObject"
+            }
+          }
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.output"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "const": "stage"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "action",
+                "stageId",
+                "name",
+                "outputRelativePath"
+              ],
+              "properties": {
+                "action": {
+                  "const": "write"
+                },
+                "stageId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "outputRelativePath": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "sourceName": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "inputToken": {
+                  "type": "string"
+                },
+                "base64": {
+                  "type": "string"
+                },
+                "replace": {
+                  "type": "boolean"
+                },
+                "previousCommitId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "previousArtifactId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "expectedDigest": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "stageId"
+              ],
+              "properties": {
+                "action": {
+                  "enum": [
+                    "validate",
+                    "rollback"
+                  ]
+                },
+                "stageId": {
+                  "$ref": "#/$defs/uuid"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "stageId",
+                "idempotencyKey"
+              ],
+              "properties": {
+                "action": {
+                  "const": "commit"
+                },
+                "onConflict": {
+                  "enum": [
+                    "error",
+                    "rename"
+                  ]
+                },
+                "stageId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "migrationId",
+                "outputs"
+              ],
+              "properties": {
+                "action": {
+                  "const": "adopt"
+                },
+                "migrationId": {
+                  "$ref": "#/$defs/id"
+                },
+                "outputs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 2000,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "oneOf": [
+                      {
+                        "required": [
+                          "relativePath"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "sourcePath"
+                        ]
+                      }
+                    ],
+                    "properties": {
+                      "relativePath": {
+                        "$ref": "#/$defs/relativePath"
+                      },
+                      "sourcePath": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "artifactId": {
+                        "$ref": "#/$defs/uuid"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "previousCommitId",
+                "previousArtifactId",
+                "expectedDigest",
+                "idempotencyKey"
+              ],
+              "properties": {
+                "action": {
+                  "const": "delete"
+                },
+                "previousCommitId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "previousArtifactId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "expectedDigest": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "commitId",
+                "artifactId"
+              ],
+              "properties": {
+                "action": {
+                  "const": "materializeOwned"
+                },
+                "commitId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "artifactId": {
+                  "$ref": "#/$defs/uuid"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "stageId",
+                "privatePath",
+                "expiresAt"
+              ],
+              "properties": {
+                "stageId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "privatePath": {
+                  "type": "string"
+                },
+                "expiresAt": {
+                  "type": "number"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "stageId",
+                "artifactId",
+                "byteLength"
+              ],
+              "properties": {
+                "stageId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "artifactId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "byteLength": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "stageId",
+                "valid",
+                "fileCount",
+                "totalBytes"
+              ],
+              "properties": {
+                "stageId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "valid": {
+                  "const": true
+                },
+                "fileCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "totalBytes": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "stageId",
+                "rolledBack"
+              ],
+              "properties": {
+                "stageId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "rolledBack": {
+                  "const": true
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "commitId",
+                "idempotencyKey",
+                "outputs"
+              ],
+              "properties": {
+                "commitId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                },
+                "outputs": {
+                  "type": "array",
+                  "maxItems": 2000,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "artifactId",
+                      "relativePath",
+                      "byteLength",
+                      "sha256"
+                    ],
+                    "properties": {
+                      "artifactId": {
+                        "$ref": "#/$defs/uuid"
+                      },
+                      "relativePath": {
+                        "$ref": "#/$defs/relativePath"
+                      },
+                      "filePath": {
+                        "type": "string"
+                      },
+                      "byteLength": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "deletionId",
+                "deleted",
+                "relativePath"
+              ],
+              "properties": {
+                "deletionId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "deleted": {
+                  "const": true
+                },
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "importId",
+                "privatePath",
+                "byteLength",
+                "sha256",
+                "outputRef"
+              ],
+              "properties": {
+                "importId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "privatePath": {
+                  "type": "string"
+                },
+                "byteLength": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "outputRef": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "commitId",
+                    "artifactId"
+                  ],
+                  "properties": {
+                    "commitId": {
+                      "$ref": "#/$defs/uuid"
+                    },
+                    "artifactId": {
+                      "$ref": "#/$defs/uuid"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "versionCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "version.create"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commitId",
+            "artifactId",
+            "photoId",
+            "parentVersionId",
+            "idempotencyKey"
+          ],
+          "properties": {
+            "commitId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "artifactId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "photoId": {
+              "type": "string"
+            },
+            "parentVersionId": {
+              "type": "string"
+            },
+            "idempotencyKey": {
+              "$ref": "#/$defs/id"
+            },
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "isFinal": {
+              "type": "boolean"
+            },
+            "status": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "versionId",
+            "result"
+          ],
+          "properties": {
+            "versionId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "result": {
+              "$ref": "#/$defs/jsonObject"
+            }
+          }
+        }
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "tasks"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "action",
+            "operationId"
+          ],
+          "properties": {
+            "action": {
+              "enum": [
+                "start",
+                "report",
+                "status",
+                "cancel",
+                "resume",
+                "complete",
+                "fail"
+              ]
+            },
+            "operationId": {
+              "$ref": "#/$defs/id"
+            },
+            "title": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "progress": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "phase": {
+              "type": "string"
+            },
+            "checkpoint": {
+              "$ref": "#/$defs/jsonObject"
+            },
+            "error": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "task",
+            "cancelled"
+          ],
+          "properties": {
+            "task": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "cancelled": {
+              "type": "boolean"
+            },
+            "checkpoint": {
+              "$ref": "#/$defs/jsonObject"
+            }
+          }
+        }
+      }
+    },
+    "dialogs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "dialogs"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "confirm"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "openFiles"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "extensions": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "multiple": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "openDirectory"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "extensions": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "recursive": {
+                  "type": "boolean"
+                },
+                "directoryToken": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "relativePath"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "openComponentDirectory"
+                },
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "relativePath"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "openComponentDataDirectory"
+                },
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "commitId",
+                "artifactId"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "openOutput",
+                    "revealOutput",
+                    "openOutputDirectory"
+                  ]
+                },
+                "commitId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "artifactId": {
+                  "$ref": "#/$defs/uuid"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "confirmed"
+              ],
+              "properties": {
+                "confirmed": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "cancelled",
+                "inputs"
+              ],
+              "properties": {
+                "cancelled": {
+                  "type": "boolean"
+                },
+                "inputs": {
+                  "type": "array",
+                  "maxItems": 2000,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "name",
+                      "relativeName",
+                      "token",
+                      "expiresAt"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "relativeName": {
+                        "$ref": "#/$defs/relativePath"
+                      },
+                      "kind": {
+                        "enum": [
+                          "file",
+                          "directory"
+                        ]
+                      },
+                      "token": {
+                        "type": "string",
+                        "pattern": "^component-input:"
+                      },
+                      "expiresAt": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    }
+                  }
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "opened",
+                "componentDirectory"
+              ],
+              "properties": {
+                "opened": {
+                  "const": true
+                },
+                "componentDirectory": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "relativePath"
+                  ],
+                  "properties": {
+                    "relativePath": {
+                      "$ref": "#/$defs/relativePath"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "opened",
+                "componentDataDirectory"
+              ],
+              "properties": {
+                "opened": {
+                  "const": true
+                },
+                "componentDataDirectory": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "relativePath"
+                  ],
+                  "properties": {
+                    "relativePath": {
+                      "$ref": "#/$defs/relativePath"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "opened",
+                "outputRef"
+              ],
+              "properties": {
+                "opened": {
+                  "const": true
+                },
+                "outputRef": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "commitId",
+                    "artifactId"
+                  ],
+                  "properties": {
+                    "commitId": {
+                      "$ref": "#/$defs/uuid"
+                    },
+                    "artifactId": {
+                      "$ref": "#/$defs/uuid"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "events": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "component.events"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "topic",
+            "event"
+          ],
+          "properties": {
+            "topic": {
+              "type": "string",
+              "pattern": "\\.v[1-9][0-9]*$"
+            },
+            "event": {
+              "$ref": "#/$defs/jsonObject"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "emitted"
+          ],
+          "properties": {
+            "emitted": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "component.lifecycle"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action"
+          ],
+          "properties": {
+            "action": {
+              "enum": [
+                "describe",
+                "preflight",
+                "verify-package",
+                "install",
+                "repair",
+                "uninstall"
+              ]
+            }
+          }
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "componentId",
+                "componentVersion",
+                "permissions",
+                "events",
+                "lifecycleActions",
+                "state"
+              ],
+              "properties": {
+                "componentId": {
+                  "$ref": "#/$defs/componentId"
+                },
+                "componentVersion": {
+                  "type": "string"
+                },
+                "permissions": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "events": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "lifecycleActions": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "#/$defs/id"
+                  }
+                },
+                "state": {
+                  "enum": [
+                    "active",
+                    "termination-unconfirmed"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "success",
+                "action",
+                "taskId",
+                "message"
+              ],
+              "properties": {
+                "success": {
+                  "const": true
+                },
+                "action": {
+                  "enum": [
+                    "preflight",
+                    "verify-package",
+                    "install",
+                    "repair",
+                    "uninstall"
+                  ]
+                },
+                "taskId": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "componentMedia": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "component.media"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "relativePath"
+          ],
+          "properties": {
+            "action": {
+              "enum": [
+                "variants",
+                "open",
+                "reveal"
+              ]
+            },
+            "relativePath": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "variants": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "thumbnail",
+                  "preview",
+                  "original"
+                ]
+              }
+            }
+          }
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "opaqueRef",
+                "variants"
+              ],
+              "properties": {
+                "opaqueRef": {
+                  "type": "string"
+                },
+                "variants": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {
+                    "thumbnail": {
+                      "$ref": "#/$defs/derivedVariant"
+                    },
+                    "preview": {
+                      "$ref": "#/$defs/derivedVariant"
+                    },
+                    "original": {
+                      "$ref": "#/$defs/originalVariant"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "opaqueRef",
+                "action",
+                "opened"
+              ],
+              "properties": {
+                "opaqueRef": {
+                  "type": "string"
+                },
+                "action": {
+                  "enum": [
+                    "open",
+                    "reveal"
+                  ]
+                },
+                "opened": {
+                  "const": true
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "notifications"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tone",
+            "message"
+          ],
+          "properties": {
+            "tone": {
+              "enum": [
+                "info",
+                "success",
+                "warning",
+                "error"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 360
+            },
+            "dedupeKey": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$"
+            }
+          }
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "accepted",
+                "id"
+              ],
+              "properties": {
+                "accepted": {
+                  "const": true
+                },
+                "id": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "accepted",
+                "deduplicated",
+                "code"
+              ],
+              "properties": {
+                "accepted": {
+                  "const": false
+                },
+                "deduplicated": {
+                  "const": true
+                },
+                "code": {
+                  "const": "NOTIFICATION_DEDUPLICATED"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "accepted",
+                "error"
+              ],
+              "properties": {
+                "accepted": {
+                  "const": false
+                },
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "boundedPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cursor",
+        "hasMore",
+        "pageSize",
+        "truncated"
+      ],
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 80
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "projectFileItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relativePath",
+        "name",
+        "kind"
+      ],
+      "properties": {
+        "relativePath": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "kind": {
+          "enum": [
+            "directory",
+            "file",
+            "sidecar"
+          ]
+        },
+        "extension": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "size": {
+          "type": "number",
+          "minimum": 0
+        },
+        "updatedAt": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "projectFilesResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "page"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/projectFileItem"
+          }
+        },
+        "page": {
+          "$ref": "#/$defs/boundedPage"
+        }
+      }
+    },
+    "projectFilesPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.files.page"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pageSize": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 80
+            }
+          }
+        },
+        "result": {
+          "$ref": "#/$defs/projectFilesResult"
+        }
+      }
+    },
+    "projectFilesSearch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.files.search"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "query"
+          ],
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "pageSize": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 80
+            }
+          }
+        },
+        "result": {
+          "$ref": "#/$defs/projectFilesResult"
+        }
+      }
+    },
+    "metadataValue": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "null"
+      ],
+      "maxLength": 512
+    },
+    "publicVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "photoId",
+        "parentVersionId",
+        "versionNumber",
+        "name",
+        "type",
+        "status",
+        "note",
+        "isCurrent",
+        "isFinal",
+        "fileMissing",
+        "contentChanged",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "photoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "parentVersionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "versionNumber": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "type": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "isCurrent": {
+          "type": "boolean"
+        },
+        "isFinal": {
+          "type": "boolean"
+        },
+        "fileMissing": {
+          "type": "boolean"
+        },
+        "contentChanged": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "updatedAt": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "progressNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "nodeRole",
+        "mediaKind",
+        "versionKey",
+        "displayName",
+        "parentProgressId",
+        "relationKind",
+        "trackingEnabled",
+        "missing",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "nodeRole": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "mediaKind": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "versionKey": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "parentProgressId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "relationKind": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40
+        },
+        "trackingEnabled": {
+          "type": "boolean"
+        },
+        "missing": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "updatedAt": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "graphEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "targetId",
+        "kind"
+      ],
+      "properties": {
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "targetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      }
+    },
+    "projectMediaMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.media.metadata"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "relativePath"
+          ],
+          "properties": {
+            "relativePath": {
+              "$ref": "#/$defs/relativePath"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mediaRef",
+            "kind",
+            "size",
+            "updatedAt",
+            "dimensions",
+            "colorSpace",
+            "camera",
+            "capture",
+            "video"
+          ],
+          "properties": {
+            "mediaRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "relativePath"
+              ],
+              "properties": {
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                }
+              }
+            },
+            "kind": {
+              "enum": [
+                "image",
+                "raw",
+                "video"
+              ]
+            },
+            "size": {
+              "type": "number",
+              "minimum": 0
+            },
+            "updatedAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "dimensions": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "width",
+                "height"
+              ],
+              "properties": {
+                "width": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "height": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0
+                }
+              }
+            },
+            "colorSpace": {
+              "$ref": "#/$defs/metadataValue"
+            },
+            "camera": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "make",
+                "model",
+                "lens"
+              ],
+              "properties": {
+                "make": {
+                  "$ref": "#/$defs/metadataValue"
+                },
+                "model": {
+                  "$ref": "#/$defs/metadataValue"
+                },
+                "lens": {
+                  "$ref": "#/$defs/metadataValue"
+                }
+              }
+            },
+            "capture": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "aperture",
+                "exposureTime",
+                "iso",
+                "focalLength",
+                "takenAt"
+              ],
+              "properties": {
+                "aperture": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "exposureTime": {
+                  "$ref": "#/$defs/metadataValue"
+                },
+                "iso": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "focalLength": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "takenAt": {
+                  "$ref": "#/$defs/metadataValue"
+                }
+              }
+            },
+            "video": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "codec",
+                    "audioCodec",
+                    "durationSeconds",
+                    "frameRate",
+                    "rotation"
+                  ],
+                  "properties": {
+                    "codec": {
+                      "$ref": "#/$defs/metadataValue"
+                    },
+                    "audioCodec": {
+                      "$ref": "#/$defs/metadataValue"
+                    },
+                    "durationSeconds": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "frameRate": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "rotation": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "projectVersionsPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.versions.page"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pageSize": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 80
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "items",
+            "page"
+          ],
+          "properties": {
+            "items": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "$ref": "#/$defs/publicVersion"
+              }
+            },
+            "page": {
+              "$ref": "#/$defs/boundedPage"
+            }
+          }
+        }
+      }
+    },
+    "projectVersionGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.version.graph"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "includeMissing": {
+              "type": "boolean"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "progress",
+            "versions",
+            "edges",
+            "truncated"
+          ],
+          "properties": {
+            "progress": {
+              "type": "array",
+              "maxItems": 1000,
+              "items": {
+                "$ref": "#/$defs/progressNode"
+              }
+            },
+            "versions": {
+              "type": "array",
+              "maxItems": 5000,
+              "items": {
+                "$ref": "#/$defs/publicVersion"
+              }
+            },
+            "edges": {
+              "type": "array",
+              "maxItems": 7000,
+              "items": {
+                "$ref": "#/$defs/graphEdge"
+              }
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "projectMediaRatings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.media.ratings"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mediaRefs"
+          ],
+          "properties": {
+            "mediaRefs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "relativePath"
+                ],
+                "properties": {
+                  "relativePath": {
+                    "$ref": "#/$defs/relativePath"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "supported",
+            "items"
+          ],
+          "properties": {
+            "supported": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "rating",
+                "labels",
+                "selectionState"
+              ],
+              "properties": {
+                "rating": {
+                  "const": true
+                },
+                "labels": {
+                  "const": false
+                },
+                "selectionState": {
+                  "const": false
+                }
+              }
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mediaRef",
+                  "revision",
+                  "rating",
+                  "labels",
+                  "selectionState"
+                ],
+                "properties": {
+                  "mediaRef": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "relativePath"
+                    ],
+                    "properties": {
+                      "relativePath": {
+                        "$ref": "#/$defs/relativePath"
+                      }
+                    }
+                  },
+                  "revision": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "rating": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 5
+                  },
+                  "labels": {
+                    "const": null
+                  },
+                  "selectionState": {
+                    "const": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mutationReceipt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "mutationArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relativePath",
+        "size",
+        "sha256"
+      ],
+      "properties": {
+        "relativePath": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "size": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "mutationProgress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "displayName",
+        "trackingEnabled",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "trackingEnabled": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      }
+    },
+    "mutationEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sourceId",
+        "targetId",
+        "kind",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "sourceId": {
+          "type": "string"
+        },
+        "targetId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      }
+    },
+    "filePlanItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relativePath",
+        "targetRelativePath"
+      ],
+      "properties": {
+        "relativePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targetRelativePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "fileUndoItem": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "fromRelativePath",
+            "toRelativePath"
+          ],
+          "properties": {
+            "action": {
+              "const": "move"
+            },
+            "fromRelativePath": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "toRelativePath": {
+              "$ref": "#/$defs/relativePath"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "relativePath"
+          ],
+          "properties": {
+            "action": {
+              "const": "trash"
+            },
+            "relativePath": {
+              "$ref": "#/$defs/relativePath"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "relativePath",
+            "recyclePidl",
+            "preciseRestore"
+          ],
+          "properties": {
+            "action": {
+              "const": "restore"
+            },
+            "relativePath": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "recyclePidl": {
+              "type": "string"
+            },
+            "preciseRestore": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "ratingWriteItem": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mediaRef",
+            "ok",
+            "rating",
+            "previousRevision",
+            "revision"
+          ],
+          "properties": {
+            "mediaRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "relativePath"
+              ],
+              "properties": {
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                }
+              }
+            },
+            "ok": {
+              "const": true
+            },
+            "rating": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "previousRevision": {
+              "type": "number"
+            },
+            "revision": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mediaRef",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "mediaRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "relativePath"
+              ],
+              "properties": {
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                }
+              }
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "projectMediaRatingsWrite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.media.ratings.write"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "items",
+            "idempotencyKey"
+          ],
+          "properties": {
+            "idempotencyKey": {
+              "$ref": "#/$defs/id"
+            },
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "relativePath",
+                  "rating",
+                  "expectedRevision"
+                ],
+                "properties": {
+                  "relativePath": {
+                    "$ref": "#/$defs/relativePath"
+                  },
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 5
+                  },
+                  "expectedRevision": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "semantics",
+            "items",
+            "succeeded",
+            "failed"
+          ],
+          "properties": {
+            "semantics": {
+              "const": "per-item"
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "$ref": "#/$defs/ratingWriteItem"
+              }
+            },
+            "succeeded": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "projectVersionUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.version.update"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "versionId",
+            "expectedUpdatedAt",
+            "idempotencyKey"
+          ],
+          "properties": {
+            "versionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "expectedUpdatedAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "idempotencyKey": {
+              "$ref": "#/$defs/id"
+            },
+            "versionName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "isFinal": {
+              "type": "boolean"
+            },
+            "makeCurrent": {
+              "const": true
+            }
+          },
+          "anyOf": [
+            {
+              "required": [
+                "versionName"
+              ]
+            },
+            {
+              "required": [
+                "note"
+              ]
+            },
+            {
+              "required": [
+                "status"
+              ]
+            },
+            {
+              "required": [
+                "isFinal"
+              ]
+            },
+            {
+              "required": [
+                "makeCurrent"
+              ]
+            }
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "receiptId",
+            "version"
+          ],
+          "properties": {
+            "receiptId": {
+              "$ref": "#/$defs/mutationReceipt"
+            },
+            "version": {
+              "$ref": "#/$defs/publicVersion"
+            }
+          }
+        }
+      }
+    },
+    "projectVersionDelete": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.version.delete"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "versionId",
+            "expectedUpdatedAt",
+            "idempotencyKey"
+          ],
+          "properties": {
+            "versionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "expectedUpdatedAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "idempotencyKey": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "receiptId",
+            "deleted",
+            "versionId"
+          ],
+          "properties": {
+            "receiptId": {
+              "$ref": "#/$defs/mutationReceipt"
+            },
+            "deleted": {
+              "const": true
+            },
+            "versionId": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "projectProgressManage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.progress.manage"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "idempotencyKey",
+            "expectedUpdatedAt"
+          ],
+          "properties": {
+            "action": {
+              "enum": [
+                "update",
+                "unregister",
+                "edgeCreate",
+                "edgeDelete",
+                "edgeReplaceSource"
+              ]
+            },
+            "idempotencyKey": {
+              "$ref": "#/$defs/id"
+            },
+            "progressId": {
+              "type": "string"
+            },
+            "expectedUpdatedAt": {
+              "type": "number"
+            },
+            "displayName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "trackingEnabled": {
+              "type": "boolean"
+            },
+            "sourceProgressId": {
+              "type": "string"
+            },
+            "targetProgressId": {
+              "type": "string"
+            },
+            "newSourceProgressId": {
+              "type": "string"
+            },
+            "edgeKind": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "receiptId",
+                "action",
+                "progress"
+              ],
+              "properties": {
+                "receiptId": {
+                  "$ref": "#/$defs/mutationReceipt"
+                },
+                "action": {
+                  "const": "update"
+                },
+                "progress": {
+                  "$ref": "#/$defs/mutationProgress"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "receiptId",
+                "action",
+                "progressId"
+              ],
+              "properties": {
+                "receiptId": {
+                  "$ref": "#/$defs/mutationReceipt"
+                },
+                "action": {
+                  "const": "unregister"
+                },
+                "progressId": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "receiptId",
+                "action",
+                "edge"
+              ],
+              "properties": {
+                "receiptId": {
+                  "$ref": "#/$defs/mutationReceipt"
+                },
+                "action": {
+                  "enum": [
+                    "edgeCreate",
+                    "edgeReplaceSource"
+                  ]
+                },
+                "edge": {
+                  "$ref": "#/$defs/mutationEdge"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "receiptId",
+                "action"
+              ],
+              "properties": {
+                "receiptId": {
+                  "$ref": "#/$defs/mutationReceipt"
+                },
+                "action": {
+                  "const": "edgeDelete"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "projectImport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.import"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "idempotencyKey",
+                "items"
+              ],
+              "properties": {
+                "action": {
+                  "const": "commit"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                },
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 100,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "inputToken",
+                      "targetRelativePath"
+                    ],
+                    "properties": {
+                      "inputToken": {
+                        "type": "string",
+                        "pattern": "^component-input:"
+                      },
+                      "targetRelativePath": {
+                        "$ref": "#/$defs/relativePath"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "idempotencyKey"
+              ],
+              "properties": {
+                "action": {
+                  "const": "cancel"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "receiptId",
+                "operationId",
+                "committed",
+                "outputs"
+              ],
+              "properties": {
+                "receiptId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "operationId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "committed": {
+                  "const": true
+                },
+                "outputs": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "$ref": "#/$defs/mutationArtifact"
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "operationId",
+                "cancelled"
+              ],
+              "properties": {
+                "operationId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "cancelled": {
+                  "type": "boolean"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "projectFilesMutate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.files.mutate"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "phase",
+                "action"
+              ],
+              "properties": {
+                "phase": {
+                  "const": "preflight"
+                },
+                "action": {
+                  "enum": [
+                    "rename",
+                    "move",
+                    "mkdir",
+                    "trash"
+                  ]
+                },
+                "relativePaths": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 100,
+                  "items": {
+                    "$ref": "#/$defs/relativePath"
+                  }
+                },
+                "targetRelativePath": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "newName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "phase",
+                "planToken",
+                "idempotencyKey"
+              ],
+              "properties": {
+                "phase": {
+                  "const": "commit"
+                },
+                "planToken": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "phase",
+                "receiptId",
+                "idempotencyKey"
+              ],
+              "properties": {
+                "phase": {
+                  "const": "undo"
+                },
+                "receiptId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "planToken",
+                "expiresAt",
+                "action",
+                "undoCapability",
+                "items"
+              ],
+              "properties": {
+                "planToken": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "expiresAt": {
+                  "type": "number"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "undoCapability": {
+                  "enum": [
+                    "available",
+                    "requires-precise-recycle"
+                  ]
+                },
+                "items": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "$ref": "#/$defs/filePlanItem"
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "receiptId",
+                "committed",
+                "action",
+                "undoAvailable",
+                "undo"
+              ],
+              "properties": {
+                "receiptId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "committed": {
+                  "const": true
+                },
+                "action": {
+                  "type": "string"
+                },
+                "undoAvailable": {
+                  "type": "boolean"
+                },
+                "undo": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "$ref": "#/$defs/fileUndoItem"
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "receiptId",
+                "undoneReceiptId",
+                "undone"
+              ],
+              "properties": {
+                "receiptId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "undoneReceiptId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "undone": {
+                  "const": true
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "projectMediaProcess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.media.process"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "relativePath",
+                "times"
+              ],
+              "properties": {
+                "action": {
+                  "const": "video.timelineFrames"
+                },
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "times": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 16,
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 86400
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "idempotencyKey",
+                "relativePath",
+                "outputDirectory"
+              ],
+              "properties": {
+                "action": {
+                  "const": "office.extractImages"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                },
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "outputDirectory": {
+                  "$ref": "#/$defs/relativePath"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "frames"
+              ],
+              "properties": {
+                "action": {
+                  "const": "video.timelineFrames"
+                },
+                "frames": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^data:image/(?:jpeg|png);base64,"
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "receiptId",
+                "operationId",
+                "outputs"
+              ],
+              "properties": {
+                "action": {
+                  "const": "office.extractImages"
+                },
+                "receiptId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "operationId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "outputs": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "$ref": "#/$defs/mutationArtifact"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "componentSecrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "component.secrets"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "name",
+                "value",
+                "idempotencyKey"
+              ],
+              "properties": {
+                "action": {
+                  "const": "put"
+                },
+                "name": {
+                  "$ref": "#/$defs/id"
+                },
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 65536
+                },
+                "metadata": {
+                  "$ref": "#/$defs/jsonObject"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "const": "list"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "secretRef",
+                "idempotencyKey"
+              ],
+              "properties": {
+                "action": {
+                  "const": "delete"
+                },
+                "secretRef": {
+                  "type": "string",
+                  "pattern": "^secret:v1:[A-Fa-f0-9-]{36}$"
+                },
+                "idempotencyKey": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "secretRef",
+                "name",
+                "metadata",
+                "createdAt",
+                "updatedAt"
+              ],
+              "properties": {
+                "secretRef": {
+                  "type": "string",
+                  "pattern": "^secret:v1:"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "metadata": {
+                  "$ref": "#/$defs/jsonObject"
+                },
+                "createdAt": {
+                  "type": "number"
+                },
+                "updatedAt": {
+                  "type": "number"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "items"
+              ],
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "maxItems": 128,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "secretRef",
+                      "name",
+                      "metadata",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "properties": {
+                      "secretRef": {
+                        "type": "string",
+                        "pattern": "^secret:v1:"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "metadata": {
+                        "$ref": "#/$defs/jsonObject"
+                      },
+                      "createdAt": {
+                        "type": "number"
+                      },
+                      "updatedAt": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "secretRef",
+                "deleted"
+              ],
+              "properties": {
+                "secretRef": {
+                  "type": "string",
+                  "pattern": "^secret:v1:"
+                },
+                "deleted": {
+                  "const": true
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "networkFetch": {
+      "$comment": "Runtime enforces payload.origin === URL.origin, manifest networkOrigins membership, fresh DNS validation and pinned TLS lookup for every redirect.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "network.fetch"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url",
+            "origin"
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^https://[^/@?#\\s]+(?::[0-9]{1,5})?(?:/[^\\s]*)?$",
+              "maxLength": 4096
+            },
+            "origin": {
+              "type": "string",
+              "pattern": "^https://[^/@?#\\s]+(?::[0-9]{1,5})?$",
+              "maxLength": 512
+            },
+            "method": {
+              "enum": [
+                "GET",
+                "HEAD",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE"
+              ]
+            },
+            "headers": {
+              "type": "object",
+              "maxProperties": 64,
+              "propertyNames": {
+                "pattern": "^(?!(?:host|cookie|set-cookie|connection|upgrade|transfer-encoding|proxy-.*)$)[a-z0-9-]{1,64}$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 4096,
+                "pattern": "^[^\\r\\n]*$"
+              }
+            },
+            "body": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 1398104
+                },
+                {
+                  "$ref": "#/$defs/jsonObject"
+                }
+              ]
+            },
+            "bodyMode": {
+              "enum": [
+                "text",
+                "json",
+                "base64"
+              ]
+            },
+            "responseMode": {
+              "enum": [
+                "text",
+                "json",
+                "base64"
+              ]
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 30000
+            },
+            "secrets": {
+              "type": "object",
+              "maxProperties": 16,
+              "propertyNames": {
+                "$ref": "#/$defs/id"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^secret:v1:[A-Fa-f0-9-]{36}$"
+              }
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "headers",
+            "body",
+            "truncated"
+          ],
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599
+            },
+            "headers": {
+              "type": "object",
+              "maxProperties": 128,
+              "propertyNames": {
+                "pattern": "^(?!(?:set-cookie|set-cookie2|proxy-.*)$)[a-z0-9-]{1,64}$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            },
+            "body": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "text"
+                  ],
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 10485760
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "json"
+                  ],
+                  "properties": {
+                    "json": {}
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "base64"
+                  ],
+                  "properties": {
+                    "base64": {
+                      "type": "string",
+                      "maxLength": 13981016
+                    }
+                  }
+                }
+              ]
+            },
+            "truncated": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    "projectProgress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.progress"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "const": "list"
+                },
+                "includeMissing": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "relativePath",
+                "mediaKind",
+                "versionKey",
+                "parentProgressId"
+              ],
+              "properties": {
+                "action": {
+                  "const": "create"
+                },
+                "relativePath": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "mediaKind": {
+                  "enum": [
+                    "image",
+                    "video"
+                  ]
+                },
+                "versionKey": {
+                  "type": "string"
+                },
+                "parentProgressId": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "trackingEnabled": {
+                  "type": "boolean"
+                },
+                "sourceMetadata": {
+                  "$ref": "#/$defs/versionSourceMetadata"
+                },
+                "sourceProgressIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "childProgressId",
+                "parentProgressId"
+              ],
+              "properties": {
+                "action": {
+                  "const": "relate"
+                },
+                "childProgressId": {
+                  "type": "string"
+                },
+                "parentProgressId": {
+                  "type": "string"
+                },
+                "expectedUpdatedAt": {
+                  "type": "number"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "progress",
+                "edges"
+              ],
+              "properties": {
+                "progress": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/jsonObject"
+                  }
+                },
+                "edges": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/jsonObject"
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "progress",
+                "edges"
+              ],
+              "properties": {
+                "progress": {
+                  "$ref": "#/$defs/jsonObject"
+                },
+                "edges": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/jsonObject"
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "result"
+              ],
+              "properties": {
+                "result": {
+                  "$ref": "#/$defs/jsonObject"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "projectFileInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.files.inputToken"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "relativePath"
+          ],
+          "properties": {
+            "relativePath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "expectedDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input",
+            "relativePath",
+            "name",
+            "byteLength",
+            "sha256",
+            "fileId"
+          ],
+          "properties": {
+            "input": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "token",
+                "expiresAt"
+              ],
+              "properties": {
+                "token": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "expiresAt": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "relativePath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "fileId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "projectFilesWatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "project.files.watch"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "relativePaths"
+              ],
+              "properties": {
+                "action": {
+                  "const": "subscribe"
+                },
+                "relativePaths": {
+                  "type": "array",
+                  "maxItems": 256,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "includeVersions": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "subscriptionId",
+                "cursor"
+              ],
+              "properties": {
+                "action": {
+                  "const": "poll"
+                },
+                "subscriptionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "cursor": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "subscriptionId"
+              ],
+              "properties": {
+                "action": {
+                  "const": "unsubscribe"
+                },
+                "subscriptionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "subscriptionId",
+                "cursor",
+                "expiresAt",
+                "files"
+              ],
+              "properties": {
+                "subscriptionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "cursor": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "expiresAt": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "files": {
+                  "type": "array",
+                  "maxItems": 256,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "relativePath",
+                      "fileId",
+                      "revision",
+                      "versionId"
+                    ],
+                    "properties": {
+                      "relativePath": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "fileId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "versionId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 128
+                      },
+                      "missing": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "subscriptionId",
+                "cursor",
+                "expiresAt",
+                "files",
+                "events",
+                "rescanRequired"
+              ],
+              "properties": {
+                "subscriptionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "cursor": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "expiresAt": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "files": {
+                  "type": "array",
+                  "maxItems": 256,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "relativePath",
+                      "fileId",
+                      "revision",
+                      "versionId"
+                    ],
+                    "properties": {
+                      "relativePath": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "fileId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "versionId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 128
+                      },
+                      "missing": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                },
+                "events": {
+                  "type": "array",
+                  "maxItems": 768,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "relativePath",
+                      "fileId",
+                      "revision",
+                      "versionId",
+                      "subscriptionId",
+                      "sequence",
+                      "type",
+                      "previousRelativePath"
+                    ],
+                    "properties": {
+                      "relativePath": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "fileId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "versionId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 128
+                      },
+                      "missing": {
+                        "type": "boolean"
+                      },
+                      "subscriptionId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "sequence": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "type": {
+                        "enum": [
+                          "modified",
+                          "renamed",
+                          "deleted",
+                          "versionChanged"
+                        ]
+                      },
+                      "previousRelativePath": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      }
+                    }
+                  }
+                },
+                "rescanRequired": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "unsubscribed"
+              ],
+              "properties": {
+                "unsubscribed": {
+                  "const": true
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "componentTransfer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "component.transfer"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "name",
+                "byteLength"
+              ],
+              "properties": {
+                "action": {
+                  "const": "create"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                "byteLength": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483648
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "token"
+              ],
+              "properties": {
+                "action": {
+                  "const": "openInput"
+                },
+                "token": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "transferId",
+                "offset",
+                "base64"
+              ],
+              "properties": {
+                "action": {
+                  "const": "write"
+                },
+                "transferId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "base64": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1398104
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "transferId",
+                "offset",
+                "byteLength"
+              ],
+              "properties": {
+                "action": {
+                  "const": "read"
+                },
+                "transferId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "byteLength": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1048576
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "transferId",
+                "expectedDigest"
+              ],
+              "properties": {
+                "action": {
+                  "const": "finish"
+                },
+                "transferId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "expectedDigest": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "transferId"
+              ],
+              "properties": {
+                "action": {
+                  "const": "close"
+                },
+                "transferId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "transferId",
+                "byteLength",
+                "chunkBytes",
+                "expiresAt"
+              ],
+              "properties": {
+                "transferId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "byteLength": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "chunkBytes": {
+                  "const": 1048576
+                },
+                "expiresAt": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "nextOffset"
+              ],
+              "properties": {
+                "nextOffset": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "offset",
+                "nextOffset",
+                "base64",
+                "eof"
+              ],
+              "properties": {
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "nextOffset": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "base64": {
+                  "type": "string",
+                  "maxLength": 1398104
+                },
+                "eof": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "input",
+                "byteLength",
+                "sha256"
+              ],
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "token",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "expiresAt": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                },
+                "byteLength": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "closed"
+              ],
+              "properties": {
+                "closed": {
+                  "const": true
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "projectPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "const": "project.preview"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "enum": [
+                    "get",
+                    "subscribe",
+                    "unsubscribe"
+                  ]
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "const": "seek"
+                },
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "action",
+                "sessionId",
+                "time"
+              ]
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "revision": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "video": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "sessionId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "relativePath": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024
+                        },
+                        "time": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "duration": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "paused": {
+                          "type": "boolean"
+                        },
+                        "canSeek": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "sessionId",
+                        "relativePath",
+                        "time",
+                        "duration",
+                        "paused",
+                        "canSeek"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "revision",
+                "video"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "accepted": {
+                  "const": true
+                }
+              },
+              "required": [
+                "accepted"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ]
+    },
+    "componentPanel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "payload",
+        "result"
+      ],
+      "properties": {
+        "method": {
+          "const": "component.panel"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "const": "get"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "const": "update"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                "subtitle": {
+                  "type": "string",
+                  "maxLength": 240
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "title",
+            "subtitle"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "subtitle": {
+              "type": "string",
+              "maxLength": 240
+            }
+          }
+        }
+      }
+    }
+  }
+}

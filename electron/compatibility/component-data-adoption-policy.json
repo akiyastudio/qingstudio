@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "legacyDomainDatabaseOwners": [
+    {
+      "componentId": "team-retouch",
+      "paths": ["team-retouch.sqlite3"]
+    }
+  ],
+  "legacySettingsAdoptions": [
+    {
+      "componentId": "team-retouch",
+      "topLevelKey": "personDetection"
+    },
+    {
+      "componentId": "video-tools",
+      "topLevelKey": "videoTools"
+    }
+  ]
+}

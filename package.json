@@ -1,0 +1,184 @@
+{
+  "name": "qingstudio",
+  "productName": "照片流开源版",
+  "private": true,
+  "license": "Apache-2.0",
+  "version": "26.9.19.1",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "generate:icon": "node scripts/generate-app-icon.cjs",
+    "build:shell-thumbnail": "node scripts/build-shell-thumbnail.cjs",
+    "build:recycle-bin-service": "node scripts/build-recycle-bin-service.cjs",
+    "build:file-clipboard-service": "node scripts/build-file-clipboard-service.cjs",
+    "build:file-publication-service": "node scripts/build-file-publication-service.cjs",
+    "build:filesystem-native-services": "npm run build:file-publication-service && npm run build:recycle-bin-service",
+    "build:video-surface-host": "node scripts/build-video-surface-host.cjs",
+    "build:job-object-launcher": "node scripts/build-job-object-launcher.cjs",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:python": "node scripts/build-python.cjs",
+    "setup:python": "node scripts/setup-python.cjs",
+    "check:python": "node scripts/check-python-environment.cjs",
+    "typecheck": "tsc -b --pretty false",
+    "preview": "vite preview",
+    "electron": "npm run build:shell-thumbnail && npm run build:recycle-bin-service && npm run build:file-clipboard-service && npm run build:file-publication-service && npm run build:video-surface-host && npm run build:job-object-launcher && node scripts/launch-electron-dev.cjs",
+    "electron:dev": "cross-env PHOTOFLOW_DEV_SERVER_URL=http://localhost:5173 concurrently -k \"cross-env BROWSER=none npm run dev\" \"npm run electron\"",
+    "preelectron:dev": "node scripts/prepare-development-python.cjs",
+    "build:native": "npm run build:shell-thumbnail && npm run build:recycle-bin-service && npm run build:file-clipboard-service && npm run build:file-publication-service && npm run build:video-surface-host && npm run build:job-object-launcher",
+    "electron:build": "npm run generate:icon && npm run build && npm run build:python && npm run build:native && node scripts/build-electron.cjs",
+    "test": "node scripts/test-public-source.cjs && node scripts/test-file-publication-platform.cjs && node scripts/test-component-status-refresh-policy.cjs",
+    "test:smoke": "node scripts/test-public-smoke.cjs"
+  },
+  "build": {
+    "appId": "cn.qingstudio.opensource",
+    "icon": "packaging/icon.ico",
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
+    "directories": {
+      "output": "artifacts/installers",
+      "buildResources": "packaging"
+    },
+    "files": [
+      "artifacts/web/**/*",
+      "electron/**/*",
+      "electron/generated/job-object-launcher-identity.json"
+    ],
+    "asarUnpack": [
+      "node_modules/exiftool-vendored.exe/**/*",
+      "node_modules/exiftool-vendored.pl/**/*"
+    ],
+    "electronFuses": {
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
+    "afterPack": "scripts/verify-job-object-packaged-layout.cjs",
+    "win": {
+      "executableName": "QingStudio",
+      "target": [
+        "nsis"
+      ],
+      "extraResources": [
+        {
+          "from": "artifacts/python/PhotoFlowImportWorker",
+          "to": "python/PhotoFlowImportWorker"
+        },
+        {
+          "from": "artifacts/python/inspiration-tools",
+          "to": "python/inspiration-tools"
+        },
+        {
+          "from": "electron/bin/shell-thumbnail.exe",
+          "to": "shell-thumbnail.exe"
+        },
+        {
+          "from": "electron/bin/recycle-bin-service.exe",
+          "to": "recycle-bin-service.exe"
+        },
+        {
+          "from": "electron/bin/file-clipboard-service.exe",
+          "to": "file-clipboard-service.exe"
+        },
+        {
+          "from": "electron/bin/file-publication-service.exe",
+          "to": "file-publication-service.exe"
+        },
+        {
+          "from": "electron/bin/video-surface-host.exe",
+          "to": "video-surface-host.exe"
+        },
+        {
+          "from": "electron/bin/job-object-launcher.exe",
+          "to": "job-object-launcher.exe"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "license": "LICENSE",
+      "createDesktopShortcut": false,
+      "shortcutName": "照片流开源版",
+      "uninstallDisplayName": "照片流开源版"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.photography",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Please allow access",
+        "NSPhotoLibraryUsageDescription": "需要访问照片以进行整理"
+      },
+      "extraResources": [
+        {
+          "from": "artifacts/python/PhotoFlowImportWorker",
+          "to": "python/PhotoFlowImportWorker"
+        },
+        {
+          "from": "artifacts/python/inspiration-tools",
+          "to": "python/inspiration-tools"
+        },
+        {
+          "from": "electron/bin/file-publication-service",
+          "to": "file-publication-service"
+        }
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "python/birthdays.json",
+        "to": "python/birthdays.json"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "NOTICE",
+        "to": "NOTICE"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      }
+    ]
+  },
+  "dependencies": {
+    "exiftool-vendored": "37.2.0"
+  },
+  "devDependencies": {
+    "@electron/asar": "^3.2.18",
+    "@eslint/js": "^8.57.1",
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/node": "^24.10.1",
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.22",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "43.4.1",
+    "electron-builder": "^26.0.12",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.6",
+    "globals": "^15.14.0",
+    "lucide-react": "^0.344.0",
+    "postcss": "^8.5.6",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tailwindcss": "^3.4.18",
+    "typescript": "^5.2.2",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^5.2.0",
+    "wait-on": "^7.2.0"
+  },
+  "description": "照片流主程序：以本地项目为核心的摄影工作流工具。",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akiyastudio/qingstudio.git"
+  },
+  "author": "成都市金牛区拾玖寻铃摄影工作室"
+}

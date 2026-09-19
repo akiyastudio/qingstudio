@@ -1,0 +1,13 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+artifacts/
+electron/bin/
+electron/generated/
+.cache/
+.tmp/
+.env
+.env.*
+*.local.json
+packaging/icon.ico

@@ -1,3 +1,6 @@
+import { LocalizedText } from "../../i18n/LocalizedText";
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { AppConfig } from '../../types';
@@ -22,6 +25,7 @@ type ProgressPairPreviewProps = {
 };
 
 export const ProgressPairPreview = ({ referencePath = '', sourcePath = '', referenceLabel = '上一版本', sourceLabel = '当前版本', referenceMissing = false, mode, swapped, cacheConfig, onModeChange, onSwappedChange }: ProgressPairPreviewProps) => {
+  useLocale();
   const [resources, setResources] = useState<{ reference?: string; source?: string; loading: boolean; error?: string }>({ loading: false });
   const requestSequenceRef = useRef(0);
 
@@ -62,9 +66,9 @@ export const ProgressPairPreview = ({ referencePath = '', sourcePath = '', refer
   }, [referencePath, sourcePath, referenceMissing, cacheConfig.directory, cacheConfig.maxSizeGB]);
 
   const image = (url: string | undefined, label: string, missing: boolean) => missing
-    ? <div className="tracking-confirmation-missing">{referencePath ? '上一版本引用不可用，请重新定位或拒绝。' : '未关联上一版本'}</div>
+    ? <div className="tracking-confirmation-missing">{referencePath ? t("ui.the.previous.version.reference.is.unavailable.7065a7") : t("ui.no.previous.version.link.566fae")}</div>
     : url ? <img src={url} alt={label} draggable={false} className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"/>
-    : <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-400">{resources.loading ? <Loader2 size={22} className="animate-spin"/> : '没有可用预览'}</div>;
+    : <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-400">{resources.loading ? <Loader2 size={22} className="animate-spin"/> : t("ui.no.preview.available.315389")}</div>;
 
   return <section className="tracking-confirmation-preview">
     <ImageComparisonView
@@ -77,6 +81,6 @@ export const ProgressPairPreview = ({ referencePath = '', sourcePath = '', refer
       comparisonKey={`${referencePath}|${sourcePath}`}
       unavailable={referenceMissing || !resources.reference || !resources.source}
     />
-    {resources.error && <p className="border-t border-red-900 bg-red-950/60 px-3 py-2 text-xs text-red-300">{resources.error}</p>}
+    {resources.error && <p className="border-t border-red-900 bg-red-950/60 px-3 py-2 text-xs text-red-300"><LocalizedText value={resources.error}/></p>}
   </section>;
 };

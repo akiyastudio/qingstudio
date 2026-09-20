@@ -1,65 +1,67 @@
-# 文件资源与大数据 API
+# File resources and large-data API
 
-本页是当前 Host API 的补充契约。类型在 `component-sdk/index.d.ts`，请求和结果在 `component-host-api.schema.json`。组件 service 调用 Host capability；renderer 通过组件声明的 `.vN` RPC 转发，不获得本地路径或任意文件系统权限。
+English | [简体中文](PLUGIN_FILE_RESOURCES_API.zh-CN.md)
 
-## 任意格式项目文件
+This page supplements the current Host API. Types are in `component-sdk/index.d.ts`; request/result schemas are in `component-host-api.schema.json`. The component service calls Host capabilities. Renderers forward requests through declared component `.vN` RPC methods and receive neither local paths nor arbitrary filesystem access.
 
-声明 `project.files.inputToken` capability，以及 `project.files.read`、`project.input.read` 两项 permission。
+## Project files of any format
+
+Declare capability `project.files.inputToken` and both `project.files.read` and `project.input.read` permissions.
 
 ```js
 const file = await host.callHost(parentId, 'project.files.inputToken', {
-  relativePath: '视觉文档/方案.qs',
-  // expectedDigest: '上次保存的 SHA-256，可选'
+  relativePath: 'Design/proposal.qs',
+  // expectedDigest: 'optional SHA-256 from the previous save'
 });
 const snapshot = await host.callHost(parentId, 'project.input.tokens', {
   action: 'materialize', token: file.input.token
 });
-// service 读取 snapshot.privatePath；不把这个路径传给 UI。
+// The service reads snapshot.privatePath; never forward that path to the UI.
 ```
 
-示例中的 host 来自 SDK 的 `createServiceHostClient`，parentId 是正在处理的组件 RPC 请求 ID。物化还需声明 `project.input.tokens` capability。
+Here `host` comes from the SDK's `createServiceHostClient`; `parentId` identifies the active component RPC request. Materialization also requires the `project.input.tokens` capability.
 
-接受 scope 内任何扩展名或没有扩展名的普通文件，包括图片、QS、ABR、字体；解析、显示和编辑由插件实现。返回 `{input:{token,expiresAt},relativePath,name,byteLength,sha256,fileId}`。路径使用 `/`，拒绝绝对路径、`..`、符号链接/目录联接、NTFS 数据流及 `.photoflow-*` 内部项。
+Any ordinary file inside scope is accepted, with any extension or none, including images, QS, ABR, and fonts. Parsing, display, and editing belong to the plugin. The result is `{input:{token,expiresAt},relativePath,name,byteLength,sha256,fileId}`. Paths use `/`; absolute paths, `..`, symlinks/junctions, NTFS streams, and `.photoflow-*` internal entries are rejected.
 
-令牌十分钟有效、一次消费，绑定组件/工作区/项目和 scope；原始文件在授权或复制期间变化，或 expectedDigest 不匹配，返回 `COMPONENT_HOST_CONFLICT`。摘要基于完整文件流式计算，不把文件整体读入内存。fileId 是 scope/来源页内的物理身份标识；改名保留，原位替换可改变。分页仍按原有 `project.files.page/search` 与 `project.media.page` 分工。
+Tokens expire after ten minutes, are consumed once, and bind component/workspace/project/scope. Changes during authorization or copying, or an `expectedDigest` mismatch, return `COMPONENT_HOST_CONFLICT`. SHA-256 is streamed over the full file without loading it into memory. `fileId` identifies the physical file within its scope/source page; renaming preserves it, while replacement may change it. Paging still uses the existing division between `project.files.page/search` and `project.media.page`.
 
-## 链接资源
+## Linked resource state
 
-声明 `project.files.watch` capability 和 `project.files.read` permission。
+Declare `project.files.watch` and permission `project.files.read`.
 
-| action | 参数 | 结果 |
+| Action | Parameters | Result |
 | --- | --- | --- |
-| subscribe | `relativePaths`（1–256 个唯一已有文件）、可选 `includeVersions` | `subscriptionId,cursor,expiresAt,files` |
-| poll | `subscriptionId,cursor` | `subscriptionId,cursor,expiresAt,files,events,rescanRequired` |
-| unsubscribe | `subscriptionId` | `unsubscribed:true` |
+| `subscribe` | `relativePaths` (1–256 unique existing files), optional `includeVersions` | `subscriptionId,cursor,expiresAt,files` |
+| `poll` | `subscriptionId,cursor` | `subscriptionId,cursor,expiresAt,files,events,rescanRequired` |
+| `unsubscribe` | `subscriptionId` | `unsubscribed:true` |
 
-files 包含 `relativePath,fileId,revision,versionId`；缺失时带 `missing:true`。事件类型为 `modified/renamed/deleted/versionChanged`，包含文件信息、`subscriptionId`、单调 `sequence` 和 `previousRelativePath`。按 sequence 去重，保存返回的 cursor。原路径恢复会发出 modified。版本跟踪仅用于项目，另需 `project.versions.read`，跟踪关联照片的当前版本 ID。
+Files include `relativePath,fileId,revision,versionId`, with `missing:true` when absent. Events are `modified`, `renamed`, `deleted`, or `versionChanged`, carrying file information, `subscriptionId`, monotonic `sequence`, and `previousRelativePath`. Deduplicate by sequence and retain the returned cursor. A restored original path emits `modified`. Version tracking applies only to projects, additionally requires `project.versions.read`, and tracks the associated photo's current version ID.
 
-这是资源**状态订阅**，不是逐次操作日志：两次轮询间的变化会合并，不保留短暂的中间状态。每次最多扫描 scope 下 20,000 个目录项；扫描或版本快照截断、cursor 不匹配、轮询间隔超过 30 秒时返回 `rescanRequired:true`，调用方必须核对资源。截断扫描不会把没找到的文件直接判为删除。同 inode 多个硬链接造成改名定位歧义时不猜测目标。
+This is a **state subscription**, not an operation log: changes between polls are coalesced and transient intermediate states are not retained. A scan visits at most 20,000 scope entries. Truncated scans/version snapshots, cursor mismatches, or intervals exceeding 30 seconds return `rescanRequired:true`; the caller must reconcile resources. A truncated scan does not treat undiscovered files as deleted. Multiple hard links with the same inode do not lead to guessed rename targets.
 
-建议可见页面每 2–5 秒 poll，一次订阅不并发 poll。无变化返回空 events。收到变化后另取读取令牌；订阅本身不赋予读取权。
+Poll visible pages every 2–5 seconds, without concurrent polls for one subscription. Unchanged state returns empty events. Obtain a separate read token after a change; subscriptions do not authorize reading.
 
-绑定组件、工作区、项目、scope 和来源页，每组件最多 16 个订阅，全宿主最多 256 个。五分钟无调用过期；view 清理或组件卸载/升级时释放。重连时带旧 cursor 核对最新状态，过期则重新 subscribe 建立基线。
+Subscriptions bind component, workspace, project, scope, and source page. Limits are 16 per component and 256 per host. They expire after five minutes without a call and are released on view cleanup or component uninstall/upgrade. Reconnect with the old cursor to reconcile; after expiry, subscribe again for a new baseline.
 
-## 大二进制传输
+## Large binary transfers
 
-声明 `component.transfer` capability 和 `project.input.read` permission。原图/ABR 输入优先用令牌在宿主内流式物化，服务导出优先直接写 output stage；跨 renderer/service 传输时使用以下会话。
+Declare `component.transfer` and permission `project.input.read`. Prefer streaming token materialization inside the host for original images/ABR, and direct output-stage writes for service exports. Use transfer sessions when crossing the renderer/service boundary.
 
-上传：
+Upload:
 
-1. `{action:'create',name,byteLength}` 返回 `transferId,byteLength,chunkBytes,expiresAt`。
-2. `{action:'write',transferId,offset,base64}` 顺序写入私有文件，返回 `nextOffset`，确认后再发送下一块。同位置相同内容可重试，不同内容或跳跃写入返回冲突。
-3. `{action:'finish',transferId,expectedDigest}` 检查完整大小和 SHA-256，返回 `input,byteLength,sha256`。相同摘要重复 finish 返回同一结果，但令牌仍只能消费一次。
-4. `{action:'close',transferId}` 释放传输文件。finish 的令牌仍可物化，也可传入 `project.output` 的 write 操作，继续 validate/commit。
+1. `{action:'create',name,byteLength}` returns `transferId,byteLength,chunkBytes,expiresAt`.
+2. `{action:'write',transferId,offset,base64}` writes sequentially to a private file and returns `nextOffset`. Wait for acknowledgment before the next chunk. Identical retries at the same offset work; different bytes or skipped offsets conflict.
+3. `{action:'finish',transferId,expectedDigest}` checks full size and SHA-256 and returns `input,byteLength,sha256`. Repeating finish with the same digest returns the same result, but the token remains single-use.
+4. `{action:'close',transferId}` releases transfer files. The finished token remains materializable, or can be passed to `project.output` `write`, followed by validate/commit.
 
-下载：`{action:'openInput',token}` 消费一次性令牌，返回读取会话；`{action:'read',transferId,offset,byteLength}` 返回 `offset,nextOffset,base64,eof`；最后 close。可重复读取同一区间。支持空文件，不支持目录输入。
+Download: `{action:'openInput',token}` consumes the token and returns a read session. `{action:'read',transferId,offset,byteLength}` returns `offset,nextOffset,base64,eof`; close when finished. A range can be read repeatedly. Empty files are supported; directory inputs are not.
 
-每块原始数据最多 1 MiB；上传单文件、每组件活动上传总预算均为 2 GiB。每组件最多 8 个会话，全宿主最多 64 个。会话绑定与订阅相同，单会话串行调用，十分钟无操作过期，view 清理或卸载时释放。在有效会话内可重试；宿主重启或过期后需重新创建，不提供持久断点恢复。
+Raw chunks are at most 1 MiB. The per-file upload limit and aggregate active upload budget per component are both 2 GiB. Limits are eight sessions per component and 64 per host. Sessions use the same binding as subscriptions, require serial calls within each session, expire after ten idle minutes, and are released on view cleanup or uninstall. Retry within a live session; after host restart or expiry, create a new session. Persistent resume is not provided.
 
-每块应使用独立组件 RPC 请求转发，避免同一 RPC 超过 128 次嵌套 capability 调用或请求超时。协议仍为 base64 JSON，单帧仍限 2 MiB，并保留原有并发限制。这一接口使传输内存和帧大小有界，不是零拷贝通道；finish 会创建校验后的私有快照。
+Forward each chunk through a separate component RPC to avoid exceeding 128 nested capability calls or the parent request timeout. Transport remains base64 JSON with a 2 MiB frame limit and existing concurrency limits. This bounds transfer memory and frame size; it is not zero-copy. Finish creates a verified private snapshot.
 
-## RPC 数量
+## RPC counts
 
-`component.sidePanel`、`media.contextAction`、`project.contextAction`、`project.importProvider`、`project.exportProvider`、`application.command` 每个 contribution 的 `rpcMethods` 上限从 16 提高到 **128**，与 service 总上限一致。仍要求唯一、版本化、已在 service 中声明，且不能暴露 host-only 方法。设置页保持 32，其他贡献数量不变。
+Each `component.sidePanel`, `media.contextAction`, `project.contextAction`, `project.importProvider`, `project.exportProvider`, and `application.command` contribution allows **128** `rpcMethods`, increased from 16 to match the service limit. Methods must remain unique, versioned, declared by the service, and not host-only. Settings pages remain limited to 32; other contribution-count limits are unchanged.
 
-项目外另存为、可选 capability 协商和插件绘画引擎功能不在本次改动范围。
+Saving outside the project, optional capability negotiation, and plugin painting-engine features are outside this change's scope.

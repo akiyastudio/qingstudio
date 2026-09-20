@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { normalizeLanguage, setLanguage } from '../../i18n/runtime';
 import { workspaceWindowStartup } from '../../platform/workspace-window-client';
 import { reconcileRemoteConfig } from './remote-config-model';
 import { registerApplicationQuitFlush } from '../app/application-quit-client';
@@ -67,6 +68,7 @@ export const normalizeStartupConfig = (fileConfig: AppConfig): StartupConfigNorm
   let normalizedConfig = {
     ...legacyConfig,
     theme: fileConfig.theme ?? 'system',
+    language: normalizeLanguage(fileConfig.language),
     telemetry: { enabled: fileConfig.telemetry?.enabled === true, crashReports: fileConfig.telemetry?.crashReports === true },
     workspacePath: fileConfig.workspacePath?.trim() ?? '',
     autoCleanupDeletedProjectData: fileConfig.autoCleanupDeletedProjectData ?? true,
@@ -120,6 +122,7 @@ export const useStartupConfig = () => {
     return startup ? normalizeStartupConfig(startup.config).config : null;
   });
   const [config, setConfig] = useState<AppConfig | null>(initialConfig);
+
   const [startupSdAutoStart, setStartupSdAutoStart] = useState(false);
   const [startupBirthdays, setStartupBirthdays] = useState<Record<string, string> | null>(null);
   const [configLoaded, setConfigLoaded] = useState(Boolean(initialConfig));
@@ -129,6 +132,7 @@ export const useStartupConfig = () => {
     if (!configLoaded) return;
     return window.electronAPI.onConfigChanged?.(snapshot => {
       const remote = normalizeStartupConfig(snapshot).config;
+      setLanguage(normalizeLanguage(remote.language));
       const previous = lastConfigSnapshot.current;
       lastConfigSnapshot.current = remote;
       setConfig(local => local && previous ? reconcileRemoteConfig(local, previous, remote) : remote);
@@ -141,7 +145,7 @@ export const useStartupConfig = () => {
   }), [configLoaded, config]);
 
   useEffect(() => {
-    if (initialConfig) return;
+    if (initialConfig) { setLanguage(normalizeLanguage(initialConfig.language)); return; }
     const loadConfig = async () => {
       try {
         if (window.electronAPI?.loadConfig) {
@@ -150,6 +154,7 @@ export const useStartupConfig = () => {
           if (startupSnapshot) setStartupBirthdays(startupSnapshot.birthdays || {});
           if (fileConfig) {
             const normalized = normalizeStartupConfig(fileConfig);
+            setLanguage(normalizeLanguage(normalized.config.language));
             if (!normalized.config.workspacePaths.length) setShowWorkspaceSetup(true);
             setStartupSdAutoStart(normalized.config.smartImport.autoStart === true);
             lastConfigSnapshot.current = normalized.config;
@@ -162,6 +167,7 @@ export const useStartupConfig = () => {
             const userPath = await window.electronAPI.getUserPath();
             if (userPath) {
               const defaultConfig = DEFAULT_CONFIG(userPath);
+              setLanguage(normalizeLanguage(defaultConfig.language));
               lastConfigSnapshot.current = defaultConfig;
               setConfig(defaultConfig);
               if (window.electronAPI?.saveConfig) await window.electronAPI.saveConfig(defaultConfig);

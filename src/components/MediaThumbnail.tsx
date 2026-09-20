@@ -1,3 +1,5 @@
+import { useLocale } from "../i18n/react";
+import { t } from "../i18n/runtime";
 import { useEffect, useRef, useState } from 'react';
 import { FileImage, Loader2, Play } from 'lucide-react';
 import type { AppConfig, ProjectFileEntry } from '../types';
@@ -17,6 +19,7 @@ import {
 const HOVER_VIDEO_PLAY_DELAY_MS = 300;
 
 export const MediaThumbnail = ({ entry, cacheConfig, requestedSize, queueOrder, large = false }: { entry: ProjectFileEntry; cacheConfig: AppConfig['mediaCache']; requestedSize: number; queueOrder: number; large?: boolean }) => {
+  useLocale();
   const previewCacheKey = mediaThumbnailPreviewKey(entry.path, entry.updatedAt, requestedSize);
   const cachedPreview = getMediaThumbnailPreview(previewCacheKey)
     ? { url: getMediaThumbnailPreview(previewCacheKey), size: requestedSize }
@@ -184,7 +187,7 @@ export const MediaThumbnail = ({ entry, cacheConfig, requestedSize, queueOrder, 
     className="relative flex h-full w-full items-center justify-center overflow-hidden bg-black/5"
   >
     {preview.url ? <img src={preview.url} alt="" draggable={false} className="h-full w-full object-contain" onLoad={() => { failedPreviewLoadCountRef.current = 0; setLoading(false); }} onError={handlePreviewLoadError}/> : <FileImage size={large ? 42 : 23} className="text-slate-400"/>}
-    {loading && <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-900/25"><Loader2 size={large ? 24 : 16} className="animate-spin text-white drop-shadow"/><span className="sr-only">正在加载预览</span></span>}
+    {loading && <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-900/25"><Loader2 size={large ? 24 : 16} className="animate-spin text-white drop-shadow"/><span className="sr-only">{t("ui.loading.preview.681093")}</span></span>}
     {entry.kind === 'video' && !showVideo && <Play size={large ? 25 : 15} fill="currentColor" className="pointer-events-none absolute text-white drop-shadow-[0_1px_4px_rgba(0,0,0,.8)]"/>}
     {showVideo && (
       <VideoHoverThumbnail src={videoUrl} poster={preview.url} name={entry.name} large={large} initialRatio={hoverRatioRef.current} onError={() => { setPlaybackFailed(true); setVideoActivated(false); }}/>

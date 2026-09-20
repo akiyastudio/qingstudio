@@ -1,3 +1,6 @@
+import { renderText } from "../../i18n/messages";
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import React, { Children, cloneElement, isValidElement, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { ComponentHostAction, ComponentPageOpenScope } from '../../types';
 import { ComponentIcon } from '../../components/ComponentIcon';
@@ -39,7 +42,7 @@ export const ViewportSubmenu = ({ children }: { children: React.ReactNode }) => 
   </div>;
 };
 
-export const ComponentToolbarActions = ({ actions, scope, onOpen, overflow = false }: { actions: ComponentHostAction[]; scope: ComponentPageOpenScope; onOpen: (action: ComponentHostAction, scope: ComponentPageOpenScope) => void; overflow?: boolean }) => actions.length ? <>{!overflow && <span aria-hidden className="toolbar-divider"/>}<div aria-label="UI 组件" className={overflow ? 'component-toolbar-actions-overflow' : 'component-toolbar-actions flex shrink-0 items-center gap-1'}>{actions.map(action => <button key={`${action.componentId}:${action.actionId}`} type="button" role={overflow ? 'menuitem' : undefined} onClick={() => onOpen(action, scope)} title={action.label} className={overflow ? 'project-menu-item' : 'project-action-button'}><ComponentIcon src={action.iconUrl} size={16}/><span>{action.label}</span></button>)}</div></> : null;
+export const ComponentToolbarActions = ({ actions, scope, onOpen, overflow = false }: { actions: ComponentHostAction[]; scope: ComponentPageOpenScope; onOpen: (action: ComponentHostAction, scope: ComponentPageOpenScope) => void; overflow?: boolean }) => { useLocale(); return (actions.length ? <>{!overflow && <span aria-hidden className="toolbar-divider"/>}<div aria-label={t("ui.ui.component.06bc7c")} className={overflow ? 'component-toolbar-actions-overflow' : 'component-toolbar-actions flex shrink-0 items-center gap-1'}>{actions.map(action => <button key={`${action.componentId}:${action.actionId}`} type="button" role={overflow ? 'menuitem' : undefined} onClick={() => onOpen(action, scope)} title={renderText(action.label)} className={overflow ? 'project-menu-item' : 'project-action-button'}><ComponentIcon src={action.iconUrl} size={16}/><span>{renderText(action.label)}</span></button>)}</div></> : null); };
 
 export const ViewportContextMenu = ({ x, y, widthClass, allowSubmenus = false, children }: { x: number; y: number; widthClass: string; allowSubmenus?: boolean; children: React.ReactNode }) => {
   const menuRef = useRef<HTMLDivElement>(null);

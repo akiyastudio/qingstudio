@@ -1,210 +1,197 @@
-# PhotoFlow Host API 规范
+# PhotoFlow Host API specification
 
-本文档是新组件的规范性说明。运行时清单校验器位于 `electron/component-host-contract.cjs`，机器可读约束位于 `electron/contracts/schemas/`，公开类型位于 `component-sdk/index.d.ts`。
+English | [简体中文](PLUGIN_HOST_API.zh-CN.md)
 
-## 版本协商与弃用
+This is the normative guide for new components. Runtime manifest validation is in `electron/component-host-contract.cjs`, machine-readable constraints are in `electron/contracts/schemas/`, and public types are in `component-sdk/index.d.ts`.
 
-PhotoFlow 只提供唯一、无版本协商的当前 Host API。组件必须声明 `componentHost.contractVersion:2`，并显式列出权限、能力、RPC 与事件；`componentHost.compatibility` 等 Host API 版本字段会作为未知字段拒绝。
+## Versioning and deprecation
 
-安全边界需要区分 UI 与后端：sandbox、禁用 Node、导航和浏览器权限只保护组件 UI 的 `WebContents`。组件 service、生命周期动作和 executable 是用户主动安装的受信本机代码，以当前用户的 OS 权限运行，可以直接访问该用户可访问的文件、网络和进程能力。Host API capability/permission 是正常组件的契约与最小授权，不是约束恶意进程的 OS 安全边界；“受监管进程”也只表示宿主控制启动、协议、超时和停止。当前模型不承诺安全执行不受信第三方市场插件。
+PhotoFlow exposes one current Host API without version negotiation. Declare `componentHost.contractVersion:2` and explicitly list permissions, capabilities, RPC, and events. Host API version fields such as `componentHost.compatibility` are rejected as unknown.
 
-组件自有 RPC 和事件以 `.vN` 结尾；Host capability 使用无版本的稳定名称。已发布的组件 RPC/event 语义不可修改；破坏性变化使用新的方法或事件版本。`electron/compatibility/` 下的业务适配器不属于公开 API，也不再增加方法。
+The UI sandbox disables Node, navigation, and browser permissions for UI WebContents only. Services, lifecycle actions, and executables are trusted native code installed by the user, with that user's OS file, network, and process access. Host permissions are an interoperability and least-privilege contract, not an OS boundary against malicious processes. Supervision controls startup, protocol, timeout, and shutdown. This model does not promise safe execution of untrusted marketplace plugins.
 
-渲染桥接 `window.photoFlowComponent.contractVersion` 仍为 `1`；这是独立的小型 preload ABI，不是 Host API 版本，也不参与协商。Host 上下文不包含 Host API 版本字段。
+Component RPC/events end in `.vN`; Host capabilities are unversioned. Breaking changes require new RPC/event versions, not changes to published semantics. Business adapters under `electron/compatibility/` are not public and receive no new methods. `window.photoFlowComponent.contractVersion` remains `1`, an independent preload ABI, not a negotiated Host API version. Context has no Host API version field. Its `locale` is the display language; see the [SDK](../component-sdk/README.md#display-language).
 
-## 清单与权限
+## Manifests and permissions
 
-带 UI 或组件服务的清单使用 Component Host contractVersion 2，并声明贡献项、服务协议/运行时/入口、版本化组件 RPC 白名单、无版本 Host 能力白名单和权限白名单；不声明 Host API compatibility。无事件时也要显式写空数组。能力需要匹配权限：
+UI/service manifests declare Host contract version 2, contributions, service protocol/runtime/entry, versioned RPC allowlists, unversioned capabilities, and permissions. Explicitly use an empty events array if none are emitted. Do not declare Host API compatibility.
 
-| 能力 | 权限 | 用途 |
+| Capability | Permission | Purpose |
 | --- | --- | --- |
-| `project.media.page` | `project.media.read` | 有界递归媒体分页 |
-| `project.media.variants` | `project.media.read` | 显式解析缩略图、预览或原图 |
-| `project.input.tokens` | `project.input.read` | 将受限输入物化到私有存储 |
-| `project.files.inputToken` | `project.files.read` + `project.input.read` | 项目 scope 内任意格式普通文件的读取令牌 |
-| `project.preview` | `project.preview.read`；跳转另需 `project.preview.control` | 当前预览视频、位置通知及绑定会话的跳转 |
-| `component.panel` | `component.panel` | 更新当前文件夹面板的标准顶部栏标题和副标题 |
-| `project.files.watch` | `project.files.read`；版本跟踪另需 `project.versions.read` | 链接资源状态订阅 |
-| `component.transfer` | `project.input.read` | 大二进制有界分段上传/下载 |
-| `project.output` | `project.output.write` | 暂存、登记/写入、校验、提交、回滚 |
-| `version.create` | `project.version.create` | 从已提交制品创建通用版本 |
-| `component.storage` | `component.storage` | 组件私有数据和 SQLite 位置 |
-| `component.settings` | `component.settings` | 与版本无关的私有 JSON 设置 |
-| `tasks` | `tasks` | 进度、检查点、取消与恢复握手 |
-| `dialogs` | `dialogs` | 宿主管理的确认和有界文件选择 |
-| `component.events` | `events` | 已声明的版本化组件事件 |
-| `component.lifecycle` | `component.lifecycle.read` | 授权、声明动作和生命周期状态 |
-| `component.media` | `component.media` | 私有存储下的媒体变体/打开/显示 |
-| `project.progress` | `project.progress` | 列出/创建进度节点并登记来源关系 |
-| `notifications` | `notifications` | 向主程序顶部 Toast 提交短暂纯文本状态 |
-| `project.files.page` / `project.files.search` | `project.files.read` | 非媒体文件、目录和 sidecar 的有界分页/搜索 |
-| `project.media.metadata` | `project.media.read` | 白名单 EXIF、尺寸、色彩、相机/镜头与视频元数据 |
-| `project.versions.page` / `project.version.graph` | `project.versions.read` | 有界版本分页与只读版本/进度来源图 |
-| `project.media.ratings` | `project.media.ratings.read` | 批量读取宿主实际支持的评分字段 |
-| `project.media.ratings.write` | `project.media.ratings.write` | 批量评分 CAS 写入；逐项明确成功或失败 |
-| `project.version.update` | `project.version.write` | 支持字段的原子版本 CAS 更新 |
-| `project.version.delete` | `project.version.delete` | 独立高风险权限下的版本 CAS 删除 |
-| `project.progress.manage` | `project.progress.manage` | 节点更新/取消登记与来源边变更 |
-| `project.import` | `project.import` | 一次性输入令牌的多文件事务导入 |
-| `project.files.mutate` | `project.files.write` | preflight/commit 的文件变更与收据 undo |
-| `project.media.process` | `project.media.process` | 视频时间轴/裁剪与 Office 图片提取 |
-| `component.secrets` | `component.secrets` | safeStorage 加密的组件隔离秘密引用 |
-| `network.fetch` | `network.fetch` | origin allowlist、DNS pinning 与秘密绑定的 HTTPS 请求 |
+| `project.media.page` | `project.media.read` | Bounded recursive media paging |
+| `project.media.variants` | `project.media.read` | Thumbnail, preview, original resolution |
+| `project.input.tokens` | `project.input.read` | Materialize authorized input privately |
+| `project.files.inputToken` | `project.files.read` + `project.input.read` | Any ordinary project file |
+| `project.preview` | `project.preview.read`; seek also needs `project.preview.control` | Video state and session-bound seeking |
+| `component.panel` | `component.panel` | Current folder-panel title/subtitle |
+| `project.files.watch` | `project.files.read`; version tracking also needs `project.versions.read` | Resource state subscriptions |
+| `component.transfer` | `project.input.read` | Bounded binary transfer chunks |
+| `project.output` | `project.output.write` | Stage, write/register, validate, commit, rollback |
+| `version.create` | `project.version.create` | Versions from committed artifacts |
+| `component.storage` | `component.storage` | Private data and SQLite locations |
+| `component.settings` | `component.settings` | Version-independent JSON settings |
+| `tasks` | `tasks` | Progress, checkpoints, cancellation, resume |
+| `dialogs` | `dialogs` | Confirmation and bounded selection |
+| `component.events` | `events` | Declared versioned events |
+| `component.lifecycle` | `component.lifecycle.read` | Grants, actions, lifecycle state |
+| `component.media` | `component.media` | Private media variants/open/reveal |
+| `component.runtime.execute` | `component.runtime.execute` | Declared runtime operations and playback |
+| `project.progress` | `project.progress` | Progress nodes and source relations |
+| `notifications` | `notifications` | Short plain-text top Toasts |
+| `project.files.page` / `project.files.search` | `project.files.read` | Non-media files, directories, sidecars |
+| `project.media.metadata` | `project.media.read` | Allowlisted EXIF, dimensions, color, camera/lens, video |
+| `project.versions.page` / `project.version.graph` | `project.versions.read` | Bounded versions and provenance |
+| `project.media.ratings` | `project.media.ratings.read` | Actual supported rating fields |
+| `project.media.ratings.write` | `project.media.ratings.write` | Per-item rating CAS writes |
+| `project.version.update` | `project.version.write` | Atomic version CAS updates |
+| `project.version.delete` | `project.version.delete` | CAS deletion with separate permission |
+| `project.progress.manage` | `project.progress.manage` | Node update/unregister and edge changes |
+| `project.import` | `project.import` | Transactional token-based import |
+| `project.files.mutate` | `project.files.write` | Preflight/commit and receipt undo |
+| `project.media.process` | `project.media.process` | Timeline frames and Office image extraction |
+| `component.secrets` | `component.secrets` | Isolated safeStorage secret references |
+| `network.fetch` | `network.fetch` | HTTPS origin allowlists, DNS pinning, secret bindings |
 
-执行已声明的生命周期动作还需要 `component.lifecycle.manage`。代理对 `describe` 仍检查 `component.lifecycle.read`；生命周期服务在执行 `preflight`、`install`、`repair` 或 `uninstall` 前检查更强权限。
+Lifecycle execution additionally requires `component.lifecycle.manage`; describe still checks read permission. Permissions are checked at parsing and every call. Component ID/version, project ID/name/status, and scope are host-bound and cannot be overridden by payload.
 
-权限在解析清单时检查一次，每次能力调用时再次检查。组件 ID/版本、项目 ID/名称/状态和作用域来自绑定的宿主页面，载荷不能覆盖这些身份。
+`application.settingsPage` validates ID, label, optional title, packaged entry, and RPC methods. Its surface is `application.settings`, without project identity. Methods must be in both the contribution and service allowlists. Allowed capabilities are `component.settings`, `component.lifecycle`, `dialogs`, `notifications`, and `component.secrets`, subject to permissions and action checks. Project capabilities and `network.fetch` are denied here. Application-command context additionally permits authorized `network.fetch`.
 
-Host API 清单可选声明 `application.settingsPage`，其 `id`、`label`、可选 `title`、包内 `entry` 和 `rpcMethods` 都经严格校验。设置页上下文的 `surface` 是 `application.settings`，没有项目身份；页面只能调用 contribution 列出且同时存在于 `service.rpcMethods` 的方法。服务在该 surface 下仅能使用已授权的组件设置、生命周期、确认对话框和 Host API 通知；其他 Host 能力全部默认拒绝。
+### Top notifications
 
-### 顶部短通知（Host API）
+Declare both `notifications` capability and permission. Renderers call `window.photoFlowComponent.notify` with `{tone,message,dedupeKey?}`; services use the equivalent capability only within an existing request. Do not route UI notifications through a service or treat this as arbitrary channel access. Removed `durationMs` is rejected; the host owns lifetime.
 
-同时声明 `notifications` capability 和 permission 的组件可使用通知。renderer 只调用 `window.photoFlowComponent.notify`，只提交 `{tone,message,dedupeKey?}`；后端 service 仅在处理既有请求时使用同语义的 `notifications` capability。renderer 不应为了通知绕到 service，service 也不能借此获得任意 renderer channel。`durationMs` 已从契约删除，出现该字段会作为未知字段被明确拒绝；组件不能控制通知生命周期。
+Tones are info/success/warning/error. Nonempty plain text is limited to 360 characters before and after trim; optional dedupe keys are ASCII IDs up to 80 characters. Errors persist until dismissed; other tones expire after 3500 ms. Preload enforces the same boundary before copying to main. Unknown fields, HTML, URLs, paths, callbacks, and commands are rejected. Senders bind to admitted component WebContents; permissions are checked per call. Ordinary/error bursts are separately bounded over ten seconds, with 1.2-second content/key deduplication. Destruction/uninstall/upgrade clears state. Main-window unavailability or send races return retryable `NOTIFICATION_HOST_UNAVAILABLE`, not native Electron notifications.
 
-宿主只接受 `info|success|warning|error`、raw 与 trim 后均不超过 360 字的非空纯文本，`dedupeKey` 为最多 80 字的 ASCII ID。生命周期完全由宿主按 tone 决定：`error` 常驻至手动关闭，`info`、`success`、`warning` 统一在 3500 ms 后自动消失；组件不能提交 `durationMs`。组件 preload 在复制到主进程前执行同一硬边界；未知字段、HTML、URL、路径、回调和命令均拒绝。发送方绑定到已通过完整性准入的组件 `webContents`；清单能力与权限在每次调用时复核。宿主按组件执行普通状态和 error 各自有界的 burst/10 秒速率限制、1.2 秒内容/键去重，并在 renderer 销毁或组件卸载/升级时清理状态。主窗口不可用或发送竞态失败时返回 retryable 的 `NOTIFICATION_HOST_UNAVAILABLE`，而不是创建 Electron 原生提示。
+Success is `{accepted:true,id}`; duplicates return `{accepted:false,deduplicated:true,code:"NOTIFICATION_DEDUPLICATED"}`; failures return `{accepted:false,error:{code,message,retryable}}`, with no version. Main uses a bounded buffer before subscriber readiness and re-handshakes/flushes after reload. Uninstall/upgrade purges component scope. Main preload revalidates events before bounded `useTopToastStack`. All tones share host icons, colors, lifetime, stacking, dismissal, and one live region. A transparent native overlay stays above component Views without changing their bounds; empty regions pass pointer input through, while cards/buttons remain interactive. Long work uses tasks; decisions use dialogs.
 
-结果不带版本号：成功为 `{accepted:true,id}`，重复为 `{accepted:false,deduplicated:true,code:"NOTIFICATION_DEDUPLICATED"}`，失败包含 `{accepted:false,error:{code,message,retryable}}`。主进程在 React subscriber 完成 ready 握手前使用有界缓冲，reload 后重新握手并 flush；卸载/升级发送组件作用域 purge。事件经主 preload 再校验后进入有总量上限的现有 `useTopToastStack`，四种 tone 与宿主普通 Toast 共用图标、颜色、生命周期、去重/堆叠、关闭及单层 live-region 策略；error 始终保持到手动关闭，其余 tone 使用宿主统一自动消失时间。Toast 由宿主透明原生 overlay 窗口呈现，始终位于 project 与 settings 的组件 `WebContentsView` 之上，组件 View bounds 不会因 Toast 改变。overlay 空白区域鼠标穿透，卡片与按钮可交互。长任务继续使用 `tasks`；需要用户决定继续使用 `dialogs`。
+## Capability contracts
 
-## 能力合约
+See [preview API](PLUGIN_PREVIEW_API.md) for folder panels, subtitles, and `service.previewDecoders`, including UI-free decoders. See [file resources](PLUGIN_FILE_RESOURCES_API.md) for arbitrary inputs, subscriptions, transfers, and RPC limits. UI reaches service capabilities through declared RPC, except explicitly supported SDK bridges.
 
-文件夹内并排面板、字幕播放联动和任意输入格式的预览解码器见 [预览扩展 API](PLUGIN_PREVIEW_API.md)。解码器由 `service.previewDecoders` 注册，也支持无 UI 的纯解码组件。
+### Project media
 
-任意格式读取、链接资源、大二进制传输及 contribution RPC 上限的完整契约见 [文件资源与大数据 API](PLUGIN_FILE_RESOURCES_API.md)。这三项能力由组件 service 调用，UI 通过组件自己声明的 RPC 接入。
+Files page returns directories, non-media ordinary files, and recognized sidecars. Search also needs a 1–160-character query. Page sizes are 1–200; snapshots examine at most 5,000 entries and search retains at most 500 results. Five-minute cursors bind component/project/scope. Results contain only virtual relative paths. Links, `.photoflow-*` internals, absolute paths, and escapes are rejected.
 
-### 项目媒体
+Media metadata accepts in-scope relative paths. ExifTool uses a fixed allowlist for dimensions, color space/profile, camera/lens/exposure, video/audio codecs, duration, frame rate, and rotation. Missing values are null; SourceFile, directories, and absolute paths are never echoed.
 
-Host API 的项目只读扩展按 capability 与 permission 授权。`project.files.page` 只返回目录、非媒体普通文件与识别的 sidecar；`project.files.search` 额外要求 1–160 字符查询。两者每页 1–200 项，单次快照最多检查 5,000 个目录项，搜索最多保留 500 个结果，游标 5 分钟过期并绑定组件、项目与 scope。返回值只有虚拟相对路径；符号链接、`.photoflow-*` 内部项、绝对路径与越界路径拒绝。
+Versions page uses one bounded read-only SQL snapshot for current/parent versions, status, notes, final/current flags, and timestamps: at most 200 per page and 5,000 per snapshot, with `truncated`. It never invokes index-syncing/backfilling `media_get`. Version graph uses read-only `progress_snapshot` for parent-version and persisted progress-source edges, without migration, baseline registration, repair, position sync, or folder paths. Ordinary nodes need a verifiable physical directory canonically inside scope. `includeMissing:true` additionally permits nodes whose lexical path is in scope, nearest existing ancestor is canonically safe, and actual `folderMissing` is set. Unreliable paths, external links, and out-of-scope nodes remain excluded; edges require both endpoints visible. At most 5,000 progress records are scanned and 1,000 visible nodes exposed; either bound sets truncation.
 
-`project.media.metadata` 只接受绑定 scope 内的媒体相对路径。宿主向 ExifTool 请求固定字段白名单，返回实际可得的尺寸、色彩空间/配置、相机、镜头、拍摄参数，以及视频编码、音频编码、时长、帧率和旋转；不可得字段为 `null`，绝不回显 `SourceFile`、目录或绝对路径。
+Ratings accepts 1–100 references and returns ratings/file revisions. There is no unified label/selection-state store: `supported.labels` and `supported.selectionState` are false and fields are null, never fabricated.
 
-`project.versions.page` 使用单次有界只读 SQL 快照读取当前/父版本、状态、备注、final/current 和时间戳，每页最多 200 项、快照最多 5,000 个版本，并用 `truncated` 明示边界。它不会调用会同步或回填索引的 `media_get`。`project.version.graph` 使用只读 `progress_snapshot` 返回版本父边和持久化进度来源边，不执行迁移、baseline 注册、repair 或位置同步，也不返回文件夹路径。普通进度节点必须有可验证的物理目录且 canonical 路径位于当前 scope；`includeMissing:true` 还允许 lexical 路径位于 scope、最近存在祖先 canonical 安全且真实标记 `folderMissing` 的节点。缺少可靠绝对路径、外链或越界节点始终排除，来源边仅在两端节点均可见时返回。宿主最多扫描 5,000 个进度记录，再公开其中最多 1,000 个可见节点；任一边界截断都会返回 `truncated:true`。`project.media.ratings` 一次接受 1–100 个媒体引用，返回评分及文件修订时间；当前宿主没有统一标签/选择状态存储，因此 `supported.labels`、`supported.selectionState` 为 `false` 且对应字段为 `null`，不会伪造数据。
+External file/folder links inside projects have been removed without legacy migration. Old link records, shortcuts, and target paths cannot widen scope. [External project import](PROJECT_IMPORT.md) registers a folder through copy, move, or reference-in-place. A referenced folder becomes the physical root; contents use normal relative paths, without `External/...` or `viaExternalLink`. Roots may be outside the workspace, but access stays inside that project. Importing `D:/Shoot` permits its `RAW/photo.jpg`; another project cannot access it through an old External record. Photo/version ID lookup also checks ownership and physical location.
 
-项目内创建文件或文件夹外链的功能已正式删除，也不提供旧外链迁移。项目媒体能力只覆盖当前绑定项目的物理目录；历史外链记录、快捷方式及其目标物理路径均不能扩大访问边界。
+Media page accepts pageSize 1–200, opaque cursor, and image/raw/video kinds. Cursors expire in five minutes, bind one component/project, and must not be decoded or persisted. Each page examines at most 1,000 entries under the physical root, without following links or old external registries. Imported projects follow the same rule.
 
-软件支持的是[导入外部项目](PROJECT_IMPORT.md)：通过复制、移动或引用原位置，将一个普通文件夹登记为项目。选择“引用原位置”时，该外部文件夹自身就是绑定项目的物理根目录；它的内部文件按普通项目相对路径访问，不使用 `External/...` 别名，也不标记为 `viaExternalLink`。外部项目的根目录可位于工作目录之外，但媒体仍须位于该项目自身的边界内。
+Variants accepts `{photoId,versionId}` or `{relativePath}` and a subset of thumbnail/preview/original. Thumbnails are 320-pixel derivatives, never substituted with normal original URLs; previews are 1,600-pixel derivatives; originals have `derived:false`. An empty variants list returns metadata only, with no URL grants, thumbnail requests, or tokens. Original requests also return a ten-minute single-use input token. `project.input.tokens {action:"materialize",token}` consumes it and copies input privately. Tokens bind component/workspace/project; renderers cannot submit raw paths.
 
-例如，原位置为 `D:/拍摄项目` 的文件夹被导入为项目后，其 `RAW/照片.jpg` 可通过该项目的媒体接口访问；另一个项目不能仅凭旧 `External/照片.jpg` 记录访问同一个文件。以 `photoId/versionId` 查询时也执行项目归属与物理目录检查。
+### Private storage and settings
 
-`project.media.page` 接受 `pageSize`（1–200）、不透明 `cursor` 和 `kinds`（`image`、`raw`、`video`）。游标 5 分钟过期，绑定单一组件/项目，不得解码或持久化。每页最多检查 1,000 个条目，只枚举绑定项目物理目录中的媒体，不跟随符号链接，也不枚举历史外链注册表。导入的外部项目采用同一规则，以其登记的物理根目录为起点。
+Storage returns component-owned workspace application-data locations, not project write authority. Components own schemas/migrations; the host does not inspect business tables. With `component.storage.previous.v1`, the host transactionally copies the same ID's old data root/database, retains source for rollback, and returns source/digest receipts for safe private-path rewriting. Cross-domain references use stable project/media/version IDs.
 
-`project.media.variants` 接受 `{photoId, versionId}` 或 `{relativePath}`，以及 `thumbnail`、`preview`、`original` 的子集。缩略图是 320 像素派生图，绝不会用普通原图 URL 替代；预览为 1,600 像素派生图；原图明确标记 `derived:false`。`variants:[]` 只返回元数据，不创建 URL 授权、缩略图请求或输入令牌。包含 `original` 的请求还会得到 10 分钟有效、一次性使用的输入令牌。
+Large initial adoption is asynchronous. While copying, `adoption.state:"pending"` returns identity and startedAt only, without dataPath/databasePath; never infer them. Show read-only status and disable storage-dependent reads/writes/mutations. Poll with bounded 500–1000 ms backoff. Committed results include paths and a full same-component receipt: adoption flag, old references, DB digest, copied file count/bytes. V1 sources remain; journals discard or resume unfinished trees after crashes.
 
-`project.input.tokens {action:"materialize",token}` 消耗令牌并把输入复制到组件私有存储。令牌绑定组件、工作区和项目，使用或过期后失效。渲染层不能提交原始路径。
+Component media accepts private-store relative files with variants/open/reveal. Variant semantics match project media; results contain URLs and opaque references, not echoed absolute paths. The component database owns deletion/invalidation. Settings supports get/replace/shallow merge. Settings/checkpoints are JSON objects up to 256 KiB. Atomic updates return monotonic revisions. Preserve unknown keys and migrate your own schemas.
 
-### 私有存储与设置
+### Secrets, network, and contributions
 
-`component.storage` 返回工作区应用数据下的组件专属位置，而不是项目内容写入授权。组件拥有自己的结构和迁移；宿主不检查组件业务表。清单声明 `component.storage.previous.v1` adoption grant 后，宿主事务式复制同 ID 的上一代数据根/数据库，保留来源供回滚，并返回来源与摘要收据，供组件安全重写自有路径。跨域引用使用稳定项目/媒体/版本 ID。
+Secrets is available in project and application settings. Put/list/delete strictly validate fields; list never reveals values. Put receipts are independent from current same-name records, so replaying an old key returns its old result without undoing newer updates. Request-comparison receipt content is also encrypted; no offline-enumerable secret digest is persisted, and ciphertext counts toward capacity. Reads allowlist component ID, record/receipt/deletion shapes, public fields, timestamps, metadata, base64 ciphertext, and unique refs/names. Any violation quarantines the file. Closing a view does not clear locks; explicit data cleanup queues behind the same component lock and prevents racing writes. Atomic storage uses only Electron safeStorage ciphertext and fails closed without encryption.
 
-大型首次采用异步执行。校验复制进行时，`component.storage` 返回带判别字段 `adoption.state:"pending"` 的结果，只包含采用身份和 `startedAt`；不会返回 `dataPath` 或 `databasePath`，也不能推断。组件可以显示只读状态，但所有存储读写和变更必须关闭。以 500–1000 ms 有界退避轮询。返回 `state:"committed"` 后，结果包含组件路径和完整同组件收据：采用标志、旧引用、数据库摘要、复制文件数与字节数。宿主保留 V1 来源，并使用采用日志在崩溃后丢弃或继续未完成树。
+Network fetch requires canonical origin to exactly match the URL origin and manifest networkOrigins. Headers/secrets must be plain objects; mode/timeout/body types are strict, GET/HEAD cannot have bodies, and base64 must be canonical. One deadline and uninstall controller starts before secret resolution, covering secret-lock/disk waits, DNS, connection, redirects, and response. Every hop rejects non-global addresses and pins validated addresses to `agent:false` TLS lookup, using the original hostname for SNI/Host/certificates. Cross-origin redirects strip authorization/cookie/proxy headers; 301/302/303 switch to GET and clear body. Secrets enter fixed headers only through secretBindings. Uninstall aborts through the capability barrier; counts release in finally. Ordinary view closure does not alter concurrency.
 
-`component.media` 只接受私有存储下相对文件和 `variants`、`open` 或 `reveal` 动作。变体语义与项目媒体相同。结果只包含 URL 和不透明媒体引用，不返回调用方提交的绝对路径。删除与失效仍由组件数据库负责。
+Contributions cover side panels, media/project actions, import/export providers, and application commands, each with ID, label, pageId, and separate RPC allowlist. Pages reference packaged fullPage; methods belong to the service. Ordinary tool components need a toolbar action or side panel; panel-only components need no new tab. Settings-only/decoder-only exceptions are documented separately.
 
-`component.settings` 支持 `get`、`replace` 和浅层 `merge`。设置和检查点是最大 256 KiB 的 JSON 对象。更新原子执行并返回单调递增修订号。组件必须容忍保留的未知键，并自行迁移旧结构。
+Entries bind invocation scope and selection. Cross-directory selection uses the common ancestor; toolbar receives the complete safe selection for plugin filtering. Inspiration entries carry `contentKind:"inspiration"`; the host ignores renderer path identity and binds the configured inspiration root, without version-tree/progress access. Side panels/project actions may join videoTools/imageTools/officeTools groups. All three toolbar entries remain without selection, Office keeps a one-item dropdown, and inspiration always shows all three. Any panel ID works. A project action sharing a same-component/page toolbar action opens that full page; otherwise normal opening applies. Placed entries are not duplicated in standalone toolbar, Dock, root, or blank-area menus. Clicks carry safe selection/content kind; other contribution types cannot use these placements. Panels are source-page-specific and use the shared frame.
 
-### 输出事务与版本
+Application commands use project-free context. Only a global Dock with commands registers Ctrl/Cmd+Shift+P. Host toolbars, panels, context/import/export menus, and searchable commands expose entries. All surfaces use the same sandbox preload without navigation, new windows, or Node. Uninstall/upgrade or closing the project/inspiration/source page closes associated Views.
 
-### Host API：secrets、网络与宿主入口
+### Runtime playback backends
 
-`component.secrets` 在 project 与 application settings surface 可用。`put`、`list`、`delete` 都严格校验字段；list 永不返回秘密值。put 幂等收据独立于当前同名 record，旧 key 重放只返回原结果，不会回滚后续更新；用于比较原请求的收据内容同样由 `safeStorage` 加密，不持久化可离线枚举的秘密摘要，且密文计入总容量。读取时严格白名单验证 componentId、record/receipt/deletion 形状、公开结果字段、时间戳、metadata、base64 密文与 ref/name 唯一性；任一异常隔离整文件。普通 view 关闭不清除锁，显式清数据在同 component 锁队列后执行并阻止竞态写回。秘密仅以 Electron `safeStorage` 密文原子保存，加密不可用时 fail closed。
+UI-free runtimes may declare top-level `runtimeContributions` with `media.playbackBackend`, protocol 1: unique backendId, native-process-v1 transport, priority, container/codec/extension probes, and transforms/HDR/statistics/subtitles/hardware-decoding/capture capabilities. Schema, registry parser, and SDK jointly constrain this. The broker validates and combines declarations with Chromium canPlayType into implementation-free descriptors. Extensions are sorting hints, not startup probes; priority compares components and cannot override Chromium probably/maybe. These contributions create no page/settings/renderer surface.
 
-`network.fetch` 要求 canonical `origin` 与 URL origin 完全相同并属于 manifest `networkOrigins`。headers/secrets 必须为 plain object，mode、timeout、body 类型严格校验，GET/HEAD 禁止 body，base64 必须为 canonical 编码。单一总 deadline 与卸载 controller 从 secret 解析前开始，覆盖秘密锁/磁盘等待、DNS、连接、redirect 与响应；每跳过滤非 global 地址，并把验证地址直接交给 `agent:false` TLS transport lookup，原 hostname 用于 SNI、Host 和证书。跨 origin redirect 剥离 authorization/cookie/proxy header；301/302/303 转 GET 并清 body。secret 只能通过 `secretBindings` 注入固定 header。卸载经 capability barrier abort 活动请求，计数只在 finally 释放；普通 view 关闭不修改网络并发状态。
+The media-playback-backend-v1 envelope contains sessionId, monotonic sequence, timestamp, event, payload. Frames are at most 256 KiB; images/pixels/audio/video frames cannot travel here. State/statistics are rate-limited/coalesced; closed-session commands expire. Input grants bind backend/process/session. Components return only their surface HWND; core checks PID and owns SetParent/styles/DPI/position/clipping. Components never receive Electron's main-window handle. The host alone creates, validates, and commits capture targets.
 
-Host API contribution 为 `component.sidePanel`、`media.contextAction`、`project.contextAction`、`project.importProvider`、`project.exportProvider`、`application.command`。每项声明 `id`、`label`、`pageId` 和独立 `rpcMethods` allowlist；pageId 必须引用包内 fullPage，RPC 必须属于 service。组件必须声明一个 `workspace.toolbarAction` 或至少一个 `component.sidePanel`；因此仅面板组件不需要创建新的组件标签页。项目入口绑定触发时的 scope 与 selection；跨目录选择以共同祖先为 scope，workspace toolbar 收到 Host 的完整安全选择并由插件自行过滤类型。灵感库文件页也提供这些入口，并在组件 context 中标记 `contentKind: "inspiration"`；宿主会忽略渲染进程传入的路径身份，重新绑定当前配置的灵感库根目录，且不开放版本树和项目进度能力。`component.sidePanel` 和 `project.contextAction` 可声明 `placement:"workspace.videoTools"`、`"workspace.imageTools"` 或 `"workspace.officeTools"`，进入项目文件页和灵感库工具栏／文件选择右键菜单的对应分组（视频工具、图片工具、Office 文档）。三个工具栏入口不随选择状态消失，Office 即使只有一个工具也保留下拉菜单；灵感库固定显示三个入口。任意 ID 的面板均支持挂载；project action 有同组件、同 pageId 的 toolbar action 时打开完整页面，否则走标准 contribution 打开流程。挂载入口不再重复显示在独立工具栏、Dock、右键根菜单或空白区域菜单，点击时传入完整安全 selection 和 contentKind。其他 contribution type 使用这些 placement 会被拒绝。sidePanel 还按 sourcePageId 隔离实例，并使用文件页统一工具面板外框。application command 使用无项目 application context，且只有实际含命令的全局 Dock 注册 `Ctrl/Cmd+Shift+P`。宿主 UI 分别在项目与灵感库工具栏/统一工具面板、媒体与目录右键菜单、导入/导出菜单及可搜索命令入口发现并打开这些 contribution。所有 surface 使用同一 sandbox preload，禁止导航、新窗口和 Node 集成；组件卸载、升级、项目、灵感库或所属文件页关闭会关闭对应 view。
+### Project mutations and recovery
 
-无 UI 的运行时组件可在顶层 `runtimeContributions` 声明
-`media.playbackBackend`，当前协议版本为 1。声明包含组件内唯一的
-`backendId`、`native-process-v1` transport、优先级、容器/codec/扩展名 probe，
-以及 transforms、HDR、statistics、subtitles、hardware decoding、capture
-能力矩阵。清单由独立 JSON schema、安装注册表解析器和 component-sdk 类型共同约束。
-Electron 播放 broker 校验声明、结合 Chromium `canPlayType` probe 生成不含
-组件实现细节的 descriptor；扩展名只用于排序提示，不能替代实际启动探测。
-清单 priority 只比较多个组件后端，不能压过 Chromium 的 probably/maybe 信号。
-这类贡献不创建页面、设置入口或 renderer surface。
+The seven project-write extensions each require their table permission. Rating batches are 1–100 with per-item outcomes. Only image/RAW rating is writable, not video, labels, or selection state. Checked CAS and legacy outbox share the per-file ExifTool queue. Index fingerprint refresh after successful ExifTool work is nonfatal maintenance and cannot make completed rating effects appear failed.
 
-组件进程协议使用 `media-playback-backend-v1` envelope：每帧包含 sessionId、
-单调 sequence、timestamp、event 和 payload。普通 JSON 帧上限 256 KiB，禁止
-传输图像、像素或音视频帧；状态/统计按声明频率限流合并，session 关闭后旧命令
-失效。媒体输入授权绑定 backend/process/session。组件只返回自己的 surface HWND；
-core surface host 校验 HWND 所属 PID 后负责 `SetParent`、窗口样式、DPI、定位与裁切，
-组件永远不会收到 Electron 主窗口句柄。截图目标只由主程序创建、验证并提交。
+Version update/delete and progress-node/edge changes use expectedUpdatedAt CAS, with independent deletion permission. Progress scope is rechecked in the DB transaction using Windows case-insensitive path keys. Graph endpoints must be physically in scope and not external links; role/cycle constraints remain.
 
-Host API 的七项写能力各自声明上表中的最小权限。评分批量限制为 1–100，采用逐项语义；只支持图片/RAW 的 `rating`，视频、标签和选择状态写入拒绝。checked CAS 与宿主旧评分 outbox 共用同一 per-file 队列；ExifTool 成功后的索引指纹刷新是非致命维护步骤，不会把已发生的评分副作用报告成失败。版本更新/删除、进度节点与边变更均使用 `expectedUpdatedAt` CAS；删除权限独立。progress 的项目/scope 路径会在数据库事务内再次以 Windows case-insensitive path-key 语义验证，所有图端点必须在当前物理 scope 内、不得是 external link，并继续复用数据库角色和循环约束。
+Import reserves a single-use token bound to component/workspace/project/scope, then stages, validates, and commits. Reservation pauses cleanup but never extends the original ten-minute authorization. Release restores original expiry and immediately removes expired tokens. Concurrent calls sharing an idempotency key share one active owner. Cancellation/conflict/failure releases tokens and rolls back published files with unchanged digests. All import/file/process recovery repeats lstat, rejects links, verifies realpath in current canonical scope, and checks file SHA-256 or directory identity/owner marker. Replaced targets are neither claimed as success nor moved.
 
-`project.import` 先保留同 component/workspace/project/scope 的一次性 input token，再执行 stage→validate→commit；reservation 只暂停清理，不延长原 10 分钟授权，释放时恢复原到期并立即删除已过期 token。同幂等键并发调用共享一个 active owner，取消、冲突或失败会释放令牌并回滚已发布且摘要未变的文件。任何 import/file/process 恢复都重新执行 `lstat`、拒绝链接、验证 `realpath` 位于当前 canonical scope，并复核文件 SHA-256 或目录 identity/owner marker；目标被其他主体替换时既不认领成功，也不移动替换内容。
+File mutation binds short-lived plans to identity/digests and rechecks before commit. Rename/move/mkdir/trash reject overwrite, links, Windows reserved names/trailing dots/spaces, protected roots, progress directories, and escapes by default. Moves journal from/to intent and file SHA-256 or directory identity before effects. Directory moves are same-volume, so recovery can recognize a crash between move and applied. Mkdir uses prepared/applied journals.
 
-`project.files.mutate` 的短时 plan 绑定身份与摘要，commit 前再次复核；rename/move/mkdir/trash 默认拒绝覆盖、链接、Windows 保留名/尾点/尾空格、宿主保护根目录、进度目录和越界路径。每个 move 在副作用前写入 from/to intent 及文件 SHA-256 或目录 identity；插件目录 move 限制为同卷，从而可在 move 后、applied 前崩溃时验证并补记 applied。mkdir 使用 prepared/applied 日志。trash 使用 file-operations 域的原子替换命令收据：`executing` 状态若发现任一源已消失即为不可判定结果，返回人工恢复所需的 `outcomeUnknown`，永不重复 OS trash，也不伪装为 committed。preflight 的 `undoCapability` 对 trash 为 `requires-precise-recycle`；commit 只有在全部结果均为 `preciseRestore:true`、`permanent:false` 且有 PIDL 时才返回 `undoAvailable:true`。否则仍明确报告已提交，但 `undoAvailable:false`、`undo:[]`，后续 undo 请求拒绝。
+Trash uses atomic-replacement command receipts in the file-operations domain. If executing finds any source absent, outcomeUnknown requires manual recovery: never repeat OS trash or claim committed. Preflight reports undoCapability requires-precise-recycle. Commit reports undoAvailable true only if every item has preciseRestore true, permanent false, and PIDL. Otherwise it still reports committed but undoAvailable false and empty undo, and rejects later undo.
 
-undo 本身同样使用逐项 intent/applied 日志。move undo 复核原 mutation 的摘要/目录 identity；mkdir undo 只移除仍属于原 mkdir 且为空的目录；recycle restore 在 originalPath 不存在时先 probe PIDL，probe 不确定或项目目标身份不匹配会返回人工恢复错误，绝不重复 restore。
+Undo journals per-item intent/applied. Move undo checks original digests/identities; mkdir undo removes only an empty directory still owned by the original operation. Recycle restore probes PIDL when originalPath is absent. Uncertain probes or project-target identity mismatch require manual recovery, never repeated restore.
 
-`project.media.process` 当前只公开 `video.timelineFrames` 和 `office.extractImages`，请求与响应形状以 `component-sdk/index.d.ts` 为准。时间线帧来源必须是当前项目 scope 内的相对视频路径，由宿主解析并交给可用的播放后端；renderer 没有这个 IPC 通道。Office 提取使用稳定幂等键，在宿主长请求租约内等待完成，并通过后台任务提供进度和协作式取消；即使没有图片也会先在组件私有 stage 创建 owner marker，再原子发布空输出目录。未列入 SDK 的旧 `video.sources.preview`、`video.trim`、`video.transcode.inspect`、`video.transcode` 和 `video.split` 动作不属于当前 Host API。
+Media process exposes only `video.timelineFrames` and `office.extractImages`, with shapes in the SDK. Timeline input is an in-scope relative video, resolved by the host and sent to an available backend; no general renderer IPC is exposed. Office extraction uses a stable key, supervised long-request lease, background progress, and cooperative cancellation. Even empty output first creates a private-stage owner marker before publishing an empty directory. Legacy video.sources.preview, video.trim, video.transcode.inspect, video.transcode, and video.split are not current Host API actions.
 
-`project.output` 动作：
+### Output transactions and versions
 
-- `stage`：创建私有 stage，并把路径返回给受监管后端。
-- `write`：登记 stage 下已有 `sourceName`、复制输入令牌，或接收最大 8 MiB 内联 base64；绑定 `outputRelativePath` 并返回 artifact ID。
-- `validate`：拒绝空、链接、越界、缺失或超限 stage。单 stage 最多 2,000 文件、2 GiB。
-- `commit`：要求 ID 形状幂等键，默认拒绝覆盖，原子发布绑定项目下文件；多文件失败会回滚已创建文件，并返回 commit/artifact ID。相同键重试返回原结果。
-- `rollback`：只递归删除组件私有 stage，可安全清理放弃任务。
-- `adopt`：仅供一次性迁移。声明 `project.output.existing.v1` adoption grant 后，可提交项目相对输出或组件旧记录中的绝对来源。宿主只接受规范路径位于绑定项目根内、非符号链接的普通文件，并返回不回显绝对路径的项目相对收据。这不是通用文件系统 API。
-- `materializeOwned`：校验已提交输出收据和当前摘要，将制品复制到组件私有存储，使组件迁移结构时无需保留项目路径。
-- `delete`：仅在旧 commit/artifact ID 和期望摘要仍匹配时删除当前输出，并写入幂等删除收据。
+`project.output` actions:
 
-stage 状态不只存在内存中。宿主在可写载荷子目录外原子持久化 stage 元数据和登记文件，绑定组件/工作区/项目，并对每个非终态动作执行不可变 `createdAt + 24h` 过期。过期只删除该已验证 stage 目录。
+- `stage`: create private stage and return its path to the supervised backend.
+- `write`: register existing stage sourceName, copy an input token, or accept up to 8 MiB inline base64; bind outputRelativePath and return artifact ID.
+- `validate`: reject empty, linked, escaped, missing, or oversized stages. Limits: 2,000 files and 2 GiB per stage.
+- `commit`: require an ID-shaped idempotency key, reject overwrite by default, and atomically publish into the bound project. Multi-file failure rolls back newly created files. Return commit/artifact IDs; same-key retry returns the same result.
+- `rollback`: recursively delete only the private component stage.
+- `adopt`: one-time migration with project.output.existing.v1. Accept project-relative outputs or absolute sources from old component records only if canonical, regular, non-linked, and within the bound root. Return relative receipts without echoing absolute paths. This is not general filesystem access.
+- `materializeOwned`: verify committed receipts/current digests and copy artifacts into private component storage for migration without retaining project paths.
+- `delete`: delete only when old commit/artifact ID and expected digest still match, recording an idempotent deletion receipt.
 
-发布前，`commit` 写入包含稳定 commit ID、目标相对路径、artifact ID、大小、SHA-256 和逐文件发布状态的 `prepared` 收据。每次原子发布后写日志；只有全部输出存在且摘要匹配才转为 `committed`。重启恢复只复用匹配字节。冲突时回滚仍匹配的宿主输出，并保留用户已改动文件。无法最终写收据时回滚完整多文件发布并移除无效日志。
+Stage metadata/registered files persist atomically outside writable payload directories and bind component/workspace/project. Every nonterminal action enforces immutable createdAt + 24h expiry, which removes only the verified stage.
 
-受控替换要求 `write` 同时提供 `replace:true`、`previousCommitId`、`previousArtifactId` 和 `expectedDigest`。旧收据必须拥有同一目标且当前字节仍匹配。替换备份留在会过期的 stage 中，直到新多文件收据提交。旧输出采用受清单控制、同组件/项目作用域、项目相对且校验摘要，不包含组件业务规则。
+Before publication, commit writes a prepared receipt with stable commit ID, relative targets, artifact IDs, sizes, SHA-256, and per-file states. Each atomic publication is journaled; only complete matching output becomes committed. Restart reuses matching bytes only. Conflicts roll back unchanged host outputs while preserving user edits. Final-receipt write failure rolls back the whole multi-file publication and removes invalid journal state.
 
-项目内容目标必须是相对路径；绝对路径和 `..` 无效。组件不能提交到绑定项目之外，也不能使用其他组件/项目的 stage 或 commit。
+Replacement requires `replace:true`, `previousCommitId`, `previousArtifactId`, and `expectedDigest` in write. The previous receipt must own the same target and its current bytes must match. Backups stay in the expiring stage until the new transaction commits. Legacy adoption is manifest-controlled, same-component/project, relative, digest-verified, and independent of component business logic.
 
-`version.create` 使用已提交制品及照片/父版本 ID。重启后直接从已提交收据解析 `commitId`，不要求重放 `commit`。版本 ID 由绑定作用域和幂等键确定性生成；数据库调用前持久化 `prepared` 版本收据。重试先在真实照片版本中查找稳定 ID，即使宿主崩溃或最终收据写入失败也不会重复创建版本。
+Project targets are relative; absolute paths and `..` are invalid. Components cannot publish outside the project or use another component/project's stage/commit.
 
-`project.progress` 支持 `list`、`create` 和 `relate`，返回稳定 progress/edge ID，不返回目录路径。创建接收项目虚拟 `relativePath`、`image`/`video` 类型、版本键、结构父 ID、可选 `sourceProgressIds` 和 `sourceMetadata`。元数据是白名单扁平对象：`category`、`role`、`displayName` 为非空、无控制字符、最多 128 字符；`parentCapability` 为 `structural`、`workflow-input` 或 `none`。省略或 `{}` 默认 `{ category:'progress', parentCapability:'structural' }`。宿主始终覆盖 `componentId`，创建前拒绝未知/嵌套字段。列表返回持久化非空元数据；旧空记录仍为 `null`。版本仓库检查图角色和循环。
+`version.create` uses committed artifacts and photo/parent-version IDs. Restart resolves commitId directly from receipts without replaying commit. Version IDs derive deterministically from scope and idempotency key; a prepared version receipt precedes DB calls. Retry searches actual photo versions by stable ID, preventing duplicates after crash or final-receipt failure.
 
-### 任务、取消与恢复
+Progress supports list/create/relate, returning stable progress/edge IDs without directory paths. Create accepts virtual relativePath, image/video type, version key, structural parent ID, optional sourceProgressIds, and flat sourceMetadata. Category/role/displayName are nonempty, control-free strings up to 128 characters. parentCapability is structural/workflow-input/none. Omitted metadata or `{}` defaults to `{category:'progress',parentCapability:'structural'}`. The host always sets componentId and rejects unknown/nested fields. Lists return nonempty persisted metadata; old empty values stay null. The repository enforces graph roles/cycles.
 
-`tasks` 动作为 `start`、`report`、`status`、`cancel`、`resume`、`complete`、`fail`。`operationId` 稳定并绑定组件/项目，进度为 0–100，报告可保存 JSON 检查点。取消为协作式：返回 `cancelled:true` 后服务停止工作、保持项目内容不变，并回滚 stage 或只保留私有可恢复数据。`resume` 使用提供或返回的检查点启动/重新绑定。重复终态转换无害。
+### Tasks, cancellation, and recovery
 
-不要让同步服务请求长时间保持打开。普通超时 60 秒。`project.media.process` 使用受监管长请求租约；其他 Host API 调用不获得兼容超时。
+Tasks supports start/report/status/cancel/resume/complete/fail. Stable operationId binds component/project, progress is 0–100, and reports may save JSON checkpoints. Cancellation is cooperative: after cancelled true, stop work, leave project contents unchanged, and roll back stages or retain only private resumable data. Resume starts/rebinds with supplied or returned checkpoints. Repeated terminal transitions are harmless.
 
-### 安全对话框、事件与生命周期
+Do not leave synchronous service requests open indefinitely. Ordinary timeout is 60 seconds. Media process uses a supervised long-request lease; other capabilities receive no compatibility timeout exemption. See [service protocol](COMPONENT_SERVICE_PROTOCOL_V1.md) for long-task budgets.
 
-`dialogs` 支持 `confirm`、`openFiles`、`openDirectory`、`openComponentDirectory`、`openOutput`、`revealOutput`、`openOutputDirectory`。文件选择返回受限令牌，而不是调用方选择的输出路径。`openComponentDirectory` 只接受调用组件根目录内的安全相对路径，可用于设置页打开模型等组件自有目录，不向组件返回绝对路径。`openOutputDirectory` 会在软件内的新项目标签页打开输出所在目录；其他输出动作保留系统打开/定位语义。所有输出动作只接受收据和当前摘要仍匹配的已提交 `{commitId, artifactId}`。扩展过滤规范化后最多 64 项；最多返回 2,000 个选择。
+### Dialogs, events, and lifecycle
 
-`component.events` 只发送 `service.events` 声明的版本化主题和最大 256 KiB JSON 对象。投递为尽力而为、至少一次；消费者处理器必须幂等。事件不携带文件路径，也不修改宿主状态。
+Dialogs supports confirm/openFiles/openDirectory/openComponentDirectory/openOutput/revealOutput/openOutputDirectory. Selection returns bounded tokens instead of caller-selected output paths. openComponentDirectory accepts safe relative paths in the calling component, including from settings, without returning absolute paths. openOutputDirectory opens the artifact folder in a new application project tab; other output actions retain system open/reveal semantics. Output actions require committed commitId/artifactId with matching receipts/current digests. Limits: 64 normalized extension filters and 2,000 selections.
 
-`component.lifecycle {action:"describe"}` 返回已安装组件版本、权限、声明事件/动作和状态。拥有 `component.lifecycle.manage` 时，`preflight`、`install`、`repair`、`uninstall` 只会在验证安装版本、根目录、符号链接和 SHA-256 后执行清单中对应的包内 PowerShell 入口。载荷命令、参数和路径都会拒绝。已验证脚本只得到固定 `PHOTOFLOW_COMPONENT_LIFECYCLE_ACTION`、组件 ID/版本和小型 OS 环境白名单。页面创建/销毁和项目关闭仍由宿主管理。
+Component events uses only declared versioned topics and JSON objects up to 256 KiB. Delivery is best-effort with at-least-once semantics, so consumers must be idempotent. Events contain no file paths and do not change host state.
 
-## 协议、限制与错误
+Lifecycle describe returns installed version, permissions, declared events/actions, and state. With manage permission, preflight/install/repair/uninstall execute only manifest-declared packaged PowerShell entries after version/root/symlink/SHA-256 validation. Payload commands/arguments/paths are rejected. Scripts receive fixed PHOTOFLOW_COMPONENT_LIFECYCLE_ACTION, component ID/version, and a small OS environment allowlist. The host owns page lifecycle and project close.
 
-UI RPC 与服务 JSONL 帧都是 JSON 对象，上限 2 MiB。方法/事件名有界且版本化。未知方法、严格清单边界字段、发送方、能力、权限、stage、token 和事件主题全部默认拒绝。服务 stdout 每行一个 JSON 帧，日志写 stderr。`component-host-api.schema.json` 为每个能力提供按方法区分的请求/结果分支；`component-service-protocol-v1.schema.json` 定义 JSONL 帧。
+## Protocol, limits, and errors
 
-稳定错误码：
+UI RPC and service JSONL are JSON objects up to 2 MiB. Method/event names are bounded and versioned. Unknown methods, strict manifest fields, senders, capabilities, permissions, stages, tokens, and topics default to denial. Stdout carries one frame per line; logs go to stderr. component-host-api.schema.json has method-specific request/results; component-service-protocol-v1.schema.json defines envelopes.
 
-- `COMPONENT_HOST_INVALID_REQUEST`、`COMPONENT_HOST_PERMISSION_DENIED`、`COMPONENT_HOST_NOT_FOUND`
-- `COMPONENT_HOST_TOKEN_EXPIRED`、`COMPONENT_HOST_TOKEN_SCOPE`、`COMPONENT_HOST_LIMIT_EXCEEDED`
-- `COMPONENT_HOST_VARIANT_UNAVAILABLE`、`COMPONENT_HOST_CONFLICT`、`COMPONENT_HOST_CANCELLED`
-- `COMPONENT_HOST_TIMEOUT`、`COMPONENT_HOST_SERVICE_EXITED`、`COMPONENT_HOST_INTERNAL`
+Stable codes:
 
-错误包含可读消息，可能包含 `retryable`。只在明确标记可重试或文档说明操作幂等时重试。结果不明确后，绝不能换一个新幂等键重试变更。
+- COMPONENT_HOST_INVALID_REQUEST, COMPONENT_HOST_PERMISSION_DENIED, COMPONENT_HOST_NOT_FOUND
+- COMPONENT_HOST_TOKEN_EXPIRED, COMPONENT_HOST_TOKEN_SCOPE, COMPONENT_HOST_LIMIT_EXCEEDED
+- COMPONENT_HOST_VARIANT_UNAVAILABLE, COMPONENT_HOST_CONFLICT, COMPONENT_HOST_CANCELLED
+- COMPONENT_HOST_TIMEOUT, COMPONENT_HOST_SERVICE_EXITED, COMPONENT_HOST_INTERNAL
 
-## 数据归属、安全与兼容
+Errors have readable messages and may have retryable. Retry only when explicitly allowed or documented idempotent. Never retry an uncertain mutation using a new idempotency key.
 
-宿主拥有项目、媒体索引/变体、版本、文件安全、任务中心、组件生命周期和权限账本。组件拥有私有存储、设置结构、算法、UI 状态和业务实体。只有宿主发布项目内容；双方都不能更新对方数据库。
+## Ownership, security, and compatibility
 
-只保留显式 adoption grant 所引用的上一代数据来源；旧公共 Host 路由、alias、adapter 和 fallback 已删除。组件自有 RPC/事件版本以及 service protocol v1 不属于公共 Host capability。删除组件源码目录不能导致宿主、SDK、schema、示例或通用测试无法构建。新代码必须通过架构断言：通用组件宿主文件中不得出现组件业务表或字段名。
+The host owns projects, media indexes/variants, versions, file safety, tasks, component lifecycle, and grants. Components own private storage, settings schemas, algorithms, UI state, and business entities. Only the host publishes project content; neither updates the other's database.
 
+Only explicitly granted previous-generation adoption sources remain. Old public routes/aliases/adapters/fallbacks have been removed. Component RPC/event versions and service protocol v1 are distinct from Host capability names. Removing component implementations must not break host, SDK, schema, examples, or generic builds/tests. Generic host code must not contain component business tables/fields.
 
 ### Component-owned embedded playback
 
-`component.runtime.execute` accepts `action: 'playback'` with `relativePaths` or retained `inputGrants` and a `playback` request. Exactly one authorized media file is required for `source`, `backends`, `start`, and `frames`. Service-recorded output paths are allowed only after checking the bound project scope and canonical path. These operations share the main application's Chromium source grants and playback broker/process service. No general renderer playback IPC is exposed.
+`component.runtime.execute` accepts action playback, relativePaths or retained inputGrants, and a playback request. Source/backends/start/frames require exactly one authorized media file. Recorded outputs require bound-project/canonical-path checks. Operations reuse Chromium source grants and broker/process service, without general renderer playback IPC.
 
-`source` returns a view-scoped media URL; `backends` returns the main broker descriptors; `start` returns a sender-owned session. `control`, `bounds`, and `stop` operate only on owned sessions; controls also require the original component/project scope. Bounds are clipped to the component view and converted using trusted display scale and view zoom. `onPlaybackState` subscribes to that view's player events. The caller pauses/hides on deactivation, obscuring dialogs, and crop editing; view destruction closes the underlying native session. `frames` accepts at most two finite, nonnegative times and reuses the installed timeline-frame backend.
+Source returns a view-scoped URL; backends returns broker descriptors; start returns a sender-owned session. Control/bounds/stop require ownership; controls also require original component/project scope. Bounds clip to the component view using trusted display scale and zoom. onPlaybackState subscribes to that view's events. Callers pause/hide on deactivation, obscuring dialogs, and crop editing; view destruction closes native sessions. Frames accepts at most two finite nonnegative times through the installed timeline-frame backend.
 
-转码输出边界以绑定项目根目录为限，`output.relativeDirectory: "."` 表示项目根目录。允许从选中子文件夹输出到项目内的同级目录；输入仍限制在绑定来源 scope 内，输出仍拒绝绝对路径、上级跳转和逃出项目的链接。记录的输出播放可读取该项目内同级结果。
+Transcoding output is bounded by the project root: `output.relativeDirectory:"."` means that root. Input stays in source scope; output can use sibling directories inside the project. Absolute paths, parent traversal, and escaping links remain forbidden. Recorded output playback may read in-project sibling results.
 
+`ComponentSdk.setPlaybackBounds(sessionId,bounds)` is a one-way layout-only path for authorized sessions; it grants no access or opens media. The host checks main-frame sender, runtime permission, ownership, and original project binding, ignores old sequence numbers, and synchronously clips/converts DPI. No service RPC or filesystem authorization runs per scroll frame. Moving/resizing/suspending a view immediately reapplies its last accepted rectangle. Other operations retain their capability path. `host.setPlaybackPaused` similarly dispatches authorized play/pause; actual decoder state arrives through onPlaybackState.
 
-`ComponentSdk.setPlaybackBounds(sessionId, bounds)` is the one-way layout-only fast path for already authorized embedded playback sessions. It does not open media or grant access. The Host verifies the main-frame sender, runtime permission, session owner and original project binding, ignores old sequence numbers, and applies the existing viewport clipping/DPI conversion synchronously. No service-process RPC or filesystem authorization runs per scroll frame. The Host also reapplies the last accepted local rectangle immediately after moving/resizing/suspending the component view. Other playback operations retain the capability path.
-
-
-Runtime `output: {private:true, argument:"--preview-root"}` allocates a unique directory below the component/project/scope-bound runtime preview cache. It is distinct from project-relative final outputs. Playback can resolve `privateOutputPath` only under that same scope's preview root, rejecting links and cross-scope paths. The component service must resolve this path from its own preview receipt; the renderer receives no arbitrary private-file access.
+Runtime `output:{private:true,argument:"--preview-root"}` allocates a unique private preview-cache directory bound to component/project/scope, separate from final project-relative output. Playback resolves privateOutputPath only below the same scope's preview root, rejecting links and cross-scope paths. The service resolves it from its own receipt; renderer gains no arbitrary private-file access.

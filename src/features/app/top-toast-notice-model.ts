@@ -5,6 +5,7 @@ export const MAX_TOTAL_NOTICES = 8;
 export interface TopToastNotice {
   id: number;
   message: string;
+  localizedMessage?: import('../../i18n/messages').LocalizedMessage;
   persistent: boolean;
   count: number;
   tone?: 'info' | 'success' | 'warning' | 'error';

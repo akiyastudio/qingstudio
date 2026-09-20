@@ -1,3 +1,6 @@
+const { localizeDialogOptions } = require("../services/localization.cjs");
+const { t: translateNative } = require("../services/localization.cjs");
+const applicationLocalization = require('../services/localization.cjs');
 const { sendToApplicationRenderers, sendToRequestingRenderer, applicationWindowFor } = require('../services/application-windows.cjs');
 const { validateRendererPythonInvocation } = require('../security-policy.cjs');
 const { mergeConcurrentConfig } = require('../services/concurrent-config.cjs');
@@ -413,7 +416,7 @@ const savePrivacyConsentWithConfig = async ({ request, privacyService, configMut
 };
 
 const registerSystemIpc = context => {
-  const { Array, Boolean, BrowserWindow, Date, Error, JSON, Object, String, abortComponentNetworkRequests, app, approvedMediaCacheDirectories, backgroundTasks, checkForUpdates, clearComponentSecretData, componentCapabilityBroker, componentServiceManager, componentViewManager, configMutationService, console, crypto, dialog, domainCommandJournal, domainHealthService, exiftoolPath, filePublicationService, fileSystemService, findLatestPhotoshop, fs, getConfigPath, getLogDir, getResourceBirthdaysPath, getRunConfig, getUserBirthdaysPath, ipcMain, mainWindow, mediaRuntimeState, openAllowedExternalUrl, path, pluginService, privacyService, process, processSupervisor, readSavedConfig, releaseWorkspaceWatchPath, screen, shell, spawn, suppressWorkspaceWatchPath, telemetryService, thumbnailService, undefined, writeLog } = context;
+  const { Array, Boolean, BrowserWindow, Date, Error, JSON, Object, String, abortComponentNetworkRequests, app, approvedMediaCacheDirectories, backgroundTasks, checkForUpdates, clearComponentSecretData, componentCapabilityBroker, componentServiceManager, componentViewManager, configMutationService, console, crypto, dialog, domainCommandJournal, domainHealthService, exiftoolPath, filePublicationService, fileSystemService, findLatestPhotoshop, fs, getConfigPath, getLogDir, getRunConfig, getUserBirthdaysPath, ipcMain, mainWindow, mediaRuntimeState, openAllowedExternalUrl, path, pluginService, privacyService, process, processSupervisor, readSavedConfig, releaseWorkspaceWatchPath, screen, shell, spawn, suppressWorkspaceWatchPath, telemetryService, thumbnailService, undefined, writeLog } = context;
   if (!configMutationService?.mutate) throw new Error('System IPC requires the shared config mutation service');
   const lifecycleCoordinator = processSupervisor?.lifecycleCoordinator;
   const componentCleanupPublicationService = filePublicationService;
@@ -1754,6 +1757,7 @@ const registerSystemIpc = context => {
         .filter((value, index, values) => value && values.findIndex(candidate => path.resolve(candidate).toLocaleLowerCase() === path.resolve(value).toLocaleLowerCase()) === index);
       const normalizedConfig = {
         ...config,
+        language: applicationLocalization.normalizeLanguage(config?.language),
         smartImport: {
           ...config?.smartImport,
           autoMoveProjectAfterSdImport: normalizeSdImportAutoMove(config?.smartImport?.autoMoveProjectAfterSdImport),
@@ -1776,6 +1780,8 @@ const registerSystemIpc = context => {
       }
       if (requestedCacheDirectory) approvedMediaCacheDirectories.add(path.resolve(requestedCacheDirectory));
       const savedConfig = await mutateConfig(current => configMutationService.mergeRendererConfig(mergeConcurrentConfig(baseline, normalizedConfig, current), current));
+      applicationLocalization.setLanguage(savedConfig.language, app.getLocale?.() || 'zh-CN');
+      componentViewManager?.setResolvedLocale?.(applicationLocalization.getLocale());
       telemetryService?.syncConsent(savedConfig.telemetry);
       sendToApplicationRenderers(mainWindow, 'config-changed', savedConfig);
       console.log('✅ Config saved to:', getConfigPath());
@@ -1789,12 +1795,7 @@ const registerSystemIpc = context => {
   const readBirthdays = () => {
     try {
       const userPath = getUserBirthdaysPath();
-      if (!fs.existsSync(userPath)) {
-        const resourcePath = getResourceBirthdaysPath();
-        if (!fs.existsSync(resourcePath)) return {};
-        console.log('Initialize birthdays.json from resources...');
-        fs.copyFileSync(resourcePath, userPath);
-      }
+      if (!fs.existsSync(userPath)) return {};
       const parsed = JSON.parse(fs.readFileSync(userPath, 'utf8'));
       return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     } catch (error) {
@@ -1880,45 +1881,45 @@ const registerSystemIpc = context => {
 
   ipcMain.handle('choose-workspace-directory', async (_event, currentPath = '') => {
     const defaultPath = currentPath && fs.existsSync(currentPath) && fs.statSync(currentPath).isDirectory() ? currentPath : undefined;
-    const choice = await dialog.showOpenDialog(mainWindow, {
-      title: '选择工作文件夹',
+    const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({
+      title: translateNative("ui.choose.workspace.folder.615297"),
       defaultPath,
       properties: ['openDirectory', 'createDirectory']
-    });
+    }));
     return choice.canceled ? { cancelled: true } : { path: choice.filePaths[0] };
   });
 
   ipcMain.handle('choose-import-source-files', async () => {
-    const choice = await dialog.showOpenDialog(mainWindow, {
-      title: '选择要导入的底片文件',
+    const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({
+      title: translateNative("native.e2f6958cfc8c"),
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: '照片、RAW 与视频', extensions: ['jpg', 'jpeg', 'png', 'webp', 'tif', 'tiff', 'avif', 'heic', 'heif', 'hif', 'arw', 'cr2', 'cr3', 'dng', 'nef', 'orf', 'mp4', 'mov', 'avi', 'crm', 'rwl', 'raf', '3fr', 'fff'] }],
-    });
+      filters: [{ name: translateNative("native.df7be1edf9cb"), extensions: ['jpg', 'jpeg', 'png', 'webp', 'tif', 'tiff', 'avif', 'heic', 'heif', 'hif', 'arw', 'cr2', 'cr3', 'dng', 'nef', 'orf', 'mp4', 'mov', 'avi', 'crm', 'rwl', 'raf', '3fr', 'fff'] }],
+    }));
     return choice.canceled ? { cancelled: true, paths: [] } : { paths: choice.filePaths };
   });
 
   ipcMain.handle('choose-project-import-files', async () => {
-    const choice = await dialog.showOpenDialog(mainWindow, {
-      title: '选择要导入的文件',
+    const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({
+      title: translateNative("native.fe1326e972ce"),
       properties: ['openFile', 'multiSelections'],
-    });
+    }));
     return choice.canceled ? { cancelled: true, paths: [] } : { paths: choice.filePaths };
   });
 
   ipcMain.handle('choose-video-files', async () => {
-    const choice = await dialog.showOpenDialog(mainWindow, {
-      title: '选择视频文件',
+    const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({
+      title: translateNative("native.2d8ceafd6864"),
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: '视频', extensions: ['mp4', 'mov', 'm4v', 'mkv', 'avi', 'webm', 'crm', 'mts', 'm2ts', 'ts'] }],
-    });
+      filters: [{ name: translateNative("ui.video.c20f76"), extensions: ['mp4', 'mov', 'm4v', 'mkv', 'avi', 'webm', 'crm', 'mts', 'm2ts', 'ts'] }],
+    }));
     return choice.canceled ? { cancelled: true, paths: [] } : { paths: choice.filePaths };
   });
 
   ipcMain.handle('choose-video-folder', async () => {
-    const choice = await dialog.showOpenDialog(mainWindow, {
-      title: '选择包含视频的文件夹',
+    const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({
+      title: translateNative("native.bc1949d3eafc"),
       properties: ['openDirectory'],
-    });
+    }));
     return choice.canceled ? { cancelled: true } : { path: choice.filePaths[0] };
   });
 

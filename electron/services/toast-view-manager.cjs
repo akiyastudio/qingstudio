@@ -1,3 +1,4 @@
+const { isSupportedLocale } = require('./localization.cjs');
 const TOAST_VIEW_MAX_ITEMS = 12;
 const TOAST_VIEW_MAX_WIDTH = 720;
 const TOAST_VIEW_MAX_HEIGHT = 2000;
@@ -16,6 +17,7 @@ const validSnapshot = value => value && typeof value === 'object' && !Array.isAr
   && finiteInteger(value.height) && value.height >= 0 && value.height <= TOAST_VIEW_MAX_HEIGHT
   && Array.isArray(value.notices) && value.notices.length <= TOAST_VIEW_MAX_ITEMS
   && Array.isArray(value.tasks) && value.tasks.length <= 4
+  && (value.language === undefined || isSupportedLocale(value.language))
   && finiteInteger(value.overflowCount) && value.overflowCount >= 0 && value.overflowCount <= 10000;
 
 const validAction = value => value && typeof value === 'object' && !Array.isArray(value)
@@ -23,6 +25,7 @@ const validAction = value => value && typeof value === 'object' && !Array.isArra
   && typeof value.id === 'string' && value.id.length > 0 && value.id.length <= 200;
 
 const snapshotLayoutKey = snapshot => JSON.stringify({
+  language: snapshot.language || 'zh-CN',
   width: snapshot.width,
   notices: snapshot.notices.map(notice => [notice.id, notice.message, notice.count]),
   tasks: snapshot.tasks.map(task => [task.id, task.state]),

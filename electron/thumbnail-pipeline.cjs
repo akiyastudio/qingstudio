@@ -1889,6 +1889,9 @@ class ThumbnailPipeline {
           const result = await this.database.call('prune_missing_batch', { limit: 512, cache_root: options.cacheRoot || null }, this.maintenanceCallTimeout(control));
           collect(result);
           prunedSourceCount += Number(result.sourceCount) || 0;
+          // Sources without thumbnail rows still make durable progress. Include
+          // them before returning a bounded slice, not only during recovery.
+          control.processedCount = detachedCount + prunedSourceCount;
           pruneBatchCount += 1;
           await this.yieldMaintenanceToForeground(control, 'yield-after-prune-batch');
           if (result.done) {

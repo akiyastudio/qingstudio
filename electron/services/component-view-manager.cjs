@@ -1,3 +1,4 @@
+const applicationLocalization = require('./localization.cjs');
 const path = require('path');
 const { fileURLToPath } = require('url');
 const { normalizeComponentSettingsFormValues, validateComponentSettingsFormPatch } = require('../contracts/component-settings-form-contract.cjs');
@@ -151,6 +152,7 @@ class ComponentViewManager {
     this.senderBindings = new Map();
     this.rpcMethods = new Map();
     this.resolvedTheme = 'light';
+    this.resolvedLocale = applicationLocalization.getLocale();
     this.activeInstanceId = '';
     this.activationGeneration = 0;
     this.partitionSessions = new Map();
@@ -621,6 +623,7 @@ class ComponentViewManager {
       panelStyleContractVersion: 1,
       panelLayoutContractVersion: 1,
       resolvedTheme: this.resolvedTheme,
+      locale: applicationLocalization.getLocale(),
     };
   }
 
@@ -637,6 +640,13 @@ class ComponentViewManager {
     }
     instance.surfaceCssKey = nextKey;
     if (previousKey && typeof contents.removeInsertedCSS === 'function') await contents.removeInsertedCSS(previousKey).catch(() => undefined);
+  }
+
+  setResolvedLocale(value) {
+    if (!applicationLocalization.isSupportedLocale(value) || this.resolvedLocale === value) return false;
+    this.resolvedLocale = value;
+    for (const instance of this.instances.values()) if (!instance.view.webContents.isDestroyed()) instance.view.webContents.send('component-sdk:locale-changed', { contractVersion: 1, locale: value });
+    return true;
   }
 
   setResolvedTheme(value) {

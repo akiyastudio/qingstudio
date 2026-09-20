@@ -1,3 +1,5 @@
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Minimize2, X } from 'lucide-react';
@@ -17,6 +19,7 @@ export const ComponentToolPanelSurface = ({ contribution, instanceId, initialCon
   onClose: () => void;
   onMinimize: () => void;
 }) => {
+  useLocale();
   const { backgroundTasks } = useTaskCenter();
   const backdropRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -98,9 +101,9 @@ export const ComponentToolPanelSurface = ({ contribution, instanceId, initialCon
         <header className="tool-panel-header flex shrink-0 items-center gap-3 border-b border-slate-200 px-5">
           <span className="tool-panel-title-icon flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-blue-50 text-blue-600"><ComponentIcon src={contribution.iconUrl} size={18}/></span>
           <div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-bold text-slate-800">{contribution.title}</h3>{contribution.description && <p className="mt-0.5 truncate text-[10px] text-slate-400">{contribution.description}</p>}</div>
-          <button type="button" onClick={requestClose} aria-label={backgroundTaskActive ? '收起到后台' : '关闭插件面板'} title={backgroundTaskActive ? '收起到后台，任务会继续运行' : '关闭'} className={`rounded-md text-slate-500 hover:bg-slate-100 ${backgroundTaskActive ? 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold' : 'p-1.5'}`}>{backgroundTaskActive ? <><Minimize2 size={15}/>收起到后台</> : <X size={18}/>}</button>
+          <button type="button" onClick={requestClose} aria-label={backgroundTaskActive ? t("ui.minimize.to.background.a466fe") : t("ui.close.plugin.panel.28a4de")} title={backgroundTaskActive ? t("ui.minimize.to.background.the.task.keeps.8f7ffd") : t("common.close")} className={`rounded-md text-slate-500 hover:bg-slate-100 ${backgroundTaskActive ? 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold' : 'p-1.5'}`}>{backgroundTaskActive ? <><Minimize2 size={15}/>{t("ui.minimize.to.background.a466fe")}</> : <X size={18}/>}</button>
         </header>
-        <div className="tool-panel-body relative min-h-0 flex-1 overflow-hidden"><div ref={surfaceRef} data-component-view-host aria-label={`${contribution.title} 插件内容`} className="absolute inset-0"/></div>
+        <div className="tool-panel-body relative min-h-0 flex-1 overflow-hidden"><div ref={surfaceRef} data-component-view-host aria-label={t("ui.value0.plugin.content.571352", { value0: contribution.title })} className="absolute inset-0"/></div>
       </section>
     </div>,
     document.body,

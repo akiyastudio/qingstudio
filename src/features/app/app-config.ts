@@ -68,6 +68,7 @@ export const normalizeVideoPreviewQuality = (value: unknown): AppConfig['smartIm
 export const isMac = window.navigator.userAgent.includes('Mac');
 
 export const DEFAULT_CONFIG = (userPath: string): AppConfig => ({
+  language: 'system',
   theme: 'system',
   telemetry: { enabled: false, crashReports: false },
   workspacePath: '',

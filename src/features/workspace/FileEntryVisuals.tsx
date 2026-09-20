@@ -1,3 +1,5 @@
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowUpRight, File, FileImage, Folder, FolderInput } from 'lucide-react';
 import type { AppConfig, ProjectFileEntry } from '../../types';
@@ -174,6 +176,7 @@ export const ShortcutEntryIcon = ({ entry, cacheConfig, requestedSize, queueOrde
   large: boolean;
   loadEntries: (entry: ProjectFileEntry) => Promise<DirectoryPreviewLoadResult>;
 }) => {
+  useLocale();
   const container = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (entry.shortcutTargetKind || entry.shortcutBroken) return;
@@ -188,13 +191,13 @@ export const ShortcutEntryIcon = ({ entry, cacheConfig, requestedSize, queueOrde
     return () => observer.disconnect();
   }, [entry.path, entry.updatedAt, entry.shortcutTargetKind, entry.shortcutBroken, loadEntries]);
 
-  if (entry.shortcutBroken) return <span ref={container} className={`shortcut-folder-cover is-broken ${large ? 'h-full w-full' : ''}`} aria-label="失效的文件夹快捷方式">
+  if (entry.shortcutBroken) return <span ref={container} className={`shortcut-folder-cover is-broken ${large ? 'h-full w-full' : ''}`} aria-label={t("ui.broken.folder.shortcut.e89dc8")}>
     <Folder size={large ? 64 : 30} strokeWidth={1.5} fill="currentColor"/>
     <span className="shortcut-cover-badge is-warning"><AlertTriangle size={large ? 15 : 10}/></span>
   </span>;
   if (entry.shortcutTargetKind === 'folder') return <>
     <FolderCover entry={entry} cacheConfig={cacheConfig} requestedSize={requestedSize} queueOrder={queueOrder} large={large} loadEntries={loadEntries}/>
-    <span aria-label="快捷方式" className="shortcut-cover-badge"><ArrowUpRight size={large ? 16 : 10}/></span>
+    <span aria-label={t("ui.shortcut.6ab335")} className="shortcut-cover-badge"><ArrowUpRight size={large ? 16 : 10}/></span>
   </>;
   return <span ref={container} className="relative inline-flex"><FolderInput size={large ? 48 : 28} strokeWidth={1.4} className="text-blue-500"/></span>;
 };

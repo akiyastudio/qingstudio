@@ -16,6 +16,8 @@ export type MultiSelectionSummary = {
   containedFolderCount: number;
   totalSize: number;
   sizeComplete: boolean;
+  selectedKindCounts: Partial<Record<ProjectFileEntry['kind'], number>>;
+  selectedFormats: string[];
   typeSummary: string;
   formatSummary: string;
   commonParentPath: string;
@@ -69,11 +71,15 @@ const summarizeTypes = (entries: readonly ProjectFileEntry[]) => {
   return parts.join('，');
 };
 
-const summarizeFormats = (entries: readonly ProjectFileEntry[]) => {
+const collectSelectionFormats = (entries: readonly ProjectFileEntry[]) => {
   const formats = [...new Set(entries
     .filter(entry => !isFolderLike(entry))
     .map(entry => entry.extension.replace(/^\./, '').toLocaleUpperCase())
     .filter(Boolean))].sort((left, right) => left.localeCompare(right, 'zh-CN'));
+  return formats;
+};
+
+const summarizeFormats = (formats: readonly string[]) => {
   if (!formats.length) return '—';
   if (formats.length <= 4) return formats.join('、');
   return `${formats.slice(0, 4).join('、')} 等 ${formats.length} 种`;
@@ -83,6 +89,8 @@ export const summarizeMultiSelection = (
   entries: readonly ProjectFileEntry[],
   detailsByPath: Readonly<Record<string, SelectionEntryDetails | undefined>> = {},
 ): MultiSelectionSummary => {
+  const kindCounts = new Map<ProjectFileEntry['kind'], number>();
+  const selectedFormats = collectSelectionFormats(entries);
   let totalSize = 0;
   let sizeComplete = true;
   let containedFileCount = 0;
@@ -90,6 +98,7 @@ export const summarizeMultiSelection = (
   let selectedFolderCount = 0;
 
   for (const entry of entries) {
+    kindCounts.set(entry.kind, (kindCounts.get(entry.kind) ?? 0) + 1);
     const details = detailsByPath[entry.path];
     if (isFolderLike(entry)) {
       selectedFolderCount += 1;
@@ -117,8 +126,10 @@ export const summarizeMultiSelection = (
     containedFolderCount,
     totalSize,
     sizeComplete,
+    selectedKindCounts: Object.fromEntries(kindCounts),
+    selectedFormats,
     typeSummary: summarizeTypes(entries),
-    formatSummary: summarizeFormats(entries),
+    formatSummary: summarizeFormats(selectedFormats),
     commonParentPath: commonParentPath(entries),
     earliestCreatedAt: createdRange.earliest,
     latestCreatedAt: createdRange.latest,

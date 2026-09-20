@@ -27,7 +27,7 @@ const registerComponentHostIpc = ({ ipcMain, manager, mainWindow }) => {
     if (!host || host.isDestroyed() || event.sender !== host.webContents
       || !event.senderFrame || event.senderFrame !== host.webContents.mainFrame) throw new Error('Unauthorized component host sender');
   };
-  require('./component-preview-ipc.cjs').registerComponentPreviewIpc({ ipcMain, manager, mainRenderer });
+  require('./components/preview-ipc.cjs').registerComponentPreviewIpc({ ipcMain, manager, mainRenderer });
   ipcMain.handle('component-host-list', event => { mainRenderer(event); return { success: true, actions: manager.listToolbarActions() }; });
   ipcMain.handle('component-host-settings-list', event => { mainRenderer(event); return { success: true, pages: manager.listSettingsPages() }; });
   ipcMain.handle('component-host-settings-form-read', (event, request) => { mainRenderer(event); return manager.readSettingsForm(settingsRequest(request)).then(result => ({ success: true, ...result }), error => ({ success: false, error: error.message || String(error) })); });

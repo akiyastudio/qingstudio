@@ -60,7 +60,7 @@ contextBridge.exposeInMainWorld('photoFlowComponent', Object.freeze({
   // Bridge ABI version; this is independent from the unversioned Host API.
   contractVersion: 1,
   setPlaybackPaused: (sessionId,paused) => {if(typeof sessionId!=='string'||!sessionId||sessionId.length>128||typeof paused!=='boolean')throw new TypeError('Invalid playback pause state');return ipcRenderer.invoke('component-sdk:playback-paused',{sessionId,paused}).then(()=>undefined);},
-  setPlaybackBounds: (sessionId,bounds) => {if(typeof sessionId!=='string'||sessionId.length>128||!bounds||['x','y','width','height'].some(key=>!Number.isFinite(bounds[key]))||typeof bounds.visible!=='boolean')throw new TypeError('Invalid playback layout');ipcRenderer.send('component-sdk:playback-bounds',{sessionId,bounds:{x:bounds.x,y:bounds.y,width:bounds.width,height:bounds.height,visible:bounds.visible},sequence:++playbackBoundsSequence});},
+  setPlaybackBounds: (sessionId,bounds) => {if(typeof sessionId!=='string'||sessionId.length>128||!bounds||['x','y','width','height'].some(key=>!Number.isFinite(bounds[key]))||typeof bounds.visible!=='boolean')throw new TypeError('Invalid playback layout');const holes={};for(const key of ['overlayHole','controlsOverlayHole','cornerOverlayHole']){const hole=bounds[key];if(!hole)continue;if(['x','y','width','height'].some(k=>!Number.isFinite(hole[k])))throw new TypeError('Invalid playback overlay');holes[key]={x:hole.x,y:hole.y,width:hole.width,height:hole.height,...(Number.isFinite(hole.radius)?{radius:hole.radius}:{})};}ipcRenderer.send('component-sdk:playback-bounds',{sessionId,bounds:{x:bounds.x,y:bounds.y,width:bounds.width,height:bounds.height,visible:bounds.visible,...holes},sequence:++playbackBoundsSequence});},
   onPlaybackState: callback => subscribe('video-player-state', callback),
   getContext: () => ipcRenderer.invoke('component-sdk:get-context'),
   setPanelInfo: info => ipcRenderer.invoke('component-sdk:panel-info', { action: 'update', ...info }),
@@ -94,5 +94,6 @@ contextBridge.exposeInMainWorld('photoFlowComponent', Object.freeze({
   onActivate: callback => subscribe('component-sdk:activate', callback),
   onDeactivate: callback => subscribe('component-sdk:deactivate', callback),
   onThemeChange: callback => subscribe('component-sdk:theme-changed', callback),
+  onLocaleChange: callback => subscribe('component-sdk:locale-changed', callback),
   onContextChange: callback => subscribe('component-sdk:context-changed', callback),
 }));

@@ -1,3 +1,5 @@
+import { useLocale } from "../i18n/react";
+import { t } from "../i18n/runtime";
 import { useId, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 
@@ -50,6 +52,7 @@ const adjustCropRectangleFromKeyboard = ({ crop, imageSize, minimumSize, handle,
 };
 
 const InteractiveCropEditor = ({ previewUrl, imageSize, crop, onChange, large = false, embedded = false, snapGuides = { x: [], y: [] }, snapEnabled = false }: { previewUrl: string; imageSize: { width: number; height: number }; crop: CropRectangle; onChange: (crop: CropRectangle) => void; large?: boolean; embedded?: boolean; snapGuides?: { x: number[]; y: number[] }; snapEnabled?: boolean }) => {
+  useLocale();
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ pointerId: number; handle: CropHandle; x: number; y: number; crop: CropRectangle } | null>(null);
   const cropDescriptionId = useId();
@@ -136,7 +139,7 @@ const InteractiveCropEditor = ({ previewUrl, imageSize, crop, onChange, large = 
     { handle: 'nw', x: crop.x, y: crop.y, cursor: 'nwse-resize' }, { handle: 'ne', x: crop.x + crop.width, y: crop.y, cursor: 'nesw-resize' },
     { handle: 'sw', x: crop.x, y: crop.y + crop.height, cursor: 'nesw-resize' }, { handle: 'se', x: crop.x + crop.width, y: crop.y + crop.height, cursor: 'nwse-resize' },
   ];
-  return <div className={`flex justify-center overflow-hidden bg-slate-950 ${embedded ? 'h-full w-full' : `mt-4 rounded-xl ${large ? 'h-[68vh] max-h-[760px] min-h-[420px]' : 'max-h-80'}`}`}><svg ref={svgRef} aria-label="交互式裁剪编辑器" className={`${embedded || large ? 'h-full' : 'max-h-80'} w-full select-none touch-none`} viewBox={`0 0 ${imageSize.width} ${imageSize.height}`} preserveAspectRatio="xMidYMid meet" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}>
+  return <div className={`flex justify-center overflow-hidden bg-slate-950 ${embedded ? 'h-full w-full' : `mt-4 rounded-xl ${large ? 'h-[68vh] max-h-[760px] min-h-[420px]' : 'max-h-80'}`}`}><svg ref={svgRef} aria-label={t("ui.interactive.crop.editor.c44643")} className={`${embedded || large ? 'h-full' : 'max-h-80'} w-full select-none touch-none`} viewBox={`0 0 ${imageSize.width} ${imageSize.height}`} preserveAspectRatio="xMidYMid meet" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}>
     <desc id={cropDescriptionId}>{cropDescription}</desc>
     <image href={previewUrl} width={imageSize.width} height={imageSize.height} pointerEvents="none"/>
     {activeGuides.x !== undefined && <line x1={activeGuides.x} y1="0" x2={activeGuides.x} y2={imageSize.height} stroke="#22d3ee" strokeWidth={Math.max(2, imageSize.width / 1000)} strokeDasharray={`${Math.max(8, imageSize.width / 120)} ${Math.max(6, imageSize.width / 180)}`} pointerEvents="none"/>}

@@ -1,3 +1,6 @@
+import { LocalizedText } from "../i18n/LocalizedText";
+import { useLocale } from "../i18n/react";
+import { t } from "../i18n/runtime";
 import { useEffect, useId, useMemo, useState } from 'react';
 import { ChevronDown, File, FileInput, FolderInput, Plus, Trash2, X } from 'lucide-react';
 import { mergeSourcePaths, parseSourcePathText, removeSourcePath, sourcePathIdentity } from './source-path-picker-model';
@@ -63,6 +66,7 @@ export const SourcePathPicker = ({
   pathAnnotations = {},
   folderPreviewExtensions = [],
 }: SourcePathPickerProps) => {
+  useLocale();
   const normalizedPaths = useMemo(() => mergeSourcePaths(paths), [paths]);
   const [dragActive, setDragActive] = useState(false);
   const [pasteDraft, setPasteDraft] = useState('');
@@ -152,14 +156,14 @@ export const SourcePathPicker = ({
   return <section className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <p className="text-xs font-semibold uppercase text-slate-500">{loading ? '正在读取来源…' : `${title} ${normalizedPaths.length} ${itemLabel}`}</p>
-        <p className="mt-1 text-xs text-slate-500">{loading ? '正在建立可处理文件列表' : description}</p>
+        <p className="text-xs font-semibold uppercase text-slate-500">{loading ? t("ui.loading.sources.7924ad") : `${title} ${normalizedPaths.length} ${itemLabel}`}</p>
+        <p className="mt-1 text-xs text-slate-500">{loading ? t("ui.preparing.the.file.list.713de9") : description}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {folderPaths.length > 0 && <button type="button" disabled={loading} onClick={() => setExpandedFolders(allFoldersExpanded ? new Set() : new Set(folderPaths.map(sourcePathIdentity)))} className="dialog-secondary px-3 py-1.5 text-xs disabled:opacity-50">{allFoldersExpanded ? '全部收起' : '展开全部'}</button>}
+        {folderPaths.length > 0 && <button type="button" disabled={loading} onClick={() => setExpandedFolders(allFoldersExpanded ? new Set() : new Set(folderPaths.map(sourcePathIdentity)))} className="dialog-secondary px-3 py-1.5 text-xs disabled:opacity-50">{allFoldersExpanded ? t("ui.collapse.all.0d42a1") : t("ui.expand.all.695704")}</button>}
         {onChooseFolder && <button type="button" disabled={disabled || loading} onClick={() => void choose(onChooseFolder)} className="dialog-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-50"><FolderInput size={14}/>{folderButtonLabel}</button>}
         {onChooseFiles && <button type="button" disabled={disabled || loading} onClick={() => void choose(onChooseFiles)} className="dialog-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-50"><Plus size={14}/>{fileButtonLabel}</button>}
-        <button type="button" disabled={disabled || loading || !normalizedPaths.length} onClick={() => onChange([])} className="dialog-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-600 disabled:opacity-50"><Trash2 size={14}/>清空</button>
+        <button type="button" disabled={disabled || loading || !normalizedPaths.length} onClick={() => onChange([])} className="dialog-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-600 disabled:opacity-50"><Trash2 size={14}/>{t("ui.clear.1ef3de")}</button>
       </div>
     </div>
 
@@ -170,7 +174,7 @@ export const SourcePathPicker = ({
       onDrop={drop}
       className={`max-h-64 overflow-y-auto rounded-xl border p-2 transition ${dragActive ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/20' : normalizedPaths.length ? 'border-slate-200 bg-slate-50' : 'border-dashed border-slate-300 bg-slate-50/70'}`}
     >
-      {!normalizedPaths.length ? <button type="button" disabled={disabled || loading || !onChooseFiles} onClick={() => void choose(onChooseFiles)} className="flex min-h-28 w-full flex-col items-center justify-center gap-2 rounded-lg px-4 text-sm text-slate-500 hover:bg-white disabled:opacity-50"><FolderInput size={24} className="text-slate-400"/><span className="font-semibold">{loading ? '正在读取…' : emptyTitle}</span><span className="text-xs text-slate-400">{dragActive ? '松开即可追加' : emptyDescription}</span></button> : <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {!normalizedPaths.length ? <button type="button" disabled={disabled || loading || !onChooseFiles} onClick={() => void choose(onChooseFiles)} className="flex min-h-28 w-full flex-col items-center justify-center gap-2 rounded-lg px-4 text-sm text-slate-500 hover:bg-white disabled:opacity-50"><FolderInput size={24} className="text-slate-400"/><span className="font-semibold">{loading ? t("ui.loading.86b6d0") : emptyTitle}</span><span className="text-xs text-slate-400">{dragActive ? t("ui.drop.to.add.a177dd") : emptyDescription}</span></button> : <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         {normalizedPaths.map(sourcePath => {
           const identity = sourcePathIdentity(sourcePath);
           const details = sourcePathDetails(sourcePath, pathKinds[identity]);
@@ -182,24 +186,24 @@ export const SourcePathPicker = ({
             <div className="flex items-center gap-3 px-3 py-2.5">
               <span className="flex h-8 w-10 shrink-0 items-center justify-center rounded-md bg-blue-50 text-[10px] font-bold text-blue-700">{details.badge}</span>
               <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-700" title={sourcePath}>{details.name}</span><span className="mt-0.5 block truncate text-[10px] text-slate-400" title={sourcePath}>{annotation || details.parent || sourcePath}</span></span>
-              {folder && <span className="shrink-0 text-xs text-slate-500">{preview?.loading ? '正在读取…' : preview?.error ? '读取失败' : preview ? `${preview.count} 个文件${preview.truncated ? '+' : ''}` : '展开后读取'}</span>}
-              {folder && <button type="button" aria-expanded={expanded} onClick={() => setExpandedFolders(current => { const next = new Set(current); if (next.has(identity)) next.delete(identity); else next.add(identity); return next; })} aria-label={`${expanded ? '收起' : '展开'} ${details.name}`} title={expanded ? '收起' : '展开'} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : '-rotate-90'}`}/></button>}
-              <button type="button" disabled={disabled || loading} onClick={() => onChange(removeSourcePath(normalizedPaths, sourcePath))} aria-label={`移除 ${details.name}`} title="移除" className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"><X size={14}/></button>
+              {folder && <span className="shrink-0 text-xs text-slate-500">{preview?.loading ? t("ui.loading.86b6d0") : preview?.error ? t("ui.could.not.load.6aa27f") : preview ? t("ui.files.value0.value1.f87a11", { value0: preview.count, value1: preview.truncated ? '+' : '' }) : t("ui.expand.to.load.02839f")}</span>}
+              {folder && <button type="button" aria-expanded={expanded} onClick={() => setExpandedFolders(current => { const next = new Set(current); if (next.has(identity)) next.delete(identity); else next.add(identity); return next; })} aria-label={`${expanded ? t("ui.collapse.afd4b7") : t("ui.expand.00bd39")} ${details.name}`} title={expanded ? t("ui.collapse.afd4b7") : t("ui.expand.00bd39")} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : '-rotate-90'}`}/></button>}
+              <button type="button" disabled={disabled || loading} onClick={() => onChange(removeSourcePath(normalizedPaths, sourcePath))} aria-label={t("ui.remove.value0.30c215", { value0: details.name })} title={t("ui.remove.6135d4")} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"><X size={14}/></button>
             </div>
             {folder && expanded && <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-1.5">
-              {preview?.loading ? <p className="px-2 py-2 text-xs text-slate-400">正在读取文件夹中的媒体文件…</p> : preview?.error ? <p className="px-2 py-2 text-xs text-red-500">{preview.error}</p> : preview?.files.length ? preview.files.map(relativePath => <div key={relativePath} className="flex items-center gap-2 border-b border-slate-100 px-2 py-1.5 last:border-0"><File size={13} className="shrink-0 text-slate-400"/><span className="min-w-0 flex-1 truncate text-xs text-slate-600" title={relativePath}>{relativePath}</span></div>) : <p className="px-2 py-2 text-xs text-slate-400">没有找到匹配的媒体文件</p>}
-              {preview?.truncated && <p className="px-2 py-1.5 text-[10px] text-amber-600">文件较多，列表仅显示前 {preview.files.length} 个。</p>}
+              {preview?.loading ? <p className="px-2 py-2 text-xs text-slate-400">{t("ui.loading.media.from.folders.c3805a")}</p> : preview?.error ? <p className="px-2 py-2 text-xs text-red-500"><LocalizedText value={preview.error}/></p> : preview?.files.length ? preview.files.map(relativePath => <div key={relativePath} className="flex items-center gap-2 border-b border-slate-100 px-2 py-1.5 last:border-0"><File size={13} className="shrink-0 text-slate-400"/><span className="min-w-0 flex-1 truncate text-xs text-slate-600" title={relativePath}>{relativePath}</span></div>) : <p className="px-2 py-2 text-xs text-slate-400">{t("ui.no.matching.media.files.5267d3")}</p>}
+              {preview?.truncated && <p className="px-2 py-1.5 text-[10px] text-amber-600">{t("message.6821adfb2bc6", { count: preview.files.length })}</p>}
             </div>}
           </div>;
         })}
       </div>}
     </div>
-    {selectionError && <p role="alert" className="text-xs text-red-600">选择来源失败：{selectionError}</p>}
+    {selectionError && <p role="alert" className="text-xs text-red-600">{t("message.b7ed04cd478a", { value0: selectionError })}</p>}
 
     <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
       <button type="button" aria-expanded={pasteOpen} aria-controls={pastePanelId} onClick={() => setPasteOpen(open => !open)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-bold text-slate-600 hover:bg-slate-50">
         <ChevronDown size={13} className={`shrink-0 transition-transform ${pasteOpen ? 'rotate-180' : '-rotate-90'}`}/>
-        <span>批量粘贴路径</span>
+        <span>{t("ui.paste.multiple.paths.3910cb")}</span>
       </button>
       {pasteOpen && <div id={pastePanelId} className="border-t border-slate-200 px-3 pb-3">
         <textarea
@@ -215,7 +219,7 @@ export const SourcePathPicker = ({
           placeholder={pastePlaceholder}
           className="mt-3 h-24 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 font-mono text-xs text-slate-900 outline-none transition focus:border-blue-500 disabled:opacity-60"
         />
-        <div className="mt-2 flex items-center justify-between gap-3"><span className="text-[10px] text-slate-400">粘贴后会立即追加；手动输入可点击右侧按钮。</span><button type="button" disabled={disabled || loading || !parseSourcePathText(pasteDraft).length} onClick={() => applyPastedPaths()} className="dialog-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-40"><FileInput size={13}/>添加这些路径</button></div>
+        <div className="mt-2 flex items-center justify-between gap-3"><span className="text-[10px] text-slate-400">{t("ui.pasted.paths.are.added.immediately.for.0e3aef")}</span><button type="button" disabled={disabled || loading || !parseSourcePathText(pasteDraft).length} onClick={() => applyPastedPaths()} className="dialog-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-40"><FileInput size={13}/>{t("ui.add.these.paths.69acd8")}</button></div>
       </div>}
     </section>
   </section>;

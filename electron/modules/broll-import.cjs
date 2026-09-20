@@ -1,3 +1,5 @@
+const { localizeDialogOptions } = require("../services/localization.cjs");
+const { t: translateNative } = require("../services/localization.cjs");
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -525,11 +527,11 @@ const registerBrollImportIpc = ({
   getTelemetry,
 }) => {
   ipcMain.handle('choose-broll-source-files', async () => {
-    const choice = await dialog.showOpenDialog(getMainWindow(), {
-      title: '选择花絮文件',
+    const choice = await dialog.showOpenDialog(getMainWindow(), localizeDialogOptions({
+      title: translateNative("native.2c97181c8cf4"),
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: '媒体文件', extensions: [...BROLL_EXTENSIONS].map(value => value.slice(1)) }],
-    });
+      filters: [{ name: translateNative("native.c6133c6932ee"), extensions: [...BROLL_EXTENSIONS].map(value => value.slice(1)) }],
+    }));
     return choice.canceled ? { cancelled: true, paths: [] } : { paths: choice.filePaths };
   });
 
@@ -558,11 +560,11 @@ const registerBrollImportIpc = ({
       const projectPath = path.resolve(getProjectPath(workspacePath, status, projectName));
       let sourcePaths = Array.isArray(options?.sourcePaths) ? options.sourcePaths.map(source => String(source)) : [];
       if (!sourcePaths.length) {
-        const choice = await dialog.showOpenDialog(getMainWindow(), {
-          title: '选择花絮文件',
+        const choice = await dialog.showOpenDialog(getMainWindow(), localizeDialogOptions({
+          title: translateNative("native.2c97181c8cf4"),
           properties: ['openFile', 'multiSelections'],
-          filters: [{ name: '媒体文件', extensions: [...BROLL_EXTENSIONS].map(value => value.slice(1)) }],
-        });
+          filters: [{ name: translateNative("native.c6133c6932ee"), extensions: [...BROLL_EXTENSIONS].map(value => value.slice(1)) }],
+        }));
         if (choice.canceled || !choice.filePaths.length) return { success: true, cancelled: true, count: 0, splitCount: 0, clearedCount: 0 };
         sourcePaths = choice.filePaths;
       }

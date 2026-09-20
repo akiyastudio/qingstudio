@@ -1,3 +1,7 @@
+import { renderText } from '../../i18n/messages';
+import { LocalizedText } from "../../i18n/LocalizedText";
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { Loader2 } from 'lucide-react';
 import type { ProgressFolder } from '../../types';
 import { ImportSourceControls, type ImportMaterialKind } from '../../components/ImportSourceControls';
@@ -57,6 +61,7 @@ const Callout = ({ tone = 'info', title, children }: { tone?: 'info' | 'success'
 const Card = ({ title, meta, children }: { title?: string; meta?: string; children: React.ReactNode }) => <section className="rounded-xl border border-slate-200 bg-white p-4">{(title || meta) && <div className="mb-3 flex items-center justify-between gap-3"><b className="text-sm text-slate-800">{title}</b>{meta && <span className="text-[11px] text-slate-400">{meta}</span>}</div>}{children}</section>;
 
 export const VersionProgressPanel = ({ draft, folders, state = 'ready', progress, message, error, namePresets = [], onChange, onChooseFiles, onChooseFolder, importStep = 'source', onImportStepChange, onImportKindChange, onSubmit, onClose }: VersionProgressPanelProps) => {
+  useLocale();
   const restrictedNode = draft.relationKind === 'auxiliary';
   const policy = normalizeTrackingPolicy(draft.relationKind, draft);
   const parents = selectableVersionParents(folders, { ...draft, relationKind: 'main' });
@@ -133,18 +138,18 @@ export const VersionProgressPanel = ({ draft, folders, state = 'ready', progress
       : '项目根目录';
   const modeAction = draft.mode === 'import' ? '导入并创建' : draft.mode === 'modify' ? '保存修改' : '创建';
   const versionKindControl = parent ? <fieldset>
-    <legend className="text-xs font-semibold text-slate-600">创建方式</legend>
+    <legend className="text-xs font-semibold text-slate-600">{t("ui.creation.mode.7dc7ed")}</legend>
     <div className="mt-2 grid gap-2 sm:grid-cols-2">
       <button type="button" aria-pressed={versionKind === 'main'} onClick={() => setVersionKind('main')} className={`rounded-xl border px-3 py-3 text-left transition ${versionKind === 'main' ? 'border-blue-500 bg-blue-50 text-blue-800 ring-1 ring-blue-200' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50/40'}`}>
-        <b className="block text-sm">{parent.nodeRole === 'original' ? '创建主版本' : '继续当前分支'}</b><span className="mt-1 block text-xs font-semibold tabular-nums">{parentVersionLabel} → V{suggestions.main}</span>
+        <b className="block text-sm">{parent.nodeRole === 'original' ? t("ui.create.main.version.ef3a6d") : t("ui.continue.current.branch.cbcbb0")}</b><span className="mt-1 block text-xs font-semibold tabular-nums">{parentVersionLabel} → V{suggestions.main}</span>
       </button>
       <button type="button" aria-pressed={versionKind === 'branch'} onClick={() => setVersionKind('branch')} className={`rounded-xl border px-3 py-3 text-left transition ${versionKind === 'branch' ? 'border-violet-500 bg-violet-50 text-violet-800 ring-1 ring-violet-200' : 'border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:bg-violet-50/40'}`}>
-        <b className="block text-sm">创建子分支</b><span className="mt-1 block text-xs font-semibold tabular-nums">{parentVersionLabel} → V{suggestions.branch}</span>
+        <b className="block text-sm">{t("ui.create.sub.branch.682821")}</b><span className="mt-1 block text-xs font-semibold tabular-nums">{parentVersionLabel} → V{suggestions.branch}</span>
       </button>
     </div>
-  </fieldset> : <Callout tone="warning" title={noAvailableParents ? '请先标记原始素材' : '请选择父版本'}>{noAvailableParents
-    ? '当前媒体类型没有可用来源。请先将一个文件夹标记为原始素材，再创建版本进度。'
-    : '选择同媒体类型的原始素材或已有进度后，才能生成延续版本或子分支。'}</Callout>;
+  </fieldset> : <Callout tone="warning" title={noAvailableParents ? t("ui.mark.original.media.first.f55977") : t("ui.choose.parent.version.cb7144")}>{noAvailableParents
+    ? t("ui.no.source.is.available.for.this.bf5b1a")
+    : t("ui.choose.original.media.or.existing.progress.f968a5")}</Callout>;
 
   if (state !== 'ready') {
     const totalCount = progress?.totalCount && progress.totalCount > 0 ? progress.totalCount : 0;
@@ -157,15 +162,15 @@ export const VersionProgressPanel = ({ draft, folders, state = 'ready', progress
     const progressStatus = totalCount
       ? `${processedCount} / ${totalCount}`
       : progress?.waiting ? '等待后台资源' : '处理中';
-    return <div className="space-y-4"><Callout tone={state === 'failure' ? 'danger' : state === 'result' ? 'success' : 'info'} title={stateLabel[state] || state}>{error || message || (busy ? '版本任务正在后台执行；收起面板不会中断任务。' : '版本节点及其自动关系已更新。')}</Callout>{busy && <Card><div className="flex items-center justify-between text-xs font-semibold text-slate-600"><span className="truncate">{progress?.currentName || '正在启动版本任务…'}</span><span className="ml-3 tabular-nums text-blue-600">{determinate ? `${Math.round(progressValue)}%` : progress?.waiting ? '等待中' : '处理中'}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">{determinate ? <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${progressValue > 0 ? Math.max(2, progressValue) : 0}%` }}/> : <div className="h-full w-1/3 animate-pulse rounded-full bg-blue-500"/>}</div><p className="mt-2 text-xs text-slate-500">{progressStatus}</p></Card>}<div className="flex justify-end"><button type="button" disabled={busy} onClick={onClose} className="dialog-primary">关闭</button></div></div>;
+    return <div className="space-y-4"><Callout tone={state === 'failure' ? 'danger' : state === 'result' ? 'success' : 'info'} title={renderText(stateLabel[state] || state)}>{error || message ? <LocalizedText value={error || message}/> : (busy ? t("ui.the.version.task.is.running.in.25d9ef") : t("ui.version.nodes.and.their.automatic.relationships.957505"))}</Callout>{busy && <Card><div className="flex items-center justify-between text-xs font-semibold text-slate-600"><span className="truncate">{progress?.currentName || t("ui.starting.version.task.7eb6af")}</span><span className="ml-3 tabular-nums text-blue-600">{determinate ? `${Math.round(progressValue)}%` : progress?.waiting ? t("ui.waiting.26c8cf") : t("ui.processing.694b71")}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">{determinate ? <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${progressValue > 0 ? Math.max(2, progressValue) : 0}%` }}/> : <div className="h-full w-1/3 animate-pulse rounded-full bg-blue-500"/>}</div><p className="mt-2 text-xs text-slate-500"><LocalizedText value={progressStatus}/></p></Card>}<div className="flex justify-end"><button type="button" disabled={busy} onClick={onClose} className="dialog-primary">{t("common.close")}</button></div></div>;
   }
 
   if (draft.mode === 'import' && importStep === 'source') {
     return <div className="space-y-4">
-      <Callout title="先选择需要导入的来源">选择文件或文件夹并确认导入方式后，再进入进度版本设置。</Callout>
+      <Callout title={t("ui.choose.import.sources.first.776857")}>{t("ui.choose.files.or.folders.and.confirm.1aeaa2")}</Callout>
       <ImportSourceControls
-        selectionTitle="选择或拖入进度文件/文件夹"
-        selectionDescription="可直接拖入多个文件或文件夹"
+        selectionTitle={t("legacy.ba7809860144")}
+        selectionDescription={t("legacy.9d9f931422e7")}
         selectedPaths={draft.sourcePaths || []}
         onSelectedPathsChange={paths => update({ sourcePaths: paths })}
         onChooseFiles={onChooseFiles || (() => undefined)}
@@ -174,45 +179,44 @@ export const VersionProgressPanel = ({ draft, folders, state = 'ready', progress
         onImportKindChange={kind => onImportKindChange?.(kind, draft.sourcePaths || [])}
         deleteSourceAfterImport={draft.deleteSourceAfterImport === true}
         onDeleteSourceAfterImportChange={value => update({ deleteSourceAfterImport: value })}
-        deleteSourceDescription="复制并验证成功后删除源文件；关闭则保留"
+        deleteSourceDescription={t("legacy.44c937440126")}
 
 
-        startLabel="下一步：设置进度"
+        startLabel={t("legacy.e34950ac708f")}
         onStart={() => onImportStepChange?.('settings')}
       />
     </div>;
   }
 
   return <div className="space-y-4">
-    {draft.mode === 'import' && <Card title="导入来源" meta={`${draft.sourcePaths?.length || 0} 个`}><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs leading-5 text-slate-500">已确认来源；{draft.deleteSourceAfterImport ? '导入验证成功后将删除源文件。' : '将复制到项目内并保留源文件。'}</p><button type="button" onClick={() => onImportStepChange?.('source')} className="dialog-secondary">返回重新选择</button></div></Card>}
-    {requiresMove && <Callout tone="warning" title="所选文件夹将移动到项目根目录">登记前会预检并移动到“{movePlan.targetRelativePath}”。快捷方式或外部目录不能移动或覆盖。</Callout>}
-    {draft.mode === 'modify' && <Callout title={`修改 ${versionLabel}`}>保存时会同步更新版本关系和文件夹名称。</Callout>}
-    {restrictedNode && <Callout tone="warning" title="辅助节点不参与版本跟踪">选片、预览和协作节点不参与版本跟踪传播。</Callout>}
+    {draft.mode === 'import' && <Card title={t("ui.import.source.53b599")} meta={t("ui.items.value0.9479b5", { value0: draft.sourcePaths?.length || 0 })}><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs leading-5 text-slate-500">{t("message.c12221b5a9bd", { value0: draft.deleteSourceAfterImport ? t("ui.source.files.will.be.deleted.after.69795e") : t("ui.files.will.be.copied.into.the.c14fc2") })}</p><button type="button" onClick={() => onImportStepChange?.('source')} className="dialog-secondary">{t("ui.go.back.and.choose.again.820d13")}</button></div></Card>}
+    {requiresMove && <Callout tone="warning" title={t("ui.the.selected.folder.will.move.to.4da694")}>{t("message.ee850d62d536", { value0: movePlan.targetRelativePath })}</Callout>}
+    {draft.mode === 'modify' && <Callout title={t("ui.edit.value0.185923", { value0: versionLabel })}>{t("ui.saving.updates.version.relationships.and.folder.7d2e48")}</Callout>}
+    {restrictedNode && <Callout tone="warning" title={t("ui.auxiliary.nodes.do.not.participate.in.f0e62c")}>{t("ui.selection.preview.and.collaboration.nodes.do.b7f66c")}</Callout>}
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-    <Card title={draft.mode === 'modify' ? '版本关系' : '创建版本'}>
+    <Card title={draft.mode === 'modify' ? t("ui.version.relationships.1d5d58") : t("ui.create.version.df664f")}>
       <div className="space-y-4">
         <div>
-          <p className="text-xs font-semibold text-slate-600">父版本</p>
-          {draft.contextLocked ? <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"><b className="block text-sm text-slate-800">{parentLabel}</b><span className="mt-1 block text-xs text-slate-400">从版本树发起，媒体类型和父版本已锁定</span></div> : <select aria-label="父版本" className={fieldClass} value={draft.parentProgressId} onChange={event => setParent(event.target.value)}><option value="" disabled>{noAvailableParents ? '没有可用父版本' : '请选择父版本'}</option>{parents.map(folder => <option key={folder.id} value={folder.id}>{folder.nodeRole === 'original' ? `原始素材 · ${folder.displayName}` : `V${folder.versionKey} · ${folder.displayName}`}</option>)}</select>}
+          <p className="text-xs font-semibold text-slate-600">{t("ui.parent.version.faaa7d")}</p>
+          {draft.contextLocked ? <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"><b className="block text-sm text-slate-800">{parentLabel}</b><span className="mt-1 block text-xs text-slate-400">{t("ui.started.from.the.version.tree.media.0485b9")}</span></div> : <select aria-label={t("ui.parent.version.faaa7d")} className={fieldClass} value={draft.parentProgressId} onChange={event => setParent(event.target.value)}><option value="" disabled>{noAvailableParents ? t("ui.no.parent.version.available.803d1d") : t("ui.choose.parent.version.cb7144")}</option>{parents.map(folder => <option key={folder.id} value={folder.id}>{folder.nodeRole === 'original' ? t("ui.original.media.value0.6fdbc4", { value0: folder.displayName }) : `V${folder.versionKey} · ${folder.displayName}`}</option>)}</select>}
         </div>
-        {!draft.contextLocked && draft.mode !== 'modify' && <fieldset><legend className="text-xs font-semibold text-slate-600">媒体类型</legend><div className="mt-2 grid grid-cols-2 gap-2"><button type="button" aria-pressed={draft.mediaKind === 'image'} onClick={() => setMediaKind('image')} className={`h-10 rounded-lg border text-sm font-semibold ${draft.mediaKind === 'image' ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>图片</button><button type="button" aria-pressed={draft.mediaKind === 'video'} onClick={() => setMediaKind('video')} className={`h-10 rounded-lg border text-sm font-semibold ${draft.mediaKind === 'video' ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>视频</button></div></fieldset>}
+        {!draft.contextLocked && draft.mode !== 'modify' && <fieldset><legend className="text-xs font-semibold text-slate-600">{t("ui.media.type.296225")}</legend><div className="mt-2 grid grid-cols-2 gap-2"><button type="button" aria-pressed={draft.mediaKind === 'image'} onClick={() => setMediaKind('image')} className={`h-10 rounded-lg border text-sm font-semibold ${draft.mediaKind === 'image' ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>{t("ui.image.d24c10")}</button><button type="button" aria-pressed={draft.mediaKind === 'video'} onClick={() => setMediaKind('video')} className={`h-10 rounded-lg border text-sm font-semibold ${draft.mediaKind === 'video' ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>{t("ui.video.c20f76")}</button></div></fieldset>}
         {versionKindControl}
-        <label className="block text-xs font-semibold text-slate-600">版本序号
-          <span className={`mt-1 flex h-10 overflow-hidden rounded-lg border bg-white transition focus-within:ring-2 ${versionError ? 'border-red-400 focus-within:border-red-500 focus-within:ring-red-100' : 'border-slate-300 focus-within:border-blue-500 focus-within:ring-blue-100'}`}><span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 text-sm font-bold tabular-nums text-slate-500">V{versionPrefix}</span><input aria-label="版本序号" className="min-w-0 flex-1 px-3 text-sm font-semibold tabular-nums text-slate-800 outline-none" value={versionIndex} inputMode="numeric" pattern="[0-9]*" placeholder={suggestedParts.at(-1) || '1'} onChange={event => setCustomVersionIndex(event.target.value)}/></span>
-          {versionError ? <span className="mt-1.5 block text-xs font-normal text-red-500">{versionError}</span> : <span className="mt-1.5 block text-xs font-normal text-slate-400">只需填写最后一段数字；系统会自动补全为 V{normalizedVersionKey}。</span>}
+        <label className="block text-xs font-semibold text-slate-600">{t("ui.version.number.54c723")}<span className={`mt-1 flex h-10 overflow-hidden rounded-lg border bg-white transition focus-within:ring-2 ${versionError ? 'border-red-400 focus-within:border-red-500 focus-within:ring-red-100' : 'border-slate-300 focus-within:border-blue-500 focus-within:ring-blue-100'}`}><span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 text-sm font-bold tabular-nums text-slate-500">V{versionPrefix}</span><input aria-label={t("ui.version.number.54c723")} className="min-w-0 flex-1 px-3 text-sm font-semibold tabular-nums text-slate-800 outline-none" value={versionIndex} inputMode="numeric" pattern="[0-9]*" placeholder={suggestedParts.at(-1) || '1'} onChange={event => setCustomVersionIndex(event.target.value)}/></span>
+          {versionError ? <span className="mt-1.5 block text-xs font-normal text-red-500"><LocalizedText value={versionError}/></span> : <span className="mt-1.5 block text-xs font-normal text-slate-400">{t("message.3c704192ec7c", { value0: normalizedVersionKey })}</span>}
         </label>
-        <label className="block text-xs font-semibold text-slate-600">文件夹名称<input aria-label="文件夹名称" className={fieldClass} value={draft.displayName} placeholder="例如 精修" onChange={event => update({ displayName: event.target.value, targetFolderLocked: false })}/>{namePresets.length > 0 && <span className="mt-2 flex flex-wrap gap-2">{namePresets.map(name => <button key={name} type="button" onClick={() => update({ displayName: name, targetFolderLocked: false })} className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 transition hover:border-blue-400 hover:bg-blue-100">{name}</button>)}</span>}</label>
+        <label className="block text-xs font-semibold text-slate-600">{t("ui.folder.name.bacf70")}<input aria-label={t("ui.folder.name.bacf70")} className={fieldClass} value={draft.displayName} placeholder={t("ui.for.example.retouched.71a3f7")} onChange={event => update({ displayName: event.target.value, targetFolderLocked: false })}/>{namePresets.length > 0 && <span className="mt-2 flex flex-wrap gap-2">{namePresets.map(name => <button key={name} type="button" onClick={() => update({ displayName: name, targetFolderLocked: false })} className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 transition hover:border-blue-400 hover:bg-blue-100">{name}</button>)}</span>}</label>
         <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold text-blue-600">{draft.mode === 'modify' ? '修改后' : draft.targetFolderLocked ? '当前文件夹' : '将创建'}</p><p className="mt-1 text-base font-bold text-slate-900">{resolvedVersionLabel} · {outputFolderName}</p></div><span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 shadow-sm">{versionKind === 'branch' ? '子分支' : parent?.nodeRole === 'original' ? '主版本' : parent ? '继续当前分支' : '等待父版本'}</span></div>
-          <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><div><dt className="text-slate-400">父版本</dt><dd className="mt-0.5 font-semibold text-slate-700">{parentLabel}</dd></div><div><dt className="text-slate-400">位置</dt><dd className="mt-0.5 font-semibold text-slate-700">{locationLabel}</dd></div></dl>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold text-blue-600">{draft.mode === 'modify' ? t("ui.after.change.8d6d51") : draft.targetFolderLocked ? t("ui.current.folder.9112e7") : t("ui.will.create.5cb828")}</p><p className="mt-1 text-base font-bold text-slate-900">{resolvedVersionLabel} · {outputFolderName}</p></div><span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 shadow-sm">{versionKind === 'branch' ? t("ui.sub.branch.c516a5") : parent?.nodeRole === 'original' ? t("ui.main.version.5b2599") : parent ? t("ui.continue.current.branch.cbcbb0") : t("ui.waiting.for.parent.version.2a1d48")}</span></div>
+          <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><div><dt className="text-slate-400">{t("ui.parent.version.faaa7d")}</dt><dd className="mt-0.5 font-semibold text-slate-700">{parentLabel}</dd></div><div><dt className="text-slate-400">{t("ui.location.1fb4d5")}</dt><dd className="mt-0.5 font-semibold text-slate-700">{locationLabel}</dd></div></dl>
         </div>
       </div>
     </Card>
-    <Card title="版本跟踪">
-      <label className={`flex gap-3 ${restrictedNode ? 'opacity-50' : ''}`}><input type="checkbox" className="mt-0.5" checked={policy.trackingEnabled} disabled={restrictedNode} onChange={event => updatePolicy({ trackingEnabled: event.target.checked })}/><span><b className="block text-sm text-slate-700">启用版本跟踪</b><small className="mt-0.5 block text-xs leading-5 text-slate-400">检测当前文件夹的媒体变化，并在需要时确认图片对应关系。</small></span></label>
-      <div className={`mt-3 border-t border-slate-100 pt-3 ${!policy.trackingEnabled || restrictedNode ? 'opacity-50' : ''}`}><div>{([['renameFromParent', '沿用上一版本文件名', '开启后会重新检查已有匹配；确认关联后使用父版本媒体文件名。'], ['copyMissingFromParent', '补齐缺失媒体', '父版本新增媒体后，此版本会变成“待刷新”。']] as const).map(([key, title, help], index) => <label key={key} className={`flex gap-3 py-3 first:pt-0 last:pb-0 ${index ? 'border-t border-slate-100' : ''}`}><input type="checkbox" className="mt-0.5" checked={policy[key]} disabled={!policy.trackingEnabled || restrictedNode} onChange={event => updatePolicy({ [key]: event.target.checked })}/><span><b className="block text-sm text-slate-700">{title}</b><small className="mt-0.5 block text-xs leading-5 text-slate-400">{help}</small></span></label>)}</div></div>
+    <Card title={t("ui.version.tracking.c4c7df")}>
+      <label className={`flex gap-3 ${restrictedNode ? 'opacity-50' : ''}`}><input type="checkbox" className="mt-0.5" checked={policy.trackingEnabled} disabled={restrictedNode} onChange={event => updatePolicy({ trackingEnabled: event.target.checked })}/><span><b className="block text-sm text-slate-700">{t("ui.enable.version.tracking.270154")}</b><small className="mt-0.5 block text-xs leading-5 text-slate-400">{t("ui.detect.media.changes.in.this.folder.fd2319")}</small></span></label>
+      <div className={`mt-3 border-t border-slate-100 pt-3 ${!policy.trackingEnabled || restrictedNode ? 'opacity-50' : ''}`}><div>{([['renameFromParent', t("ui.inherit.previous.version.file.names.90c3c9"), t("ui.recheck.existing.matches.and.use.parent.9bf240")], ['copyMissingFromParent', t("ui.fill.missing.media.eae8e4"), t("ui.this.version.becomes.needs.refresh.when.72450b")]] as const).map(([key, title, help], index) => <label key={key} className={`flex gap-3 py-3 first:pt-0 last:pb-0 ${index ? 'border-t border-slate-100' : ''}`}><input type="checkbox" className="mt-0.5" checked={policy[key]} disabled={!policy.trackingEnabled || restrictedNode} onChange={event => updatePolicy({ [key]: event.target.checked })}/><span><b className="block text-sm text-slate-700">{title}</b><small className="mt-0.5 block text-xs leading-5 text-slate-400">{help}</small></span></label>)}</div></div>
     </Card>
     </div>
-    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4"><span className="mr-auto max-w-xl text-xs leading-5 text-slate-400">版本前缀由父版本和创建方式生成，只需调整最后一段数字；名称更改时会同步更新文件夹名。</span><button type="button" disabled={busy} onClick={onClose} className="dialog-secondary">取消</button><button type="button" disabled={busy || Boolean(versionError) || !resolvedVersionKey || parentSelectionRequired || (draft.mode === 'import' && !draft.sourcePaths?.length)} onClick={onSubmit} className="dialog-primary inline-flex items-center gap-2">{busy && <Loader2 size={15} className="animate-spin"/>}{requiresMove ? '继续并检查移动' : `${modeAction} ${resolvedVersionLabel}`}</button></div>
+    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4"><span className="mr-auto max-w-xl text-xs leading-5 text-slate-400">{t("ui.the.parent.and.creation.mode.determine.654a52")}</span><button type="button" disabled={busy} onClick={onClose} className="dialog-secondary">{t("common.cancel")}</button><button type="button" disabled={busy || Boolean(versionError) || !resolvedVersionKey || parentSelectionRequired || (draft.mode === 'import' && !draft.sourcePaths?.length)} onClick={onSubmit} className="dialog-primary inline-flex items-center gap-2">{busy && <Loader2 size={15} className="animate-spin"/>}{requiresMove ? t("ui.continue.and.check.move.9ff6e9") : `${modeAction} ${resolvedVersionLabel}`}</button></div>
   </div>;
 };

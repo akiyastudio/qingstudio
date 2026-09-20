@@ -1,3 +1,5 @@
+import { useLocale } from "../i18n/react";
+import { t } from "../i18n/runtime";
 import { Aperture, Files, GitBranch, Loader2, Video } from 'lucide-react';
 import { PanelSwitch } from './PanelSwitch';
 import { SourcePathPicker } from './SourcePathPicker';
@@ -49,11 +51,12 @@ export const ImportSourceControls = ({
   startDisabled = false,
   onStart,
 }: ImportSourceControlsProps) => {
+  useLocale();
   const importKinds: Array<{ kind: ImportMaterialKind; label: string; icon: React.ReactNode }> = [
-    { kind: 'original', label: '原始素材', icon: <Aperture size={16}/> },
-    { kind: 'progress', label: '进度', icon: <GitBranch size={16}/> },
-    { kind: 'broll', label: '花絮', icon: <Video size={16}/> },
-    { kind: 'files', label: '其他文件', icon: <Files size={16}/> },
+    { kind: 'original', label: t("ui.original.media.2a53f2"), icon: <Aperture size={16}/> },
+    { kind: 'progress', label: t("ui.progress.f81ff5"), icon: <GitBranch size={16}/> },
+    { kind: 'broll', label: t("ui.behind.the.scenes.6bcb07"), icon: <Video size={16}/> },
+    { kind: 'files', label: t("ui.other.files.6ef019"), icon: <Files size={16}/> },
   ];
 
   return <div className="space-y-4">
@@ -62,18 +65,18 @@ export const ImportSourceControls = ({
     onChange={onSelectedPathsChange}
     onChooseFiles={onChooseFiles}
     onChooseFolder={onChooseFolder}
-    fileButtonLabel={selectedPaths.length ? `追加${chooseFilesLabel.replace(/^选择/, '')}` : chooseFilesLabel}
-    folderButtonLabel={selectedPaths.length ? `追加${chooseFolderLabel.replace(/^选择/, '')}` : chooseFolderLabel}
-    title="已选择"
-    description="所选文件和文件夹将按列表顺序导入"
+    fileButtonLabel={selectedPaths.length ? t("ui.add.value0.3eec14", { value0: chooseFilesLabel.replace(/^选择/, '') }) : chooseFilesLabel}
+    folderButtonLabel={selectedPaths.length ? t("ui.add.value0.3eec14", { value0: chooseFolderLabel.replace(/^选择/, '') }) : chooseFolderLabel}
+    title={t("ui.selected.3f4ebc")}
+    description={t("ui.selected.files.and.folders.will.be.ec790f")}
     emptyTitle={selectionTitle}
     emptyDescription={selectionDescription}
     disabled={busy}
-    itemLabel="个来源"
+    itemLabel={t("legacy.68450f43fd47")}
   />
 
   {importKind && onImportKindChange && <fieldset>
-    <legend className="mb-2 text-xs font-semibold text-slate-600">导入的内容</legend>
+    <legend className="mb-2 text-xs font-semibold text-slate-600">{t("ui.import.contents.c95c54")}</legend>
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {importKinds.map(item => {
         const unavailable = disabledImportKinds.includes(item.kind);
@@ -82,7 +85,7 @@ export const ImportSourceControls = ({
           type="button"
           aria-pressed={importKind === item.kind}
           disabled={busy || unavailable}
-          title={unavailable ? '当前目录不支持此导入类型' : undefined}
+          title={unavailable ? t("ui.this.import.type.is.not.supported.089fec") : undefined}
           onClick={() => onImportKindChange(item.kind)}
           className={`flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${importKind === item.kind ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-100' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50/40'}`}
         >{item.icon}{item.label}</button>;
@@ -91,7 +94,7 @@ export const ImportSourceControls = ({
   </fieldset>}
 
     <PanelSwitch
-      title="导入后删除源文件"
+      title={t("ui.delete.source.files.after.import.7a39fa")}
       description={deleteSourceDescription}
       checked={deleteSourceAfterImport}
       disabled={busy}
@@ -99,7 +102,7 @@ export const ImportSourceControls = ({
     />
 
   <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
-    <span className="mr-auto text-xs text-slate-400">{statusText || (selectedPaths.length ? `已选择 ${selectedPaths.length} 个来源` : '尚未选择来源')}</span>
+    <span className="mr-auto text-xs text-slate-400">{statusText || (selectedPaths.length ? t("ui.selected.sources.value0.3a9d8a", { value0: selectedPaths.length }) : t("ui.no.source.selected.1e22f4"))}</span>
     <button type="button" onClick={onStart} disabled={busy || startDisabled || !selectedPaths.length} className="dialog-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">
       {busy && <Loader2 size={15} className="animate-spin"/>}
       {busy ? busyLabel : startLabel}

@@ -853,6 +853,10 @@
         "derived"
       ],
       "properties": {
+        "sourceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "url": {
           "type": "string"
         },

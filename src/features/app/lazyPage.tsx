@@ -1,3 +1,4 @@
+import { t } from "../../i18n/runtime";
 import { Suspense, type ComponentType } from 'react';
 
 // Keep loading local to a page; opening a tool must not hide the application shell.
@@ -20,6 +21,6 @@ export function lazyPage<P extends object>(load: () => Promise<{ default: Compon
     return <Page {...props}/>;
   }
   return function DeferredPage(props: P) {
-    return <Suspense fallback={<div role="status" className="flex h-full min-h-24 items-center justify-center text-sm text-slate-400">正在加载页面…</div>}><Content {...props}/></Suspense>;
+    return <Suspense fallback={<div role="status" className="flex h-full min-h-24 items-center justify-center text-sm text-slate-400">{t("ui.loading.page.0cf062")}</div>}><Content {...props}/></Suspense>;
   };
 }

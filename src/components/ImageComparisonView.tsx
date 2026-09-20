@@ -1,3 +1,6 @@
+import { localizeBuiltInLabel } from '../i18n/built-in-labels';
+import { useLocale } from "../i18n/react";
+import { t } from "../i18n/runtime";
 import React, { useEffect, useRef, useState } from 'react';
 
 export type ImageComparisonMode = 'side-by-side' | 'split' | 'overlay' | 'blink' | 'difference';
@@ -34,6 +37,7 @@ const MODES: Array<[ImageComparisonMode, string]> = [
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
 
 export const ImageComparisonView = ({ left, right, mode, onModeChange, swapped = false, onSwappedChange, comparisonKey, leading, trailing, className = '', stageClassName = '', unavailable = false }: ImageComparisonViewProps) => {
+  useLocale();
   const [internalSwapped, setInternalSwapped] = useState(false);
   const [split, setSplit] = useState(50);
   const [opacity, setOpacity] = useState(50);
@@ -85,19 +89,19 @@ export const ImageComparisonView = ({ left, right, mode, onModeChange, swapped =
     <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-white/10 px-4 py-2">
       {leading && <div className="mr-2 min-w-0">{leading}</div>}
       <div className="flex flex-wrap items-center gap-1">
-        {MODES.map(([value, label]) => <button key={value} type="button" disabled={unavailable} onClick={() => onModeChange(value)} className={`rounded-md px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-35 ${mode === value ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-300 hover:bg-white/15'}`}>{label}</button>)}
-        <button type="button" disabled={unavailable} onClick={() => onSwappedChange ? onSwappedChange(!swapped) : setInternalSwapped(current => !current)} className="rounded-md bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/15 disabled:opacity-35">交换 A/B</button>
+        {MODES.map(([value, label]) => <button key={value} type="button" disabled={unavailable} onClick={() => onModeChange(value)} className={`rounded-md px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-35 ${mode === value ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-300 hover:bg-white/15'}`}>{localizeBuiltInLabel(label)}</button>)}
+        <button type="button" disabled={unavailable} onClick={() => onSwappedChange ? onSwappedChange(!swapped) : setInternalSwapped(current => !current)} className="rounded-md bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/15 disabled:opacity-35">{t("ui.swap.a.b.54a6ee")}</button>
       </div>
       <div className="ml-auto flex flex-wrap items-center gap-2">
-        <button type="button" disabled={unavailable} onClick={() => setRotation(current => (current + 90) % 360)} className="rounded-md bg-white/10 px-2.5 py-1.5 text-xs font-bold hover:bg-white/15 disabled:opacity-35">旋转 {rotation}°</button>
-        <button type="button" disabled={unavailable} onClick={resetView} className="rounded-md bg-white/10 px-2.5 py-1.5 text-xs font-bold hover:bg-white/15 disabled:opacity-35">重置</button>
-        <span className="text-xs text-slate-400">缩放</span>
-        <input disabled={unavailable} aria-label="图片缩放" type="range" min="1" max="5" step="0.1" value={zoom} onChange={event => setZoom(Number(event.currentTarget.value))}/>
+        <button type="button" disabled={unavailable} onClick={() => setRotation(current => (current + 90) % 360)} className="rounded-md bg-white/10 px-2.5 py-1.5 text-xs font-bold hover:bg-white/15 disabled:opacity-35">{t("message.7702d72f0b6b", { count: rotation })}</button>
+        <button type="button" disabled={unavailable} onClick={resetView} className="rounded-md bg-white/10 px-2.5 py-1.5 text-xs font-bold hover:bg-white/15 disabled:opacity-35">{t("ui.reset.cb5d68")}</button>
+        <span className="text-xs text-slate-400">{t("ui.zoom.b762ae")}</span>
+        <input disabled={unavailable} aria-label={t("ui.image.zoom.37dc6e")} type="range" min="1" max="5" step="0.1" value={zoom} onChange={event => setZoom(Number(event.currentTarget.value))}/>
         <span className="w-10 text-right font-mono text-[11px] text-slate-400">{Math.round(zoom * 100)}%</span>
         {trailing}
       </div>
     </header>
-    {mode === 'overlay' && !unavailable && <div className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-2 text-xs text-slate-300"><span>B 图透明度</span><input className="w-64" aria-label="B 图透明度" type="range" min="0" max="100" value={opacity} onChange={event => setOpacity(Number(event.currentTarget.value))}/><span className="font-mono">{opacity}%</span></div>}
+    {mode === 'overlay' && !unavailable && <div className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-2 text-xs text-slate-300"><span>{t("ui.image.b.opacity.f1cb34")}</span><input className="w-64" aria-label={t("ui.image.b.opacity.f1cb34")} type="range" min="0" max="100" value={opacity} onChange={event => setOpacity(Number(event.currentTarget.value))}/><span className="font-mono">{opacity}%</span></div>}
     <div
       ref={stageRef}
       onWheel={event => { if (unavailable) return; event.preventDefault(); setZoom(current => clamp(Number((current * (event.deltaY < 0 ? 1.15 : 1 / 1.15)).toFixed(2)), 1, 5)); }}
@@ -119,11 +123,11 @@ export const ImageComparisonView = ({ left, right, mode, onModeChange, swapped =
         {mode === 'split' && !unavailable && <button
           type="button"
           role="slider"
-          aria-label="拖动图片分割线"
+          aria-label={t("ui.drag.image.divider.d36665")}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(split)}
-          title="拖动分割线对比两张图片"
+          title={t("ui.drag.the.divider.to.compare.images.6f68ef")}
           onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); splitDragRef.current = event.pointerId; updateSplit(event.clientX); }}
           onPointerMove={event => { if (splitDragRef.current === event.pointerId) updateSplit(event.clientX); }}
           onPointerUp={event => { if (splitDragRef.current === event.pointerId) splitDragRef.current = null; }}

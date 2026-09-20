@@ -1,3 +1,6 @@
+import { renderText, type LocalizedText } from '../i18n/messages';
+import { useLocale } from "../i18n/react";
+import { t } from "../i18n/runtime";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useEscapeLayer } from './LayerProvider';
@@ -6,16 +9,16 @@ type DialogTone = 'primary' | 'danger';
 
 type ChoiceDialogOption = {
   value: string;
-  label: string;
+  label: LocalizedText;
   tone?: DialogTone;
 };
 
 type ChoiceDialogOptions = {
-  title: string;
-  message: string;
-  detail?: string;
+  title: LocalizedText;
+  message: LocalizedText;
+  detail?: LocalizedText;
   choices: ChoiceDialogOption[];
-  cancelLabel?: string;
+  cancelLabel?: LocalizedText;
   defaultValue?: string;
   cancelDefault?: boolean;
 };
@@ -24,30 +27,30 @@ type ConfirmDialogOptions = {
   priority?: boolean;
   requestId?: string;
   cancelDefault?: boolean;
-  title: string;
-  message: string;
-  detail?: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
+  title: LocalizedText;
+  message: LocalizedText;
+  detail?: LocalizedText;
+  confirmLabel?: LocalizedText;
+  cancelLabel?: LocalizedText;
   tone?: DialogTone;
 };
 
 type AlertDialogOptions = {
-  title: string;
-  message: string;
-  detail?: string;
-  confirmLabel?: string;
+  title: LocalizedText;
+  message: LocalizedText;
+  detail?: LocalizedText;
+  confirmLabel?: LocalizedText;
   tone?: DialogTone;
 };
 
 type PromptDialogOptions = {
-  title: string;
-  message?: string;
-  detail?: string;
+  title: LocalizedText;
+  message?: LocalizedText;
+  detail?: LocalizedText;
   defaultValue?: string;
-  placeholder?: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
+  placeholder?: LocalizedText;
+  confirmLabel?: LocalizedText;
+  cancelLabel?: LocalizedText;
 };
 
 type DialogRequest = {
@@ -67,6 +70,7 @@ type AppDialogApi = {
 const AppDialogContext = createContext<AppDialogApi | null>(null);
 
 const AppDialogProvider = ({ children }: { children: ReactNode }) => {
+  useLocale();
   const nextId = useRef(1);
   const resolvingId = useRef<number | null>(null);
   const [queue, setQueue] = useState<DialogRequest[]>([]);
@@ -166,21 +170,21 @@ const AppDialogProvider = ({ children }: { children: ReactNode }) => {
     {active && options && <div className={`fixed inset-0 ${'priority' in options && options.priority ? 'z-[3000]' : 'z-[1000]'} flex items-center justify-center bg-slate-950/40 p-4`} role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) finish(active.kind === 'confirm' ? false : null); }}>
       <form ref={dialogRef} tabIndex={-1} onKeyDown={trapFocus} onSubmit={active.kind === 'prompt' ? submitPrompt : event => event.preventDefault()} role="dialog" aria-modal="true" aria-labelledby={`app-dialog-title-${active.id}`} aria-describedby={options.message ? `app-dialog-message-${active.id}` : undefined} className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
-          <h3 id={`app-dialog-title-${active.id}`} className="font-bold text-slate-800">{options.title}</h3>
-          <button type="button" aria-label="关闭对话框" onClick={() => finish(active.kind === 'confirm' ? false : null)} className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100"><X size={18}/></button>
+          <h3 id={`app-dialog-title-${active.id}`} className="font-bold text-slate-800">{renderText(options.title)}</h3>
+          <button type="button" aria-label={t("ui.close.dialog.e80ddf")} onClick={() => finish(active.kind === 'confirm' ? false : null)} className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100"><X size={18}/></button>
         </div>
-        {options.message && <p id={`app-dialog-message-${active.id}`} className={`mt-3 whitespace-pre-line text-sm leading-6 ${alertOptions ? 'font-medium text-slate-700' : 'text-slate-500'}`}>{options.message}</p>}
-        {options.detail && <p className="mt-2 whitespace-pre-line text-xs leading-5 text-slate-500">{options.detail}</p>}
-        {promptOptions && <input aria-label={promptOptions.message || promptOptions.title} data-default-focus="true" value={promptValue} onChange={event => setPromptValue(event.target.value)} placeholder={promptOptions.placeholder} className="form-input mt-4"/>}
+        {options.message && <p id={`app-dialog-message-${active.id}`} className={`mt-3 whitespace-pre-line text-sm leading-6 ${alertOptions ? 'font-medium text-slate-700' : 'text-slate-500'}`}>{renderText(options.message)}</p>}
+        {options.detail && <p className="mt-2 whitespace-pre-line text-xs leading-5 text-slate-500">{renderText(options.detail)}</p>}
+        {promptOptions && <input aria-label={renderText(promptOptions.message || promptOptions.title)} data-default-focus="true" value={promptValue} onChange={event => setPromptValue(event.target.value)} placeholder={renderText(promptOptions.placeholder)} className="form-input mt-4"/>}
         <div className="mt-5 flex justify-end gap-2">
-          {!alertOptions && <button type="button" data-default-focus={Boolean(choiceOptions?.cancelDefault || dangerousConfirm || dangerousDefaultChoice)} onClick={() => finish(active.kind === 'confirm' ? false : null)} className="dialog-secondary">{confirmOptions?.cancelLabel || promptOptions?.cancelLabel || choiceOptions?.cancelLabel || '取消'}</button>}
+          {!alertOptions && <button type="button" data-default-focus={Boolean(choiceOptions?.cancelDefault || dangerousConfirm || dangerousDefaultChoice)} onClick={() => finish(active.kind === 'confirm' ? false : null)} className="dialog-secondary">{renderText(confirmOptions?.cancelLabel || promptOptions?.cancelLabel || choiceOptions?.cancelLabel) || t("common.cancel")}</button>}
           {alertOptions
-            ? <button type="button" data-default-focus="true" onClick={() => finish(null)} className={confirmClass}>{alertOptions.confirmLabel || '知道了'}</button>
+            ? <button type="button" data-default-focus="true" onClick={() => finish(null)} className={confirmClass}>{renderText(alertOptions.confirmLabel) || t("ui.got.it.de32e2")}</button>
             : confirmOptions
-            ? <button type="button" data-default-focus={!dangerousConfirm} onClick={() => finish(true)} className={confirmClass}>{confirmOptions.confirmLabel || '确认'}</button>
+            ? <button type="button" data-default-focus={!dangerousConfirm} onClick={() => finish(true)} className={confirmClass}>{renderText(confirmOptions.confirmLabel) || t("common.confirm")}</button>
             : promptOptions
-            ? <button type="submit" disabled={!promptValue.trim()} className="dialog-primary">{promptOptions.confirmLabel || '确认'}</button>
-            : choiceOptions?.choices.map(choice => <button key={choice.value} type="button" data-default-focus={choice.value === choiceOptions.defaultValue && choice.tone !== 'danger'} onClick={() => finish(choice.value)} className={choice.tone === 'danger' ? 'dialog-primary !bg-red-600 hover:!bg-red-500' : 'dialog-primary'}>{choice.label}</button>)}
+            ? <button type="submit" disabled={!promptValue.trim()} className="dialog-primary">{renderText(promptOptions.confirmLabel) || t("common.confirm")}</button>
+            : choiceOptions?.choices.map(choice => <button key={choice.value} type="button" data-default-focus={choice.value === choiceOptions.defaultValue && choice.tone !== 'danger'} onClick={() => finish(choice.value)} className={choice.tone === 'danger' ? 'dialog-primary !bg-red-600 hover:!bg-red-500' : 'dialog-primary'}>{renderText(choice.label)}</button>)}
         </div>
       </form>
     </div>}

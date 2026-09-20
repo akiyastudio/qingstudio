@@ -1,3 +1,5 @@
+const { localizeDialogOptions } = require("../../services/localization.cjs");
+const { t: translateNative } = require("../../services/localization.cjs");
 const registerWorkspaceImportIpc = dependencies => {
   const {
     Array,
@@ -647,7 +649,7 @@ const registerWorkspaceImportIpc = dependencies => {
       if (!fs.existsSync(destinationDir) || !fs.statSync(destinationDir).isDirectory()) throw new Error('当前文件夹不存在');
       let sourcePaths = Array.isArray(options?.sourcePaths) ? options.sourcePaths.map(source => String(source)) : [];
       if (!sourcePaths.length) {
-        const choice = await dialog.showOpenDialog(mainWindow, { title: '选择要导入的文件', properties: ['openFile', 'multiSelections'] });
+        const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({ title: translateNative("native.fe1326e972ce"), properties: ['openFile', 'multiSelections'] }));
         if (choice.canceled || !choice.filePaths.length) return { success: true, cancelled: true, count: 0 };
         sourcePaths = choice.filePaths;
       }
@@ -796,7 +798,6 @@ const registerWorkspaceImportIpc = dependencies => {
       const deleteSourceAfterImport = options?.deleteSourceAfterImport === true;
       const preserveOriginal = !deleteSourceAfterImport;
       const workspaceRoot = ensureWorkspace(workspacePath);
-      progressWorkspaceRoot = workspaceRoot;
       if (!workspaceCatalogs.has(workspaceRoot)) await refreshWorkspaceCatalog(workspaceRoot);
       const appendProgressId = String(options.appendProgressId || '');
       const appendProgress = appendProgressId
@@ -830,11 +831,11 @@ const registerWorkspaceImportIpc = dependencies => {
       } else if (Array.isArray(options.sourcePaths) && options.sourcePaths.length) {
         selectedSourcePaths = options.sourcePaths.map(value => String(value));
       } else {
-        const choice = await dialog.showOpenDialog(mainWindow, {
-          title: mediaKind === 'video' ? '选择要导入的视频版本' : '选择要导入的图片版本',
+        const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({
+          title: mediaKind === 'video' ? translateNative("native.ddd8fdb12d26") : translateNative("native.c5885dcc64f5"),
           properties: ['openFile', 'multiSelections'],
-          filters: [{ name: mediaKind === 'video' ? '视频文件' : '图片与 RAW', extensions }],
-        });
+          filters: [{ name: mediaKind === 'video' ? translateNative("native.3de55a23c480") : translateNative("native.c3b38d6b6100"), extensions }],
+        }));
         if (choice.canceled || !choice.filePaths.length) return { success: true, cancelled: true, count: 0 };
         selectedSourcePaths = choice.filePaths;
       }

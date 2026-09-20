@@ -1,17 +1,22 @@
+import { renderText } from "../../i18n/messages";
+import { LocalizedText } from "../../i18n/LocalizedText";
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentContribution, ComponentPageOpenScope, WorkspaceProject } from '../../types';
 import { componentWorkspacePanelId, PANEL_LAYOUT_CHANGED_EVENT } from '../../contracts/workspace-panels';
-import { WorkspacePanelHeader } from '../workspace/WorkspacePanelHeader';
+import { WorkspacePanelHeader } from '../../components/WorkspacePanelHeader';
 
 export const ComponentFolderPanelSurface = ({ contribution, project, workspacePath, scope, active, open, pinned, width, order, onClose, onTogglePinned }: {
   contribution: ComponentContribution; project: WorkspaceProject; workspacePath: string; scope: ComponentPageOpenScope;
   active: boolean; open: boolean; pinned: boolean; width: number; order: number; onClose: () => void; onTogglePinned: () => void;
 }) => {
+  useLocale();
   const panelId = componentWorkspacePanelId(contribution.componentId, contribution.contributionId);
   const [instanceId, setInstanceId] = useState(''); const instanceRef = useRef(''); const generation = useRef(0);
   const mounted = useRef(true); const wanted = useRef(open && active); wanted.current = open && active;
   const [error, setError] = useState(''); const [retry, setRetry] = useState(0);
-  const [info, setInfo] = useState({ title: contribution.title, subtitle: contribution.description || contribution.label });
+  const [info, setInfo] = useState({ title: contribution.title, subtitle: contribution.description || renderText(contribution.label) });
   const surface = useRef<HTMLDivElement>(null); const scopeKey = JSON.stringify(scope);
   useEffect(() => {
     if (!open || !active) return;
@@ -45,8 +50,8 @@ export const ComponentFolderPanelSurface = ({ contribution, project, workspacePa
     return () => { observer.disconnect(); window.removeEventListener('resize', schedule); window.removeEventListener('scroll', schedule, true); window.removeEventListener(PANEL_LAYOUT_CHANGED_EVENT, schedule); cancelAnimationFrame(frame); };
   }, [active, open, instanceId, width, order, info.title, info.subtitle, error]);
   if (!open || !active) return null;
-  return <section data-workspace-panel={panelId} aria-label={contribution.label} className="flex min-h-0 shrink-0 flex-col bg-slate-50" style={{ width, order }}>
-    <WorkspacePanelHeader id={panelId} label={contribution.label} title={info.title} subtitle={info.subtitle} pinned={pinned} onTogglePinned={onTogglePinned} onClose={onClose}/>
-    {error ? <div role="alert" className="p-3 text-sm text-red-600">{error}<button onClick={() => setRetry(value => value + 1)} className="ml-2 rounded border px-2 py-1">重试</button></div> : <div ref={surface} data-component-view-host className="min-h-0 flex-1">{!instanceId && <p role="status" className="p-3 text-sm text-slate-500">正在打开面板…</p>}</div>}
+  return <section data-workspace-panel={panelId} aria-label={renderText(contribution.label)} className="flex min-h-0 shrink-0 flex-col bg-slate-50" style={{ width, order }}>
+    <WorkspacePanelHeader id={panelId} label={renderText(contribution.label)} title={info.title} subtitle={info.subtitle} pinned={pinned} onTogglePinned={onTogglePinned} onClose={onClose}/>
+    {error ? <div role="alert" className="p-3 text-sm text-red-600"><LocalizedText value={error}/><button onClick={() => setRetry(value => value + 1)} className="ml-2 rounded border px-2 py-1">{t("ui.retry.b8784c")}</button></div> : <div ref={surface} data-component-view-host className="min-h-0 flex-1">{!instanceId && <p role="status" className="p-3 text-sm text-slate-500">{t("ui.opening.panel.b1302c")}</p>}</div>}
   </section>;
 };

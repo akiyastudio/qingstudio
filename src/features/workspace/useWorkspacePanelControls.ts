@@ -1,7 +1,7 @@
 import { usePublishWorkspacePanels } from '../../platform/workspace-panel-registry';
 import { DEFAULT_PANEL_WIDTHS, WORKSPACE_PANEL_IDS, WORKSPACE_PANEL_LABELS, type WorkspacePanelId, type WorkspacePanelWidths } from './workspace-panel-model';
 
-export type PanelControl = { open: boolean; pinned: boolean; setOpen: (value: boolean) => void; setPinned: (value: boolean) => void; setSuppressed?: (value: boolean) => void; label?: string };
+import type { PanelControl } from '../../contracts/workspace-panels';
 export const useWorkspacePanelControls = ({ pageId, active, order, setOrder, setWidths, files, preview, metadata, extra = {} }: {
   pageId: string; active: boolean; order: WorkspacePanelId[];
   setOrder: (order: WorkspacePanelId[]) => void;

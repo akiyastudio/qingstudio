@@ -1,3 +1,12 @@
+import { renderText } from '../../i18n/messages';
+import { projectStatusLabel } from '../../i18n/project-labels';
+import { formatBirthdayLabel } from '../../i18n/date-labels';
+import { localizeBuiltInLabel } from '../../i18n/built-in-labels';
+import { LocalizedText } from "../../i18n/LocalizedText";
+import { localizedMessage } from "../../i18n/messages";
+import { getLocale } from "../../i18n/runtime";
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import React, { useState, useEffect, useMemo } from 'react';
 import { FolderInput, ScanSearch, HardDrive, Play, Pause, Save, Trash2, AlertCircle, Edit, X, Plus, User, Loader2, RotateCcw, Download, Scissors, Video, ChevronDown, ChevronUp, Crop, CheckCircle2 } from 'lucide-react';
 import { TaskProgress } from '../../components/TaskStatus';
@@ -91,7 +100,7 @@ const usePythonTask = (scriptName: string, initialStatus: string) => {
   const pendingLogsRef = React.useRef<LogEntry[]>([]);
   const logFlushTimerRef = React.useRef<number | null>(null);
   const appendLog = React.useCallback((message: string, type: LogEntry['type']) => {
-    pendingLogsRef.current.push({ timestamp: new Date().toLocaleTimeString(), message, type });
+    pendingLogsRef.current.push({ timestamp: new Date().toLocaleTimeString(getLocale()), message, type });
     if (logFlushTimerRef.current !== null) return;
     logFlushTimerRef.current = window.setTimeout(() => {
       const pending = pendingLogsRef.current.splice(0);
@@ -234,6 +243,7 @@ const usePythonTask = (scriptName: string, initialStatus: string) => {
 };
 
 const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath, brollDestinationPath, workspacePath, workspaceProjects, active = true, directSource = false, startupAutoImportRequest = null, startupAutoImportReady = false, startupAutoImportError = null, startupAutoImportSelections = [], importKind, onImportKindChange, deleteSourceAfterImport = true, generateJpgFromRaw = false, splitVideosOnImport = false, transcodeVideosOnImport = false, splitBrollVideosOnImport = false, transcodeBrollVideosOnImport = false, transcodeSettings, videoToolsAvailable = true, onChooseSourceFiles, onChooseSourceFolder, onDropSourcePaths, onBusyChange, onImportConfigChange, onImportComplete, completedActionLabel = '继续导入', onCompletedAction }: { config?: AppConfig['smartImport'], drives?: string[], storageDevices?: StorageDevice[], destinationPath?: string | null, brollDestinationPath?: string | null, workspacePath?: string | null, workspaceProjects?: WorkspaceProject[], active?: boolean, directSource?: boolean, startupAutoImportRequest?: StartupSdAutoImportRequest | null, startupAutoImportReady?: boolean, startupAutoImportError?: string | null, startupAutoImportSelections?: Array<{ path: string; type: 'work' | 'broll' }>, importKind?: ImportMaterialKind, onImportKindChange?: (kind: ImportMaterialKind, sourcePaths: string[]) => void, deleteSourceAfterImport?: boolean, generateJpgFromRaw?: boolean, splitVideosOnImport?: boolean, transcodeVideosOnImport?: boolean, splitBrollVideosOnImport?: boolean, transcodeBrollVideosOnImport?: boolean, transcodeSettings?: VideoTranscodeSettings, videoToolsAvailable?: boolean, onChooseSourceFiles?: () => void, onChooseSourceFolder?: () => void, onDropSourcePaths?: (paths: string[]) => void, onBusyChange?: (busy: boolean) => void, onImportConfigChange?: (config: AppConfig['smartImport']) => void, onImportComplete?: (result: ImportCompletion) => void | Promise<void>, completedActionLabel?: string, onCompletedAction?: () => void }) => {
+  useLocale();
   const [status, setStatus] = useState<'idle' | 'checking' | 'ready_to_import' | 'importing' | 'decision' | 'processing' | 'completed'>('idle');
   const [progress, setProgress] = useState(0);
   const [statusMsg, setStatusMsg] = useState("等待连接...");
@@ -608,7 +618,7 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
            if (last && last.message === event.message && event.type === 'progress') return prev;
 
            return [...prev, {
-            timestamp: new Date().toLocaleTimeString(),
+            timestamp: new Date().toLocaleTimeString(getLocale()),
             message: event.message,
             type: event.type as any
            }].slice(-200);
@@ -1104,8 +1114,8 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
             : 'bg-slate-100 text-slate-500';
 
     if (directSource && status === 'idle') return <ImportSourceControls
-      selectionTitle="选择一个或多个原始素材文件，或选择素材文件夹"
-      selectionDescription="可直接拖入文件或文件夹，也可使用下方选择入口"
+      selectionTitle={t("legacy.c79633570a07")}
+      selectionDescription={t("legacy.481c5b2df671")}
       selectedPaths={selectedDrives}
       onSelectedPathsChange={paths => onDropSourcePaths?.(paths)}
       onChooseFiles={() => onChooseSourceFiles?.()}
@@ -1116,7 +1126,7 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
 
       deleteSourceAfterImport={shouldDeleteSourceAfterImport}
       onDeleteSourceAfterImportChange={setShouldDeleteSourceAfterImport}
-      deleteSourceDescription="全部文件复制并验证成功后删除源文件；关闭则保留。"
+      deleteSourceDescription={t("legacy.5207530be801")}
       startDisabled={!canStartImport}
       onStart={startBatchImport}
     />;
@@ -1129,28 +1139,28 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
             {status === 'checking' ? <Loader2 className="animate-spin" size={18} /> : <HardDrive size={18} />}
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-slate-800">{directSource ? '导入原始素材' : '从 SD 卡导入媒体'}</span>
-            <span className="text-xs text-slate-500">{displayMsg}</span>
+            <span className="text-sm font-bold text-slate-800">{directSource ? t("ui.import.original.media.4d1977") : t("ui.import.media.from.sd.card.fce3dd")}</span>
+            <span className="text-xs text-slate-500"><LocalizedText value={displayMsg}/></span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           {!directSource && <div ref={drivePickerRef} className="relative" onClick={event => event.stopPropagation()}>
-            <button type="button" aria-haspopup="menu" aria-expanded={drivePickerOpen} onClick={() => setDrivePickerOpen(open => !open)} className="flex h-9 min-w-36 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:border-blue-400"><span className="max-w-40 truncate">{selectedDrives.length ? `已选 ${selectedDrives.length} 个盘符` : '选择盘符'}</span><ChevronDown size={15} className={`transition-transform ${drivePickerOpen ? 'rotate-180' : ''}`}/></button>
+            <button type="button" aria-haspopup="menu" aria-expanded={drivePickerOpen} onClick={() => setDrivePickerOpen(open => !open)} className="flex h-9 min-w-36 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:border-blue-400"><span className="max-w-40 truncate">{selectedDrives.length ? t("ui.selected.drives.value0.579579", { value0: selectedDrives.length }) : t("ui.choose.drive.e724e9")}</span><ChevronDown size={15} className={`transition-transform ${drivePickerOpen ? 'rotate-180' : ''}`}/></button>
             {drivePickerOpen && <div role="menu" className="absolute right-0 top-full z-50 mt-1 max-h-64 min-w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
-              {[...new Set([...selectedDrives, ...drives])].map(drive => <div key={drive} className="flex items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-slate-50"><label className="flex min-w-0 cursor-pointer items-center gap-2"><input type="checkbox" checked={selectedDrives.includes(drive)} onChange={() => toggleDrive(drive)}/><span className="font-mono">{drive}</span></label><select aria-label={`${drive} 导入类型`} value={driveTypes[drive] || 'work'} onChange={event => setDriveType(drive, event.target.value as 'work' | 'broll')} className="ml-auto rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600" disabled={!selectedDrives.includes(drive)}><option value="work">原始素材</option><option value="broll">花絮</option></select><span className={`text-xs ${drives.includes(drive) ? 'text-emerald-600' : 'text-slate-400'}`}>{drives.includes(drive) ? '已连接' : '未连接'}</span></div>)}
-              {!drives.length && !selectedDrives.length && <p className="px-2 py-1 text-xs text-slate-500">未检测到可用盘符</p>}
+              {[...new Set([...selectedDrives, ...drives])].map(drive => <div key={drive} className="flex items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-slate-50"><label className="flex min-w-0 cursor-pointer items-center gap-2"><input type="checkbox" checked={selectedDrives.includes(drive)} onChange={() => toggleDrive(drive)}/><span className="font-mono">{drive}</span></label><select aria-label={t("ui.import.type.for.value0.2d6ba0", { value0: drive })} value={driveTypes[drive] || 'work'} onChange={event => setDriveType(drive, event.target.value as 'work' | 'broll')} className="ml-auto rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600" disabled={!selectedDrives.includes(drive)}><option value="work">{t("ui.original.media.2a53f2")}</option><option value="broll">{t("ui.behind.the.scenes.6bcb07")}</option></select><span className={`text-xs ${drives.includes(drive) ? 'text-emerald-600' : 'text-slate-400'}`}>{drives.includes(drive) ? t("ui.connected.5be032") : t("ui.disconnected.3d5257")}</span></div>)}
+              {!drives.length && !selectedDrives.length && <p className="px-2 py-1 text-xs text-slate-500">{t("ui.no.available.drives.detected.7f8622")}</p>}
             </div>}
           </div>}
           {canStartImport && status === 'idle' ? (
-            <button onClick={() => startBatchImport()} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all animate-in zoom-in-95"><Download size={16} />{directSource ? '开始导入' : connectedDrives.length > 1 ? '批量导入' : '开始导入'}</button>
+            <button onClick={() => startBatchImport()} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all animate-in zoom-in-95"><Download size={16} />{directSource ? t("ui.start.import.bb8aa0") : connectedDrives.length > 1 ? t("ui.batch.import.fd7719") : t("ui.start.import.bb8aa0")}</button>
           ) : (
             <button disabled className={`p-2 rounded-lg transition ${status === 'checking' ? 'text-blue-500' : 'text-slate-300 bg-slate-50 cursor-not-allowed'}`}><RotateCcw size={18} className={status === 'checking' ? 'animate-spin' : ''} /></button>
           )}
         </div>
       </div>
       {status === 'idle' && <>
-        <PanelSwitch title="导入后删除源文件" description={`全部文件复制并验证成功后删除${directSource ? '所选原始素材' : 'SD 卡媒体'}；关闭则保留。`} checked={shouldDeleteSourceAfterImport} onChange={setShouldDeleteSourceAfterImport}/>
+        <PanelSwitch title={t("ui.delete.source.files.after.import.7a39fa")} description={t("ui.delete.value0.after.all.files.are.bcf593", { value0: directSource ? t("ui.selected.original.media.d89e9d") : t("ui.sd.card.media.c17d86") })} checked={shouldDeleteSourceAfterImport} onChange={setShouldDeleteSourceAfterImport}/>
       </>}
       </div>
     );
@@ -1164,7 +1174,7 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
         <div className="flex justify-between items-center mb-6 z-10">
           <h3 className="text-lg font-semibold text-blue-200 flex items-center gap-2">
             <FolderInput size={20} />
-            {directSource ? '导入原始素材' : '从 SD 卡导入媒体'}
+            {directSource ? t("ui.import.original.media.4d1977") : t("ui.import.media.from.sd.card.fce3dd")}
           </h3>
           <span className="text-xs px-2 py-1 rounded border font-mono bg-blue-500/20 text-blue-300 border-blue-500/30">
             {status.toUpperCase().replace('_', ' ')}
@@ -1183,7 +1193,7 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                 <CheckCircle2 size={34} />
               </div>
-              <p className="text-lg font-bold text-slate-800">{{ success: '导入完成', partial: '部分导入完成', skipped: '本次导入已跳过', 'relation-pending': '文件已导入，关系待提交' }[completedOutcome]}</p>
+              <p className="text-lg font-bold text-slate-800">{{ success: t("ui.import.complete.d613fe"), partial: t("legacy.d734351a8034"), skipped: t("legacy.9293aaf318ee"), 'relation-pending': t("legacy.74bbe416e8b5") }[completedOutcome]}</p>
               <p className="mt-1 text-sm text-slate-500">
                 {completedOutcome === 'relation-pending'
                   ? completedDetail
@@ -1192,13 +1202,11 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
                     : completedOutcome === 'skipped'
                       ? completedDetail
                       : completedProjectNames.length
-                  ? `素材已导入到 ${completedProjectNames.length} 个项目。`
-                  : directSource ? '所选原始素材已成功导入。' : '所选 SD 卡素材已成功导入。'}
+                  ? t("ui.media.imported.projects.value0.e7d87c", { value0: completedProjectNames.length })
+                  : directSource ? t("ui.selected.original.media.imported.successfully.443f3e") : t("ui.selected.sd.card.media.imported.successfully.c39827")}
               </p>
               {transferStats && <p className="mt-2 text-xs font-medium tabular-nums text-slate-500">
-                共导入 {formatTransferBytes(transferStats.totalBytes || transferStats.bytesCopied)}
-                {transferStats.totalFiles ? ` · ${transferStats.totalFiles} 个文件` : ''}
-              </p>}
+                {t("message.a8fe98185528", { value0: formatTransferBytes(transferStats.totalBytes || transferStats.bytesCopied), value1: transferStats.totalFiles ? t("legacy.message.e1c21660ae24", { value0: transferStats.totalFiles }) : '' })}</p>}
               <button type="button" onClick={() => { resetCompletedImport(); onCompletedAction?.(); }} className="dialog-primary mt-5">{completedActionLabel}</button>
             </div>
           )}
@@ -1209,8 +1217,8 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
               <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4 text-blue-600">
                 <Loader2 className="animate-spin" size={32} />
               </div>
-              <p className="text-slate-800 font-bold text-lg mb-1">准备导入...</p>
-              <p className="text-slate-500 text-sm mb-6">{statusMsg}</p>
+              <p className="text-slate-800 font-bold text-lg mb-1">{t("ui.preparing.import.21e7db")}</p>
+              <p className="text-slate-500 text-sm mb-6"><LocalizedText value={statusMsg}/></p>
             </div>
           )}
 
@@ -1219,11 +1227,8 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
             <div className="w-full max-w-xl">
               <TaskProgress logs={logs} progress={progress} isRunning idleMessage={statusMsg} reportToTaskCenter={false} />
               {transferStats && <p className="mt-2 text-center text-xs font-medium tabular-nums text-slate-500">
-                已导入 {formatTransferBytes(transferStats.bytesCopied)} / {formatTransferBytes(transferStats.totalBytes)}
-                {transferStats.bytesPerSecond > 0 ? ` · ${formatTransferBytes(transferStats.bytesPerSecond)}/s` : ''}
-                {transferStats.totalFiles ? ` · ${transferStats.filesCopied || 0}/${transferStats.totalFiles} 个文件` : ''}
-              </p>}
-              <button type="button" onClick={() => void cancelImport()} disabled={isCancellingImport} className="dialog-secondary mt-4 inline-flex items-center gap-2 disabled:opacity-50">{isCancellingImport && <Loader2 size={15} className="animate-spin"/>}{isCancellingImport ? '正在取消…' : '取消导入'}</button>
+                {t("message.4b75fcf4dbda", { value0: formatTransferBytes(transferStats.bytesCopied), value1: formatTransferBytes(transferStats.totalBytes), value2: transferStats.bytesPerSecond > 0 ? ` · ${formatTransferBytes(transferStats.bytesPerSecond)}/s` : '', value3: transferStats.totalFiles ? t("legacy.message.86653b1b16af", { value0: transferStats.filesCopied || 0, value1: transferStats.totalFiles }) : '' })}</p>}
+              <button type="button" onClick={() => void cancelImport()} disabled={isCancellingImport} className="dialog-secondary mt-4 inline-flex items-center gap-2 disabled:opacity-50">{isCancellingImport && <Loader2 size={15} className="animate-spin"/>}{isCancellingImport ? t("ui.cancelling.e8e08b") : t("ui.cancel.import.26bff7")}</button>
             </div>
           )}
 
@@ -1232,11 +1237,10 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
             <div className="w-full bg-slate-50/80 p-5 rounded-xl border border-yellow-500/20 text-left animate-in zoom-in-95">
               <h4 className="text-slate-800 font-bold mb-2 flex items-center gap-2">
                 <AlertCircle className="text-yellow-400" size={20} />
-                需确认操作
-              </h4>
+                {t("ui.confirmation.required.d094a9")}</h4>
               {decisionData.kind === 'project_routing' ? <>
-                <p className="mb-4 text-sm text-slate-500">请为各拍摄时段选择目标项目；可选择同一项目。</p>
-                {decisionData.stagingComplete && currentDriveRef.current && !drives.includes(currentDriveRef.current) && <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">设备已断开，仍可继续分类；本次不会删除卡内源文件。</p>}
+                <p className="mb-4 text-sm text-slate-500">{t("ui.choose.a.target.project.for.each.318e64")}</p>
+                {decisionData.stagingComplete && currentDriveRef.current && !drives.includes(currentDriveRef.current) && <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">{t("ui.the.device.disconnected.you.can.continue.72d141")}</p>}
                 <div className="mb-5 max-h-72 space-y-3 overflow-y-auto pr-1">{decisionData.groups.map((group: any) => {
                   const suggestedIds = new Set<string>(group.suggestedProjectIds || []);
                   const suggestedPaths = new Set<string>(group.suggestedProjectPaths || []);
@@ -1244,27 +1248,24 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
                   const orderedProjects = [...(workspaceProjects || [])].sort((left, right) => Number(isSuggested(right)) - Number(isSuggested(left)));
                   const selectedIdentity = decisionData.routes?.[group.id] || '';
                   const selectedProjectId = orderedProjects.find(project => project.id === selectedIdentity || project.path === selectedIdentity)?.id || selectedIdentity;
-                  return <label key={group.id} className="block rounded-lg border border-slate-200 bg-white p-3"><span className="block text-sm font-bold text-slate-700">{group.date} · {group.startTime}–{group.endTime} · {group.count} 个文件</span><select value={selectedProjectId} onChange={event => setDecisionData((current: any) => ({ ...current, routes: { ...(current?.routes || {}), [group.id]: event.target.value } }))} className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"><option value="">请选择目标项目…</option>{orderedProjects.map(project => <option key={project.id} value={project.id}>{isSuggested(project) ? '建议 · ' : ''}{project.name} · {project.status}</option>)}</select></label>;
+                  return <label key={group.id} className="block rounded-lg border border-slate-200 bg-white p-3"><span className="block text-sm font-bold text-slate-700">{group.date} · {group.startTime}–{group.endTime} · {group.count} {t("ui.files.2d4a2a")}</span><select value={selectedProjectId} onChange={event => setDecisionData((current: any) => ({ ...current, routes: { ...(current?.routes || {}), [group.id]: event.target.value } }))} className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"><option value="">{t("ui.choose.target.project.b0b3c4")}</option>{orderedProjects.map(project => <option key={project.id} value={project.id}>{isSuggested(project) ? t("ui.suggested.368a50") : ''}{project.name} · {projectStatusLabel(project.status)}</option>)}</select></label>;
                 })}</div>
-                <button onClick={confirmProjectRoutes} className="w-full rounded-lg bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-500">确认归属并开始导入</button>
+                <button onClick={confirmProjectRoutes} className="w-full rounded-lg bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-500">{t("ui.confirm.projects.and.start.import.e96f25")}</button>
               </> : <><p className="text-slate-500 text-sm mb-6">
-                检测到多个拍摄时段，是否分别保存？
-              </p>
+                {t("ui.multiple.shooting.periods.detected.save.them.17d42a")}</p>
               <div className="flex gap-3">
                 <button
                     onClick={() => handleDecision(true)}
                     className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-slate-800 py-2 rounded-lg text-sm transition-colors"
                 >
-                    分别保存
-                </button>
+                    {t("ui.save.separately.421090")}</button>
                 <button
                     onClick={() => handleDecision(false)}
                     className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-900 py-2 rounded-lg text-sm transition-colors"
                 >
-                    合并保存
-                </button>
+                    {t("ui.save.together.585289")}</button>
               </div></>}
-              <button type="button" onClick={() => void cancelImport()} className="mt-3 w-full rounded-lg border border-slate-200 bg-white py-2 text-sm font-bold text-slate-600 hover:bg-slate-100">取消本次导入</button>
+              <button type="button" onClick={() => void cancelImport()} className="mt-3 w-full rounded-lg border border-slate-200 bg-white py-2 text-sm font-bold text-slate-600 hover:bg-slate-100">{t("ui.cancel.this.import.0ba541")}</button>
             </div>
           )}
 
@@ -1276,6 +1277,7 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
 };
 
 const BirthdayManagerModal = ({ onClose, onDataChanged }: { onClose: () => void, onDataChanged: () => void }) => {
+  useLocale();
   const appDialog = useAppDialog();
   useEscapeLayer(true, onClose);
   const [birthdays, setBirthdays] = useState<Record<string, string>>({});
@@ -1333,9 +1335,9 @@ const BirthdayManagerModal = ({ onClose, onDataChanged }: { onClose: () => void,
 
   const handleDelete = async (name: string) => {
     if (!await appDialog.confirm({
-      title: `确定删除“${name}”吗？`,
-      message: '该生日记录将被删除。',
-      confirmLabel: '删除记录',
+      title: localizedMessage("ui.delete.value0.f90da9", { value0: name }),
+      message: localizedMessage("ui.this.birthday.record.will.be.deleted.974a80"),
+      confirmLabel: localizedMessage("ui.delete.record.f2cf91"),
       tone: 'danger',
     })) return;
     const newData = { ...birthdays };
@@ -1350,18 +1352,18 @@ const BirthdayManagerModal = ({ onClose, onDataChanged }: { onClose: () => void,
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-50/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="absolute inset-0" onClick={onClose}></div>
-      <div role="dialog" aria-modal="true" aria-label="生日列表" className="bg-white border border-slate-200 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[80vh] relative z-10">
+      <div role="dialog" aria-modal="true" aria-label={t("ui.birthday.list.833303")} className="bg-white border border-slate-200 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[80vh] relative z-10">
         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-200 rounded-t-2xl">
-          <div><h3 className="text-xl font-bold text-slate-800">生日列表</h3></div>
+          <div><h3 className="text-xl font-bold text-slate-800">{t("ui.birthday.list.833303")}</h3></div>
           <button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-full text-slate-500 hover:text-slate-800 transition cursor-pointer"><X size={24} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 space-y-2">
-          {loading ? <div className="text-center text-slate-500">Loading...</div> :
+          {loading ? <div className="text-center text-slate-500">{t("common.loading")}</div> :
            sortedBirthdays.map(([name, date]) => (
             <div key={name} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200 group">
                <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400"><User size={14} /></div>
-                  <div><div className="font-medium text-slate-900">{name}</div><div className="text-xs text-slate-500">{date}</div></div>
+                  <div><div className="font-medium text-slate-900">{name}</div><div className="text-xs text-slate-500">{formatBirthdayLabel(date)}</div></div>
                </div>
                <button onClick={() => handleDelete(name)} className="opacity-0 group-hover:opacity-100 p-2 text-slate-500 hover:text-red-400 transition"><Trash2 size={16} /></button>
             </div>
@@ -1369,12 +1371,12 @@ const BirthdayManagerModal = ({ onClose, onDataChanged }: { onClose: () => void,
         </div>
         <div className="p-6 border-t border-slate-200 bg-white rounded-b-2xl">
            <div className="flex gap-3">
-              <input placeholder="Name" value={newName} onChange={e => setNewName(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-slate-800" />
-              <input aria-label="月份" placeholder="月" type="number" min="1" max="12" step="1" value={newMonth} onChange={e => { setNewMonth(e.target.value); setFormError(''); }} className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-center text-slate-800" />
-              <input aria-label="日期" placeholder="日" type="number" min="1" max="31" step="1" value={newDay} onChange={e => { setNewDay(e.target.value); setFormError(''); }} className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-center text-slate-800" />
-              <button onClick={handleSave} className="bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={16} /> 添加</button>
+              <input placeholder={t("birthdays.name")} value={newName} onChange={e => setNewName(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-slate-800" />
+              <input aria-label={t("ui.month.a27822")} placeholder={t("ui.month.162517")} type="number" min="1" max="12" step="1" value={newMonth} onChange={e => { setNewMonth(e.target.value); setFormError(''); }} className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-center text-slate-800" />
+              <input aria-label={t("ui.date.70d0c1")} placeholder={t("ui.day.85217f")} type="number" min="1" max="31" step="1" value={newDay} onChange={e => { setNewDay(e.target.value); setFormError(''); }} className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-center text-slate-800" />
+              <button onClick={handleSave} className="bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={16} /> {t("ui.add.7a8a11")}</button>
            </div>
-           {formError && <p role="alert" className="mt-2 text-sm text-red-600">{formError}</p>}
+           {formError && <p role="alert" className="mt-2 text-sm text-red-600"><LocalizedText value={formError}/></p>}
         </div>
       </div>
     </div>
@@ -1440,6 +1442,7 @@ const DashboardView = ({
   initialBirthdays?: Record<string, string>;
   dragProps?: HomePanelDragProps;
 }) => {
+  useLocale();
   // 生日逻辑保持不变
   const [upcomingBirthdays, setUpcomingBirthdays] = useState<{name: string, date: string, sortKey: number}[]>(() => upcomingBirthdaysFrom(initialBirthdays || {}));
   const [loading, setLoading] = useState(!initialBirthdays);
@@ -1545,7 +1548,7 @@ const DashboardView = ({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      {projectDestination && <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">当前项目：<strong>{projectName || projectDestination}</strong>{projectDestination.endsWith("花絮") ? " · 导入花絮" : " · 从 SD 卡导入"}</div>}
+      {projectDestination && <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">{t("ui.current.project.717d92")}<strong>{projectName || projectDestination}</strong>{projectDestination.endsWith("花絮") ? t("ui.import.behind.the.scenes.media.f6bbab") : t("ui.import.from.sd.card.2b7400")}</div>}
       {showManager && (
         <BirthdayManagerModal
           onClose={() => setShowManager(false)}
@@ -1553,24 +1556,23 @@ const DashboardView = ({
         />
       )}
 
-      {section !== 'birthday' && <HomePanel title="从 SD 卡导入" initiallyOpen onOpenChange={setImportPanelOpen} {...dragProps}>
+      {section !== 'birthday' && <HomePanel title={t("ui.import.from.sd.card.48ca18")} initiallyOpen onOpenChange={setImportPanelOpen} {...dragProps}>
         <div className="flex flex-col gap-6">
-          {storageInventory.warning && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">{storageInventory.warning}{storageInventory.deviceErrors.length ? `；故障位置：${storageInventory.deviceErrors.map(item => item.mountPath || '未知设备').join('、')}` : ''}</div>}
-          {!storageInventoryFresh && lastKnownStorageDevices.length > 0 && <div role="status" className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">设备清单正在刷新或读取失败；仅展示上次检测到的 {lastKnownStorageDevices.length} 个设备，暂不能开始手动导入。</div>}
-          <ImportCard config={config} drives={drives} storageDevices={storageDevices} workspacePath={workspacePath} destinationPath={projectDestination ?? workspacePath} brollDestinationPath={projectDestination} workspaceProjects={projectDestination ? undefined : workspaceProjects} active={active} startupAutoImportRequest={startupAutoImportRequest} startupAutoImportReady={storageInventoryFresh && (Boolean(projectDestination) || workspaceProjectsLoaded)} startupAutoImportError={storageInventory.error || workspaceProjectsError} startupAutoImportSelections={startupAutoImportSelections} deleteSourceAfterImport={importDefaults.deleteSourceAfterImport} generateJpgFromRaw={importDefaults.generateJpgFromRaw} splitVideosOnImport={importDefaults.splitVideosOnImport} transcodeVideosOnImport={importDefaults.transcodeVideosOnImport} splitBrollVideosOnImport={brollConfig.splitVideosOnImport} transcodeBrollVideosOnImport={brollConfig.transcodeVideosOnImport} transcodeSettings={videoTools.transcode} videoToolsAvailable={videoToolsAvailable} onBusyChange={setImportBusy} onImportConfigChange={onImportConfigChange} onImportComplete={projectDestination ? undefined : result => { void onImportComplete?.(result); }} completedActionLabel="刷新卡片" />
+          {storageInventory.warning && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">{storageInventory.warning}{storageInventory.deviceErrors.length ? t("ui.failure.location.value0.b654e7", { value0: storageInventory.deviceErrors.map(item => item.mountPath || '未知设备').join('、') }) : ''}</div>}
+          {!storageInventoryFresh && lastKnownStorageDevices.length > 0 && <div role="status" className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">{t("message.6245fa1613fd", { count: lastKnownStorageDevices.length })}</div>}
+          <ImportCard config={config} drives={drives} storageDevices={storageDevices} workspacePath={workspacePath} destinationPath={projectDestination ?? workspacePath} brollDestinationPath={projectDestination} workspaceProjects={projectDestination ? undefined : workspaceProjects} active={active} startupAutoImportRequest={startupAutoImportRequest} startupAutoImportReady={storageInventoryFresh && (Boolean(projectDestination) || workspaceProjectsLoaded)} startupAutoImportError={storageInventory.error || workspaceProjectsError} startupAutoImportSelections={startupAutoImportSelections} deleteSourceAfterImport={importDefaults.deleteSourceAfterImport} generateJpgFromRaw={importDefaults.generateJpgFromRaw} splitVideosOnImport={importDefaults.splitVideosOnImport} transcodeVideosOnImport={importDefaults.transcodeVideosOnImport} splitBrollVideosOnImport={brollConfig.splitVideosOnImport} transcodeBrollVideosOnImport={brollConfig.transcodeVideosOnImport} transcodeSettings={videoTools.transcode} videoToolsAvailable={videoToolsAvailable} onBusyChange={setImportBusy} onImportConfigChange={onImportConfigChange} onImportComplete={projectDestination ? undefined : result => { void onImportComplete?.(result); }} completedActionLabel={t("legacy.26b4905705d6")} />
         </div>
       </HomePanel>}
-      {section !== 'import' && <HomePanel title="角色生日" initiallyOpen tone="birthday" {...dragProps}>
+      {section !== 'import' && <HomePanel title={t("ui.character.birthdays.372146")} initiallyOpen tone="birthday" {...dragProps}>
         <div className="space-y-3">
           <div className="flex justify-between items-start">
               <h3 className="text-sm font-semibold text-slate-600 flex items-center gap-1.5">
-                <span className="text-base">🎂</span> 角色生日
-              </h3>
+                <span className="text-base">🎂</span> {t("ui.character.birthdays.372146")}</h3>
           </div>
 
           <div className="">
               {loading ? (
-                <div className="text-indigo-400 text-sm">Loading birthdays...</div>
+                <div className="text-indigo-400 text-sm">{t("birthdays.loading")}</div>
               ) : upcomingBirthdays.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pr-1">
                   {upcomingBirthdays.map((b, i) => (
@@ -1581,24 +1583,23 @@ const DashboardView = ({
                         {/* 名字文字加深 */}
                         <span className="text-sm font-medium text-slate-700 pr-2 leading-snug">{b.name}</span>
                       </div>
-                      <span className="flex-shrink-0 text-blue-600 font-mono text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">{b.date}</span>
+                      <span className="flex-shrink-0 text-blue-600 font-mono text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">{formatBirthdayLabel(b.date)}</span>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-40 text-indigo-400/60 text-sm italic">
-                  <p>近期没有角色生日。</p>
+                  <p>{t("ui.no.upcoming.birthdays.add.one.using.3d9cda")}</p>
                 </div>
               )}
           </div>
 
           {/* Footer */}
           <div className="flex items-center justify-between pt-3 border-t border-blue-100">
-              <p className="text-[11px] text-slate-500">只显示接下来两个月的角色生日</p>
+              <p className="text-[11px] text-slate-500">{t("ui.show.birthdays.in.the.next.two.dac6c4")}</p>
               {/* 管理按钮变亮 */}
               <button onClick={() => setShowManager(true)} className="flex items-center gap-1 px-2 py-1 rounded-md bg-white hover:bg-blue-50 text-blue-600 text-[11px] font-bold transition-all border border-blue-100">
-                <Edit size={12} /> Manage
-              </button>
+                <Edit size={12} /> {t("ui.manage.birthdays.2d18fc")}</button>
           </div>
         </div>
       </HomePanel>}
@@ -1630,6 +1631,7 @@ const HomePanel = ({ title, initiallyOpen = false, tone, children, onOpenChange,
 };
 
 const ConverterView = ({ embedded = false, initialTargetPath = "", initialTargetPaths, sourcesLoading = false }: { embedded?: boolean; initialTargetPath?: string; initialTargetPaths?: string[]; sourcesLoading?: boolean }) => {
+  useLocale();
   const [targetPaths, setTargetPaths] = useState<string[]>(() => initialTargetPaths?.filter(Boolean) || (initialTargetPath ? [initialTargetPath] : []));
   const { pathKinds, resolvingKinds } = useSourcePathKinds(targetPaths);
   const [quality, setQuality] = useState(100);
@@ -1658,29 +1660,29 @@ const ConverterView = ({ embedded = false, initialTargetPath = "", initialTarget
 
   return (
     <div className="w-full space-y-6">
-      {!embedded && <h2 className="text-2xl font-bold text-slate-800">图片转 JPG</h2>}
+      {!embedded && <h2 className="text-2xl font-bold text-slate-800">{t("ui.convert.images.to.jpg.c3edb0")}</h2>}
       <div className={embedded ? 'space-y-6' : 'bg-white border border-slate-200 rounded-xl p-6 space-y-6'}>
 
-        <SourcePathPicker paths={targetPaths} pathKinds={pathKinds} folderPreviewExtensions={IMAGE_SOURCE_PREVIEW_EXTENSIONS} onChange={setTargetPaths} onChooseFiles={chooseFiles} onChooseFolder={chooseFolder} fileButtonLabel="追加图片" folderButtonLabel="追加文件夹" loading={sourcesLoading || resolvingKinds} disabled={isRunning} title="已选择" itemLabel="个来源" description="支持 PNG、WebP、HEIC/HEIF、AVIF、TIFF、BMP 和 GIF；动态图片取第一帧，文件夹会递归处理" emptyTitle="拖入图片或文件夹"/>
-        <p className="flex items-center gap-1 text-xs text-slate-600"><AlertCircle size={12}/>{deleteOriginal ? '转换并验证成功后，原始图片会移入回收站' : '转换后保留原始图片'}</p>
+        <SourcePathPicker paths={targetPaths} pathKinds={pathKinds} folderPreviewExtensions={IMAGE_SOURCE_PREVIEW_EXTENSIONS} onChange={setTargetPaths} onChooseFiles={chooseFiles} onChooseFolder={chooseFolder} fileButtonLabel={t("legacy.977a546e3b2c")} folderButtonLabel={t("legacy.04580ea496bd")} loading={sourcesLoading || resolvingKinds} disabled={isRunning} title={t("ui.selected.3f4ebc")} itemLabel={t("legacy.68450f43fd47")} description={t("ui.supports.png.webp.heic.heif.avif.a7845b")} emptyTitle={t("legacy.2e29ca248a18")}/>
+        <p className="flex items-center gap-1 text-xs text-slate-600"><AlertCircle size={12}/>{deleteOriginal ? t("ui.original.images.move.to.the.recycle.fe5195") : t("ui.keep.original.images.after.conversion.8efa5f")}</p>
 
         <div className="flex items-center justify-between gap-4 rounded-lg bg-slate-50 p-3 border border-slate-200">
-          <label className="text-sm font-medium text-slate-700">JPG 画质</label>
+          <label className="text-sm font-medium text-slate-700">{t("ui.jpg.quality.a782c8")}</label>
           <select value={quality} onChange={event => setQuality(Number(event.target.value))} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-blue-500">
-            <option value={100}>最高（100）</option>
-            <option value={95}>高（95）</option>
-            <option value={85}>标准（85）</option>
-            <option value={75}>节省空间（75）</option>
+            <option value={100}>{t("ui.maximum.100.db53d8")}</option>
+            <option value={95}>{t("ui.high.95.d6f183")}</option>
+            <option value={85}>{t("ui.standard.85.d8f6b4")}</option>
+            <option value={75}>{t("ui.space.saving.75.d77b32")}</option>
           </select>
         </div>
-        <PanelSwitch title="转换成功后删除原始图片" description="JPG 生成并验证成功后，将原图片移入回收站；已有同名 JPG 不会被覆盖。" checked={deleteOriginal} disabled={isRunning} onChange={setDeleteOriginal}/>
+        <PanelSwitch title={t("ui.delete.originals.after.successful.conversion.38eeb0")} description={t("ui.move.originals.to.the.recycle.bin.b4c48f")} checked={deleteOriginal} disabled={isRunning} onChange={setDeleteOriginal}/>
         {/* Progress & Actions */}
         <TaskProgress
           logs={logs}
           progress={progress}
           isRunning={isRunning}
           reportToTaskCenter={false}
-          idleMessage={isRunning ? '正在转换…' : '进度'}
+          idleMessage={isRunning ? t("ui.converting.deaadb") : t("ui.progress.f81ff5")}
           action={<button
                 onClick={startConversion}
                 disabled={!targetPaths.length || isRunning || sourcesLoading || resolvingKinds}
@@ -1691,7 +1693,7 @@ const ConverterView = ({ embedded = false, initialTargetPath = "", initialTarget
                 }`}
              >
                 {isRunning || sourcesLoading || resolvingKinds ? <Loader2 className="animate-spin" size={18} /> : <Play size={18} fill="currentColor" />}
-                {isRunning ? '转换中...' : sourcesLoading || resolvingKinds ? '正在读取' : '开始转换'}
+                {isRunning ? t("ui.converting.94aab6") : sourcesLoading || resolvingKinds ? t("ui.loading.2d1341") : t("ui.start.conversion.f75c00")}
              </button>}
         />
       </div>
@@ -1721,6 +1723,7 @@ type ScreenshotCropReviewItem = {
 };
 
 const ScreenshotCropPreview = ({ item, cacheConfig, queueOrder, onEdit }: { item: ScreenshotCropReviewItem; cacheConfig: AppConfig['mediaCache']; queueOrder: number; onEdit: (previewUrl: string) => void }) => {
+  useLocale();
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewError, setPreviewError] = useState('');
   useEffect(() => {
@@ -1750,8 +1753,8 @@ const ScreenshotCropPreview = ({ item, cacheConfig, queueOrder, onEdit }: { item
     return () => { active = false; stopUpdates(); if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer); };
   }, [cacheConfig, item.input, item.needsReview, queueOrder]);
   return <div className="relative flex h-44 items-center justify-center overflow-hidden rounded-lg bg-slate-950">
-    {previewUrl ? <svg className="h-full w-full" viewBox={`0 0 ${item.originalSize.width} ${item.originalSize.height}`} preserveAspectRatio="xMidYMid meet"><image href={previewUrl} width={item.originalSize.width} height={item.originalSize.height}/><path d={`M0 0H${item.originalSize.width}V${item.originalSize.height}H0Z M${item.crop.x} ${item.crop.y}V${item.crop.y + item.crop.height}H${item.crop.x + item.crop.width}V${item.crop.y}Z`} fill="rgba(2,6,23,.58)" fillRule="evenodd"/><rect x={item.crop.x} y={item.crop.y} width={item.crop.width} height={item.crop.height} fill="none" stroke={item.confirmed ? '#34d399' : '#f59e0b'} strokeWidth={Math.max(4, item.originalSize.width / 260)}/></svg> : <p className="px-4 text-center text-xs text-slate-400">{previewError || '正在加载预览…'}</p>}
-    <button type="button" disabled={!previewUrl || !item.included} onClick={() => onEdit(previewUrl)} className="absolute bottom-2 right-2 rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-bold text-white shadow disabled:opacity-40">调整范围</button>
+    {previewUrl ? <svg className="h-full w-full" viewBox={`0 0 ${item.originalSize.width} ${item.originalSize.height}`} preserveAspectRatio="xMidYMid meet"><image href={previewUrl} width={item.originalSize.width} height={item.originalSize.height}/><path d={`M0 0H${item.originalSize.width}V${item.originalSize.height}H0Z M${item.crop.x} ${item.crop.y}V${item.crop.y + item.crop.height}H${item.crop.x + item.crop.width}V${item.crop.y}Z`} fill="rgba(2,6,23,.58)" fillRule="evenodd"/><rect x={item.crop.x} y={item.crop.y} width={item.crop.width} height={item.crop.height} fill="none" stroke={item.confirmed ? '#34d399' : '#f59e0b'} strokeWidth={Math.max(4, item.originalSize.width / 260)}/></svg> : <p className="px-4 text-center text-xs text-slate-400">{previewError || t("ui.loading.preview.8e1416")}</p>}
+    <button type="button" disabled={!previewUrl || !item.included} onClick={() => onEdit(previewUrl)} className="absolute bottom-2 right-2 rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-bold text-white shadow disabled:opacity-40">{t("ui.adjust.area.f70f70")}</button>
   </div>;
 };
 
@@ -1774,6 +1777,7 @@ const ScreenshotMainImageView = ({
   cacheConfig: AppConfig['mediaCache'];
   onFilesChanged?: () => void | Promise<void>;
 }) => {
+  useLocale();
   const appDialog = useAppDialog();
   const initialRelativePathKey = JSON.stringify(initialRelativePaths.filter(Boolean));
   const [targetPaths, setTargetPaths] = useState(() => initialRelativePaths.filter(Boolean));
@@ -1792,14 +1796,14 @@ const ScreenshotMainImageView = ({
   const pendingReviewCount = reviewItems.filter(item => item.included && !item.confirmed).length;
   const includedReviewItems = reviewItems.filter(item => item.included);
   const progressLogs = useMemo<LogEntry[]>(() => summary ? [{
-    timestamp: new Date().toLocaleTimeString(),
+    timestamp: new Date().toLocaleTimeString(getLocale()),
     message: summary.recycleError
       ? `主图已生成，但原图未能移入回收站：${summary.recycleError}`
       : summary.success
         ? `处理完成：已生成 ${summary.croppedCount || 0} 张主图${summary.skippedCount ? `，跳过 ${summary.skippedCount} 张` : ''}${summary.failedCount ? `，失败 ${summary.failedCount} 张` : ''}${summary.recycledOriginalCount !== undefined ? `；${summary.recycledOriginalCount} 张原图已移入回收站` : ''}`
         : summary.error || '提取失败',
     type: summary.recycleError || !summary.success ? 'error' : 'success',
-  }] : reviewItems.length ? [{ timestamp: new Date().toLocaleTimeString(), message: statusMessage, type: pendingReviewCount ? 'warning' : 'success' }] : [], [pendingReviewCount, reviewItems.length, statusMessage, summary]);
+  }] : reviewItems.length ? [{ timestamp: new Date().toLocaleTimeString(getLocale()), message: statusMessage, type: pendingReviewCount ? 'warning' : 'success' }] : [], [pendingReviewCount, reviewItems.length, statusMessage, summary]);
 
   useEffect(() => {
     requestIdRef.current = '';
@@ -1932,24 +1936,24 @@ const ScreenshotMainImageView = ({
   };
 
   return <div className="w-full space-y-6">
-    {!embedded && <h2 className="text-2xl font-bold text-slate-800">{cropMode ? '裁剪图片' : '提取截图主图'}</h2>}
+    {!embedded && <h2 className="text-2xl font-bold text-slate-800">{cropMode ? t("ui.crop.image.cf301e") : t("ui.extract.main.image.699989")}</h2>}
     <div className={embedded ? 'space-y-5' : 'space-y-5 rounded-xl border border-slate-200 bg-white p-6'}>
       <div className="space-y-2">
-        <p className="text-sm leading-6 text-slate-600">{cropMode ? '自动识别边缘，确认范围后以原始像素保存；保留原文件。' : '自动识别主图范围；不确定的结果需要手动确认。'}</p>
+        <p className="text-sm leading-6 text-slate-600">{cropMode ? t("ui.detect.edges.automatically.confirm.the.area.6be6ca") : t("ui.detect.the.main.image.area.automatically.502235")}</p>
         <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm"><Crop size={18}/></span>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-800">已选择 {targetPaths.length} 张{cropMode ? '图片' : '截图'}</p>
-            <p className="mt-0.5 truncate text-xs text-slate-500" title={targetPaths.length === 1 ? firstTargetName : undefined}>{targetPaths.length === 1 ? firstTargetName : '将按同一版式批量识别主图区域'}</p>
+            <p className="text-sm font-bold text-slate-800">{t("message.748483f8790f", { value0: targetPaths.length, value1: cropMode ? t("ui.image.d24c10") : t("ui.screenshot.c95dc9") })}</p>
+            <p className="mt-0.5 truncate text-xs text-slate-500" title={targetPaths.length === 1 ? firstTargetName : undefined}>{targetPaths.length === 1 ? firstTargetName : t("ui.detect.main.image.areas.in.a.7ad6c3")}</p>
           </div>
         </div>
-        <p className="flex items-center gap-1 text-xs text-slate-500"><AlertCircle size={12}/>{cropMode ? '裁剪结果保存在原图旁，原文件不会被覆盖。' : '主图保存在原图旁；黄色需确认，绿色可直接生成。'}</p>
-        {!cropMode && <PanelSwitch title="保留原图" description="默认关闭；关闭时仅把成功裁剪的原图移入系统回收站，跳过或失败的图片保持不变。" checked={preserveOriginal} disabled={isRunning} onChange={setPreserveOriginal}/>}
+        <p className="flex items-center gap-1 text-xs text-slate-500"><AlertCircle size={12}/>{cropMode ? t("ui.cropped.images.are.saved.beside.the.a53286") : t("ui.main.images.are.saved.beside.originals.693fb2")}</p>
+        {!cropMode && <PanelSwitch title={t("ui.keep.originals.f89e75")} description={t("ui.disabled.by.default.when.disabled.only.ac209e")} checked={preserveOriginal} disabled={isRunning} onChange={setPreserveOriginal}/>}
       </div>
 
-      {!!reviewItems.length && <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-bold text-slate-800">检查裁剪范围</h3><p className="mt-0.5 text-xs text-slate-500">{pendingReviewCount ? `还有 ${pendingReviewCount} 张需要确认` : `已确认 ${includedReviewItems.length} 张，可以生成主图`}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${pendingReviewCount ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{pendingReviewCount ? '待检查' : '已就绪'}</span></div><div className="grid gap-3 md:grid-cols-2">{reviewItems.map((item, index) => <article key={item.relativePath} className={`rounded-xl border p-3 ${!item.included ? 'border-slate-200 bg-slate-50 opacity-65' : item.confirmed ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-300 bg-amber-50/60'}`}><div className="mb-2 flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-800" title={item.inputName}>{item.inputName}</p><p className="mt-0.5 text-[11px] text-slate-500">置信度 {Math.round(item.confidence * 100)}% · {item.crop.width} × {item.crop.height}</p></div><span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${item.confirmed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{item.confirmed ? '已确认' : '需检查'}</span></div><ScreenshotCropPreview item={item} cacheConfig={cacheConfig} queueOrder={index} onEdit={previewUrl => setCropEditor({ index, previewUrl, crop: { ...item.crop }, snapEnabled: true })}/>{item.reason && <p className="mt-2 text-[11px] leading-4 text-amber-700">{item.reason}</p>}<div className="mt-3 flex justify-between gap-2"><button type="button" onClick={() => updateReviewItem(index, { included: !item.included, confirmed: item.included ? item.confirmed : true })} className="dialog-secondary px-3 py-1.5 text-xs">{item.included ? '不处理这张' : '恢复处理'}</button>{item.included && !item.confirmed && <button type="button" onClick={() => updateReviewItem(index, { confirmed: true })} className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-400">范围正确</button>}</div></article>)}</div></section>}
+      {!!reviewItems.length && <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-bold text-slate-800">{t("ui.check.crop.area.3ac5d2")}</h3><p className="mt-0.5 text-xs text-slate-500">{pendingReviewCount ? t("ui.images.needing.confirmation.value0.475cb0", { value0: pendingReviewCount }) : t("ui.confirmed.images.ready.for.extraction.value0.cf8daa", { value0: includedReviewItems.length })}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${pendingReviewCount ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{pendingReviewCount ? t("ui.needs.review.2329bc") : t("ui.ready.ab27f8")}</span></div><div className="grid gap-3 md:grid-cols-2">{reviewItems.map((item, index) => <article key={item.relativePath} className={`rounded-xl border p-3 ${!item.included ? 'border-slate-200 bg-slate-50 opacity-65' : item.confirmed ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-300 bg-amber-50/60'}`}><div className="mb-2 flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-800" title={item.inputName}>{item.inputName}</p><p className="mt-0.5 text-[11px] text-slate-500">{t("message.a14d3ea9716d", { value0: Math.round(item.confidence * 100), value1: item.crop.width, value2: item.crop.height })}</p></div><span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${item.confirmed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{item.confirmed ? t("ui.confirmed.d56a51") : t("ui.needs.review.ffcf37")}</span></div><ScreenshotCropPreview item={item} cacheConfig={cacheConfig} queueOrder={index} onEdit={previewUrl => setCropEditor({ index, previewUrl, crop: { ...item.crop }, snapEnabled: true })}/>{item.reason && <p className="mt-2 text-[11px] leading-4 text-amber-700">{item.reason}</p>}<div className="mt-3 flex justify-between gap-2"><button type="button" onClick={() => updateReviewItem(index, { included: !item.included, confirmed: item.included ? item.confirmed : true })} className="dialog-secondary px-3 py-1.5 text-xs">{item.included ? t("ui.skip.this.image.a667c9") : t("ui.include.this.image.389596")}</button>{item.included && !item.confirmed && <button type="button" onClick={() => updateReviewItem(index, { confirmed: true })} className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-400">{t("ui.area.is.correct.3a66ae")}</button>}</div></article>)}</div></section>}
 
-      {!!analysisErrors.length && <details className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"><summary className="cursor-pointer font-semibold">{analysisErrors.length} 张图片无法读取</summary><div className="mt-2 space-y-1">{analysisErrors.map((item, index) => <p key={`${item.inputName}-${index}`}>{item.inputName}：{item.error || '分析失败'}</p>)}</div></details>}
+      {!!analysisErrors.length && <details className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"><summary className="cursor-pointer font-semibold">{t("message.9fde176a332c", { count: analysisErrors.length })}</summary><div className="mt-2 space-y-1">{analysisErrors.map((item, index) => <p key={`${item.inputName}-${index}`}>{item.inputName}：{item.error || t("ui.analysis.failed.304b75")}</p>)}</div></details>}
 
       <TaskProgress
         logs={progressLogs}
@@ -1958,19 +1962,19 @@ const ScreenshotMainImageView = ({
         idleMessage={statusMessage}
         action={<button type="button" onClick={() => void (reviewItems.length ? confirmExtraction() : startAnalysis())} disabled={!targetPaths.length || isRunning || Boolean(reviewItems.length && (!includedReviewItems.length || pendingReviewCount))} className={`flex items-center gap-2 rounded-lg px-8 py-2.5 font-bold transition ${!targetPaths.length || isRunning || Boolean(reviewItems.length && (!includedReviewItems.length || pendingReviewCount)) ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400 shadow-none' : 'bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:bg-blue-500'}`}>
           {isRunning ? <Loader2 size={18} className="animate-spin"/> : <Crop size={18}/>}
-          {isRunning ? '正在处理…' : reviewItems.length ? pendingReviewCount ? `先确认 ${pendingReviewCount} 张` : `生成 ${includedReviewItems.length} 张主图` : summary ? '重新分析' : `分析范围${targetPaths.length > 1 ? `（${targetPaths.length} 张）` : ''}`}
+          {isRunning ? t("ui.processing.574ec7") : reviewItems.length ? pendingReviewCount ? t("ui.confirm.images.first.value0.c16cb6", { value0: pendingReviewCount }) : t("ui.generate.main.images.value0.59c663", { value0: includedReviewItems.length }) : summary ? t("ui.analyze.again.734b15") : t("ui.analyze.area.value0.aec900", { value0: targetPaths.length > 1 ? t("ui.value0.images.e723e0", { value0: targetPaths.length }) : '' })}
         </button>}
       />
-      {!!issueResults.length && <details className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"><summary className="cursor-pointer font-semibold">查看 {issueResults.length} 个异常项目</summary><div className="mt-2 max-h-36 space-y-1.5 overflow-y-auto">{issueResults.map((result, index) => <p key={`${result.input}-${index}`} className="break-words"><span className="font-semibold">{result.inputName}</span>：{result.skipped ? result.reason || '已跳过' : result.error || '处理失败'}</p>)}</div></details>}
+      {!!issueResults.length && <details className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"><summary className="cursor-pointer font-semibold">{t("message.27869c76376a", { count: issueResults.length })}</summary><div className="mt-2 max-h-36 space-y-1.5 overflow-y-auto">{issueResults.map((result, index) => <p key={`${result.input}-${index}`} className="break-words"><span className="font-semibold">{result.inputName}</span>：{result.skipped ? result.reason || t("ui.skipped.71e95b") : result.error || t("ui.processing.failed.ae1739")}</p>)}</div></details>}
     </div>
     {cropEditor && (() => {
       const item = reviewItems[cropEditor.index];
       if (!item) return null;
       return <div role="dialog" aria-modal="true" className="fixed inset-0 z-[470] flex items-center justify-center bg-slate-950/75 p-3"><div className="flex max-h-[96vh] w-full max-w-6xl flex-col overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
-        <div className="flex items-start gap-3"><div><h3 className="font-bold text-slate-900">调整主图范围</h3><p className="mt-1 text-xs text-slate-500">拖动框体移动，拖动四角调整大小；靠近检测边缘时会自动吸附。</p></div><PanelSwitch title="磁吸边缘" checked={cropEditor.snapEnabled} onChange={snapEnabled => setCropEditor(current => current ? { ...current, snapEnabled } : current)} className="ml-auto !rounded-lg !px-3 !py-2"/><button type="button" onClick={() => setCropEditor(null)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100"><X size={18}/></button></div>
+        <div className="flex items-start gap-3"><div><h3 className="font-bold text-slate-900">{t("ui.adjust.main.image.area.c03f30")}</h3><p className="mt-1 text-xs text-slate-500">{t("ui.drag.the.box.to.move.it.85bf24")}</p></div><PanelSwitch title={t("ui.snap.to.edges.1f979b")} checked={cropEditor.snapEnabled} onChange={snapEnabled => setCropEditor(current => current ? { ...current, snapEnabled } : current)} className="ml-auto !rounded-lg !px-3 !py-2"/><button type="button" onClick={() => setCropEditor(null)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100"><X size={18}/></button></div>
         <InteractiveCropEditor large snapEnabled={cropEditor.snapEnabled} snapGuides={item.snapGuides} previewUrl={cropEditor.previewUrl} imageSize={item.originalSize} crop={cropEditor.crop} onChange={crop => setCropEditor(current => current ? { ...current, crop } : current)}/>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">{(['x', 'y', 'width', 'height'] as const).map(key => <label key={key} className="text-xs font-bold text-slate-600">{{ x: '左边 X', y: '顶部 Y', width: '宽度', height: '高度' }[key]}<input type="number" min={key === 'x' || key === 'y' ? 0 : 20} value={cropEditor.crop[key]} onChange={event => setCropEditor(current => current ? { ...current, crop: { ...current.crop, [key]: Math.max(key === 'x' || key === 'y' ? 0 : 20, Math.round(Number(event.target.value) || 0)) } } : current)} className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2"/></label>)}</div>
-        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setCropEditor(null)} className="dialog-secondary">取消</button><button type="button" onClick={saveEditedCrop} className="dialog-primary">确认范围</button></div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">{(['x', 'y', 'width', 'height'] as const).map(key => <label key={key} className="text-xs font-bold text-slate-600">{{ x: t("legacy.0c206f2ffed1"), y: t("legacy.4a62543a1200"), width: t("legacy.3b730da0ad1a"), height: t("legacy.968dd036cbb1") }[key]}<input type="number" min={key === 'x' || key === 'y' ? 0 : 20} value={cropEditor.crop[key]} onChange={event => setCropEditor(current => current ? { ...current, crop: { ...current.crop, [key]: Math.max(key === 'x' || key === 'y' ? 0 : 20, Math.round(Number(event.target.value) || 0)) } } : current)} className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2"/></label>)}</div>
+        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setCropEditor(null)} className="dialog-secondary">{t("common.cancel")}</button><button type="button" onClick={saveEditedCrop} className="dialog-primary">{t("ui.confirm.area.88e694")}</button></div>
       </div></div>;
     })()}
   </div>;
@@ -1993,6 +1997,7 @@ const ResearchView = ({
   sourcesLoading?: boolean;
   hasTxtFiles?: boolean;
 }) => {
+  useLocale();
   const { logs, isRunning, progress, statusMsg, start } = usePythonTask('research.py', '准备就绪');
   const initialTargetKey = (initialTargetPaths.length ? initialTargetPaths : initialTargetPath ? [initialTargetPath] : []).join('\n');
   const [targetPaths, setTargetPaths] = useState<string[]>(() => initialTargetKey.split('\n').filter(Boolean));
@@ -2034,26 +2039,26 @@ const ResearchView = ({
 
   return (
     <div className="w-full space-y-6">
-      {!embedded && <h2 className="text-2xl font-bold text-slate-800">提取分镜帧</h2>}
+      {!embedded && <h2 className="text-2xl font-bold text-slate-800">{t("ui.extract.storyboard.frames.1e91e7")}</h2>}
       <div className={embedded ? 'space-y-6' : 'bg-white border border-slate-200 rounded-xl p-6 space-y-6'}>
         <div className="space-y-2">
-          <p className="mt-2 text-gray-600">识别视频转场，并从每个分镜导出清晰画面。</p>
+          <p className="mt-2 text-gray-600">{t("ui.detect.scene.transitions.and.export.a.5b57d4")}</p>
         </div>
-        <SourcePathPicker paths={targetPaths} pathKinds={pathKinds} folderPreviewExtensions={VIDEO_SOURCE_PREVIEW_EXTENSIONS} onChange={setTargetPaths} onChooseFiles={chooseFiles} onChooseFolder={chooseFolder} fileButtonLabel="追加视频" folderButtonLabel="追加文件夹" loading={sourcesLoading || resolvingKinds} disabled={isRunning} title="已选择" itemLabel="个来源" description="文件夹会作为一个来源显示，并在执行时扫描子目录" emptyTitle="拖入视频或文件夹"/>
+        <SourcePathPicker paths={targetPaths} pathKinds={pathKinds} folderPreviewExtensions={VIDEO_SOURCE_PREVIEW_EXTENSIONS} onChange={setTargetPaths} onChooseFiles={chooseFiles} onChooseFolder={chooseFolder} fileButtonLabel={t("legacy.1522d8f7910e")} folderButtonLabel={t("legacy.04580ea496bd")} loading={sourcesLoading || resolvingKinds} disabled={isRunning} title={t("ui.selected.3f4ebc")} itemLabel={t("legacy.68450f43fd47")} description={t("ui.folders.appear.as.one.source.subfolders.104d95")} emptyTitle={t("legacy.7de325e03a18")}/>
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="form-label">检测灵敏度</label>
-            <select value={config.sensitivity} onChange={event => onUpdateConfig({ ...config, sensitivity: event.target.value as AppConfig['research']['sensitivity'] })} className="form-input"><option value="low">低</option><option value="standard">标准</option><option value="high">高</option></select>
-            <p className="mt-1 text-xs leading-5 text-slate-500">{{ low: '只保留明显硬切，截图最少。', standard: '兼顾硬切、渐变与误判率。', high: '识别更多轻微转场，截图更多。' }[config.sensitivity]}</p>
+            <label className="form-label">{t("ui.detection.sensitivity.7d9188")}</label>
+            <select value={config.sensitivity} onChange={event => onUpdateConfig({ ...config, sensitivity: event.target.value as AppConfig['research']['sensitivity'] })} className="form-input"><option value="low">{t("ui.low.aa9e36")}</option><option value="standard">{t("ui.standard.6bea77")}</option><option value="high">{t("ui.high.b1c278")}</option></select>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{{ low: t("legacy.0efcece2629f"), standard: t("legacy.529e5ef42ea0"), high: t("legacy.e398a6df085a") }[config.sensitivity]}</p>
           </div>
           <div>
-            <label className="form-label">最小片段时长（秒）</label>
+            <label className="form-label">{t("ui.minimum.segment.duration.seconds.675739")}</label>
             <input type="number" min="0.05" max="5" step="0.05" value={config.minDuration} onChange={event => onUpdateConfig({ ...config, minDuration: Math.min(5, Math.max(0.05, Number(event.target.value) || 0.05)) })} className="form-input"/>
-            <p className="mt-1 text-xs leading-5 text-slate-500">数值越大，短暂画面会被过滤，最终导出的截图越少。</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{t("ui.higher.values.filter.out.shorter.shots.d2baf2")}</p>
           </div>
         </div>
-        <PanelSwitch title="自动筛除重复图片" description="截帧完成后，将本次生成的完全重复图片移入回收站，每组保留一张。" checked={deduplicateImages} disabled={isRunning} onChange={setDeduplicateImages}/>
-        {canOrganizeData && <PanelSwitch title="整理 data 文件" description="处理完成后，将所选文件夹根目录中的 TXT 文件移入 data 文件夹。" checked={organizeData} onChange={setOrganizeData}/>}
+        <PanelSwitch title={t("ui.remove.duplicate.images.automatically.4b1818")} description={t("ui.after.extraction.move.exact.duplicates.generated.210405")} checked={deduplicateImages} disabled={isRunning} onChange={setDeduplicateImages}/>
+        {canOrganizeData && <PanelSwitch title={t("ui.organize.data.files.280520")} description={t("ui.after.processing.move.txt.files.from.b99d2f")} checked={organizeData} onChange={setOrganizeData}/>}
 
         <TaskProgress
           logs={logs}
@@ -2071,7 +2076,7 @@ const ResearchView = ({
                }`}
              >
                 {isRunning || sourcesLoading || resolvingKinds ? <Loader2 className="animate-spin" size={18}/> : <Play size={18} fill="currentColor" />}
-                {isRunning ? '处理中' : sourcesLoading || resolvingKinds ? '正在读取' : '开始处理'}
+                {isRunning ? t("ui.processing.694b71") : sourcesLoading || resolvingKinds ? t("ui.loading.2d1341") : t("ui.start.processing.66b2db")}
              </button>}
         />
       </div>
@@ -2091,6 +2096,7 @@ const MatchView = ({
   onUpdateConfig: (newMatchConfig: AppConfig['smartMatch']) => void;
   folderOptions?: Array<{ name: string; path: string }>;
 }) => {
+  useLocale();
   const [keywords, setKeywords] = useState('');
   const [sourceFolders, setSourceFolders] = useState<Array<{ name: string; relativePath: string }>>([]);
   const [sourceFoldersNextCursor, setSourceFoldersNextCursor] = useState<string | null>(null);
@@ -2114,8 +2120,8 @@ const MatchView = ({
   const selectedImageRelativePath = resolveFilenameSelectionSource(sourceFolders, config.imageSourceFolderName, 'raw');
   const selectedVideoRelativePath = resolveFilenameSelectionSource(sourceFolders, config.videoSourceFolderName, 'mov');
   const selectedSources = [
-    selectedImageRelativePath ? { mediaKind: 'image' as const, label: '图片', relativePath: selectedImageRelativePath } : null,
-    selectedVideoRelativePath ? { mediaKind: 'video' as const, label: '视频', relativePath: selectedVideoRelativePath } : null,
+    selectedImageRelativePath ? { mediaKind: 'image' as const, label: t("ui.image.d24c10"), relativePath: selectedImageRelativePath } : null,
+    selectedVideoRelativePath ? { mediaKind: 'video' as const, label: t("ui.video.c20f76"), relativePath: selectedVideoRelativePath } : null,
   ].filter((source): source is { mediaKind: 'image' | 'video'; label: string; relativePath: string } => Boolean(source));
 
   useEffect(() => {
@@ -2187,7 +2193,7 @@ const MatchView = ({
   };
 
   const appendLog = (message: string, type: LogEntry['type'] = 'info') => {
-    setLogs(current => [...current, { timestamp: new Date().toLocaleTimeString(), message, type }].slice(-200));
+    setLogs(current => [...current, { timestamp: new Date().toLocaleTimeString(getLocale()), message, type }].slice(-200));
   };
   const cancel = async () => {
     if (!operationIdRef.current || isCancelling) return;
@@ -2265,11 +2271,11 @@ const MatchView = ({
         return;
       }
       const confirmed = await appDialog.confirm({
-        title: '确认从文件名选片',
-        message: `将复制 ${filesToCopy} 个文件，共 ${formatTransferBytes(totalBytes)}。`,
+        title: localizedMessage("ui.confirm.selection.by.file.name.fe00c7"),
+        message: localizedMessage("ui.files.to.copy.value0.total.size.922d42", { value0: filesToCopy, value1: formatTransferBytes(totalBytes) }),
         detail: details,
-        confirmLabel: '开始复制',
-        cancelLabel: '取消',
+        confirmLabel: localizedMessage("ui.start.copying.fc2aef"),
+        cancelLabel: localizedMessage("common.cancel"),
       });
       if (!selectionTaskOwnershipRef.current!.isCurrent(taskGeneration)) return;
       setIsConfirming(false);
@@ -2328,28 +2334,26 @@ const MatchView = ({
   };
 
   return <div className="w-full space-y-6">
-    {!embedded && <h2 className="text-2xl font-bold text-slate-800">选片</h2>}
+    {!embedded && <h2 className="text-2xl font-bold text-slate-800">{t("ui.selection.8c8db6")}</h2>}
     <div className={embedded ? 'space-y-6' : 'space-y-6 rounded-xl border border-slate-200 bg-white p-6'}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="text-sm text-slate-600">图片来源文件夹
-          <select value={selectedImageRelativePath} onChange={event => onUpdateConfig({ ...config, sourceFolderRelativePath: undefined, imageSourceFolderName: event.target.value })} disabled={isRunning || loadingFolders} className="form-input mt-1">
-            <option value="">无</option>
+        <label className="text-sm text-slate-600">{t("ui.image.source.folder.a49e0d")}<select value={selectedImageRelativePath} onChange={event => onUpdateConfig({ ...config, sourceFolderRelativePath: undefined, imageSourceFolderName: event.target.value })} disabled={isRunning || loadingFolders} className="form-input mt-1">
+            <option value="">{t("ui.none.484d55")}</option>
             {sourceFolders.map(folder => <option key={folder.relativePath} value={folder.relativePath}>{folder.relativePath}</option>)}
           </select>
-          <span className="mt-1 block text-xs font-bold text-slate-500">选中的图片会存放到“{filenameSelectionOutputName(selectedImageRelativePath) || '图片选片'}”文件夹</span>
+          <span className="mt-1 block text-xs font-bold text-slate-500">{t("message.90b4841124fe", { value0: filenameSelectionOutputName(selectedImageRelativePath) || t("ui.image.selection.7a4440") })}</span>
         </label>
-        <label className="text-sm text-slate-600">视频来源文件夹
-          <select value={selectedVideoRelativePath} onChange={event => onUpdateConfig({ ...config, sourceFolderRelativePath: undefined, videoSourceFolderName: event.target.value })} disabled={isRunning || loadingFolders} className="form-input mt-1">
-            <option value="">无</option>
+        <label className="text-sm text-slate-600">{t("ui.video.source.folder.79df33")}<select value={selectedVideoRelativePath} onChange={event => onUpdateConfig({ ...config, sourceFolderRelativePath: undefined, videoSourceFolderName: event.target.value })} disabled={isRunning || loadingFolders} className="form-input mt-1">
+            <option value="">{t("ui.none.484d55")}</option>
             {sourceFolders.map(folder => <option key={folder.relativePath} value={folder.relativePath}>{folder.relativePath}</option>)}
           </select>
-          <span className="mt-1 block text-xs font-bold text-slate-500">选中的视频会存放到“{filenameSelectionOutputName(selectedVideoRelativePath) || '视频选片'}”文件夹</span>
+          <span className="mt-1 block text-xs font-bold text-slate-500">{t("message.38b380eeed39", { value0: filenameSelectionOutputName(selectedVideoRelativePath) || t("ui.video.selection.515536") })}</span>
         </label>
       </div>
-      {sourceFoldersNextCursor && <button type="button" onClick={() => void loadMoreSourceFolders()} disabled={loadingFolders} className="text-xs font-bold text-blue-600 hover:text-blue-500 disabled:opacity-50">加载更多文件夹</button>}
-      {sourceFoldersTruncated && !sourceFoldersNextCursor && <span className="block text-xs text-amber-700">目录数量或深度已达安全上限，请缩小项目范围。</span>}
-      <div className="space-y-2"><label className="text-xs font-semibold uppercase text-slate-500">文件名</label><textarea value={keywords} onChange={event => setKeywords(event.target.value)} placeholder="输入文件名或末尾编号，以空格分隔" className="h-24 min-h-24 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 font-mono text-sm text-slate-900 focus:border-blue-500 focus:outline-none"/></div>
-      <TaskProgress logs={logs} progress={progress} isRunning={isRunning} idleMessage={statusMsg} statusMessage={statusMsg} action={<button onClick={isRunning ? () => void cancel() : () => void runTask()} disabled={isCancelling || isConfirming || (!isRunning && (!projectPath || !selectedSources.length || !keywords.trim()))} className={`flex items-center gap-2 rounded-lg px-8 py-2.5 font-bold transition ${isRunning ? 'bg-red-600 text-white hover:bg-red-500' : isConfirming || !selectedSources.length || !keywords.trim() ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-500'}`}>{isRunning ? (isCancelling ? <Loader2 className="animate-spin" size={18}/> : <X size={18}/>) : <ScanSearch size={18}/>} {isRunning ? (isCancelling ? '正在回滚…' : '取消任务') : isConfirming ? '等待确认' : '开始选片'}</button>}/>
+      {sourceFoldersNextCursor && <button type="button" onClick={() => void loadMoreSourceFolders()} disabled={loadingFolders} className="text-xs font-bold text-blue-600 hover:text-blue-500 disabled:opacity-50">{t("ui.load.more.folders.608da1")}</button>}
+      {sourceFoldersTruncated && !sourceFoldersNextCursor && <span className="block text-xs text-amber-700">{t("ui.the.folder.count.or.depth.reached.c94029")}</span>}
+      <div className="space-y-2"><label className="text-xs font-semibold uppercase text-slate-500">{t("ui.file.name.a6e48a")}</label><textarea value={keywords} onChange={event => setKeywords(event.target.value)} placeholder={t("ui.enter.file.names.or.ending.numbers.0a58fe")} className="h-24 min-h-24 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 font-mono text-sm text-slate-900 focus:border-blue-500 focus:outline-none"/></div>
+      <TaskProgress logs={logs} progress={progress} isRunning={isRunning} idleMessage={statusMsg} statusMessage={statusMsg} action={<button onClick={isRunning ? () => void cancel() : () => void runTask()} disabled={isCancelling || isConfirming || (!isRunning && (!projectPath || !selectedSources.length || !keywords.trim()))} className={`flex items-center gap-2 rounded-lg px-8 py-2.5 font-bold transition ${isRunning ? 'bg-red-600 text-white hover:bg-red-500' : isConfirming || !selectedSources.length || !keywords.trim() ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-500'}`}>{isRunning ? (isCancelling ? <Loader2 className="animate-spin" size={18}/> : <X size={18}/>) : <ScanSearch size={18}/>} {isRunning ? (isCancelling ? t("ui.rolling.back.e356b6") : t("ui.cancel.task.537d17")) : isConfirming ? t("ui.awaiting.confirmation.e5d218") : t("ui.start.selection.78bc8e")}</button>}/>
     </div>
   </div>;
 };
@@ -2424,6 +2428,7 @@ const useSourcePathKinds = (paths: readonly string[], knownFolders: readonly str
 };
 
 const VideoTranscodeView = ({ embedded = false, initialTargetPaths = [], initialSourceFolders = [], sourcesLoading = false, initialSettings, onSettingsChange, settingsOnly = false, onBusyChange, onFolderTranscodeComplete }: VideoTranscodeViewProps) => {
+  useLocale();
   const initialTargetKey = initialTargetPaths.join('\n');
   const initialSourceFolderKey = initialSourceFolders.join('\n');
   const [sourcePaths, setSourcePaths] = useState(() => mergeSourcePaths(initialTargetPaths));
@@ -2460,7 +2465,7 @@ const VideoTranscodeView = ({ embedded = false, initialTargetPaths = [], initial
     ...activeSourceFolders.flatMap(folder => ['--source-folder', folder]),
   ], [activeSourceFolders, paths, settings]);
   const inspectionKey = JSON.stringify(taskArguments);
-  const presets = [...BUILTIN_VIDEO_TRANSCODE_PRESETS, ...customPresets];
+  const presets = [...BUILTIN_VIDEO_TRANSCODE_PRESETS.map(preset => ({ ...preset, name: localizeBuiltInLabel(preset.name) })), ...customPresets];
   const blockingErrors = videoTranscodeBlockingErrors(settings, capabilities, mediaInfo);
   const warnings = videoTranscodeWarnings(settings, capabilities, mediaInfo).filter(message => !blockingErrors.includes(message));
   const estimatedOutputBytes = mediaInfo.reduce((sum, item) => sum + Number(item.estimatedOutputBytes || 0), 0);
@@ -2539,72 +2544,73 @@ const VideoTranscodeView = ({ embedded = false, initialTargetPaths = [], initial
       : inspection.statusMsg;
 
   return <div className={embedded ? 'w-full space-y-6' : 'mx-auto w-full max-w-6xl space-y-6'}>
-    {!embedded && <div><h2 className="flex items-center gap-2 text-2xl font-bold text-slate-800"><Video size={25}/>Media Encoder Lite</h2><p className="mt-1 text-sm text-slate-500">H.264、HEVC 8/10-bit、AV1 硬件、ProRes、HDR、音轨与字幕批量处理。</p></div>}
+    {!embedded && <div><h2 className="flex items-center gap-2 text-2xl font-bold text-slate-800"><Video size={25}/>Media Encoder Lite</h2><p className="mt-1 text-sm text-slate-500">{t("ui.batch.processing.for.h.264.8.cddea5")}</p></div>}
     <div className={embedded ? 'space-y-6' : 'space-y-6 rounded-xl border border-slate-200 bg-white p-6'}>
-      {!settingsOnly && <SourcePathPicker paths={paths} pathKinds={pathKinds} pathAnnotations={Object.fromEntries(activeSourceFolders.map(folder => [sourcePathIdentity(folder), '递归加入编码队列']))} folderPreviewExtensions={VIDEO_SOURCE_PREVIEW_EXTENSIONS} onChange={setSourcePaths} onChooseFiles={chooseVideos} onChooseFolder={chooseVideoFolder} fileButtonLabel="追加视频" folderButtonLabel="追加文件夹" loading={sourcesLoading || resolvingKinds} disabled={disabled} title="编码队列来源" itemLabel="个来源" description="文件夹会递归扫描，输出保留原子目录结构" emptyTitle="拖入视频或文件夹"/>}
+      {!settingsOnly && <SourcePathPicker paths={paths} pathKinds={pathKinds} pathAnnotations={Object.fromEntries(activeSourceFolders.map(folder => [sourcePathIdentity(folder), '递归加入编码队列']))} folderPreviewExtensions={VIDEO_SOURCE_PREVIEW_EXTENSIONS} onChange={setSourcePaths} onChooseFiles={chooseVideos} onChooseFolder={chooseVideoFolder} fileButtonLabel={t("legacy.1522d8f7910e")} folderButtonLabel={t("legacy.04580ea496bd")} loading={sourcesLoading || resolvingKinds} disabled={disabled} title={t("ui.encoding.queue.sources.12f234")} itemLabel={t("legacy.68450f43fd47")} description={t("ui.folders.are.scanned.recursively.output.preserves.5c343d")} emptyTitle={t("legacy.7de325e03a18")}/>}
       <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
-          <label className="text-xs font-bold text-slate-600">编码预设<select value={presetId} disabled={disabled} onChange={event => applyPreset(event.target.value)} className="form-input mt-1"><option value="">自定义设置</option>{presets.map(value => <option key={value.id} value={value.id}>{value.builtIn ? '内置 · ' : ''}{value.name}</option>)}</select></label>
-          <label className="text-xs font-bold text-slate-600">保存为用户预设<input value={presetName} disabled={disabled} maxLength={40} onChange={event => setPresetName(event.target.value)} placeholder="输入预设名称" className="form-input mt-1"/></label>
-          <button type="button" disabled={disabled || !presetName.trim()} onClick={savePreset} className="mt-5 inline-flex items-center justify-center gap-1 rounded-md bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"><Save size={14}/>保存</button>
-          <button type="button" disabled={disabled || !presetId || BUILTIN_VIDEO_TRANSCODE_PRESETS.some(value => value.id === presetId)} onClick={deletePreset} className="mt-5 inline-flex items-center justify-center gap-1 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-600 disabled:opacity-40"><Trash2 size={14}/>删除</button>
+          <label className="text-xs font-bold text-slate-600">{t("ui.encoding.preset.851a42")}<select value={presetId} disabled={disabled} onChange={event => applyPreset(event.target.value)} className="form-input mt-1"><option value="">{t("ui.custom.settings.eb04f7")}</option>{presets.map(value => <option key={value.id} value={value.id}>{value.builtIn ? t("ui.built.in.c2703a") : ''}{value.name}</option>)}</select></label>
+          <label className="text-xs font-bold text-slate-600">{t("ui.save.as.user.preset.ebec58")}<input value={presetName} disabled={disabled} maxLength={40} onChange={event => setPresetName(event.target.value)} placeholder={t("ui.enter.preset.name.72276f")} className="form-input mt-1"/></label>
+          <button type="button" disabled={disabled || !presetName.trim()} onClick={savePreset} className="mt-5 inline-flex items-center justify-center gap-1 rounded-md bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"><Save size={14}/>{t("ui.save.a3030b")}</button>
+          <button type="button" disabled={disabled || !presetId || BUILTIN_VIDEO_TRANSCODE_PRESETS.some(value => value.id === presetId)} onClick={deletePreset} className="mt-5 inline-flex items-center justify-center gap-1 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-600 disabled:opacity-40"><Trash2 size={14}/>{t("ui.delete.2f9daa")}</button>
         </div>
       </section>
       <div className="grid gap-4 md:grid-cols-2">
         <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <h3 className="mb-4 text-sm font-bold text-slate-800">输出与编码</h3>
+          <h3 className="mb-4 text-sm font-bold text-slate-800">{t("ui.output.and.encoding.4c4c34")}</h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="text-xs font-bold text-slate-600">输出封装<select value={settings.container} disabled={disabled || settings.videoMode === 'prores'} onChange={event => setSetting('container', event.target.value as VideoTranscodeSettings['container'])} className="form-input mt-1"><option value="mp4">MP4</option><option value="mov">MOV</option><option value="mkv">MKV</option></select></label>
-            <label className="text-xs font-bold text-slate-600">视频编码<select value={settings.videoMode} disabled={disabled} onChange={event => setSetting('videoMode', event.target.value as VideoTranscodeSettings['videoMode'])} className="form-input mt-1"><option value="h264">H.264</option><option value="h265">HEVC / H.265</option><option value="av1">AV1 · 硬件</option><option value="prores">Apple ProRes</option><option value="copy">复制视频流</option></select></label>
-            <label className="text-xs font-bold text-slate-600">{settings.videoMode === 'prores' ? 'ProRes 规格' : '画质'}<select value={settings.quality} disabled={videoDisabled || settings.videoBitrateMbps !== null} onChange={event => setSetting('quality', event.target.value as VideoTranscodeSettings['quality'])} className="form-input mt-1 disabled:opacity-50">{settings.videoMode === 'prores' ? <><option value="high">422 HQ</option><option value="balanced">422</option><option value="small">422 LT</option></> : <><option value="high">高质量</option><option value="balanced">平衡</option><option value="small">更小文件</option></>}</select></label>
-            <label className="text-xs font-bold text-slate-600">编码速度<select value={settings.encoderPreset} disabled={videoDisabled} onChange={event => setSetting('encoderPreset', event.target.value as VideoTranscodeSettings['encoderPreset'])} className="form-input mt-1 disabled:opacity-50"><option value="fast">快速</option><option value="balanced">平衡</option><option value="quality">质量优先</option></select></label>
-            <label className="text-xs font-bold text-slate-600">目标视频码率<input type="number" min="0.1" max="800" step="0.1" value={settings.videoBitrateMbps ?? ''} disabled={videoDisabled || settings.videoMode === 'prores'} onChange={event => setSetting('videoBitrateMbps', event.target.value ? Number(event.target.value) : null)} placeholder="自动（Mbps）" className="form-input mt-1 disabled:opacity-50"/></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.output.container.fd71a2")}<select value={settings.container} disabled={disabled || settings.videoMode === 'prores'} onChange={event => setSetting('container', event.target.value as VideoTranscodeSettings['container'])} className="form-input mt-1"><option value="mp4">MP4</option><option value="mov">MOV</option><option value="mkv">MKV</option></select></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.video.codec.780da4")}<select value={settings.videoMode} disabled={disabled} onChange={event => setSetting('videoMode', event.target.value as VideoTranscodeSettings['videoMode'])} className="form-input mt-1"><option value="h264">H.264</option><option value="h265">HEVC / H.265</option><option value="av1">{t("ui.av1.hardware.87220b")}</option><option value="prores">Apple ProRes</option><option value="copy">{t("ui.copy.video.stream.b7e135")}</option></select></label>
+            <label className="text-xs font-bold text-slate-600">{settings.videoMode === 'prores' ? t("ui.prores.profile.b666f0") : t("ui.quality.77ccdb")}<select value={settings.quality} disabled={videoDisabled || settings.videoBitrateMbps !== null} onChange={event => setSetting('quality', event.target.value as VideoTranscodeSettings['quality'])} className="form-input mt-1 disabled:opacity-50">{settings.videoMode === 'prores' ? <><option value="high">422 HQ</option><option value="balanced">422</option><option value="small">422 LT</option></> : <><option value="high">{t("ui.high.quality.4973d1")}</option><option value="balanced">{t("ui.balanced.df544e")}</option><option value="small">{t("ui.smaller.files.c789c1")}</option></>}</select></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.encoding.speed.3b0881")}<select value={settings.encoderPreset} disabled={videoDisabled} onChange={event => setSetting('encoderPreset', event.target.value as VideoTranscodeSettings['encoderPreset'])} className="form-input mt-1 disabled:opacity-50"><option value="fast">{t("ui.fast.db945c")}</option><option value="balanced">{t("ui.balanced.df544e")}</option><option value="quality">{t("ui.quality.first.7b36fd")}</option></select></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.target.video.bitrate.6b5663")}<input type="number" min="0.1" max="800" step="0.1" value={settings.videoBitrateMbps ?? ''} disabled={videoDisabled || settings.videoMode === 'prores'} onChange={event => setSetting('videoBitrateMbps', event.target.value ? Number(event.target.value) : null)} placeholder={t("ui.automatic.mbps.7b106f")} className="form-input mt-1 disabled:opacity-50"/></label>
           </div>
         </section>
         <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <h3 className="mb-4 text-sm font-bold text-slate-800">画面与色彩</h3>
+          <h3 className="mb-4 text-sm font-bold text-slate-800">{t("ui.image.and.color.6146d7")}</h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="text-xs font-bold text-slate-600">分辨率<select value={settings.resolution} disabled={videoDisabled} onChange={event => setSetting('resolution', event.target.value as VideoTranscodeSettings['resolution'])} className="form-input mt-1 disabled:opacity-50"><option value="original">保持原分辨率</option><option value="2160p">最大 4K</option><option value="1080p">最大 1080p</option><option value="720p">最大 720p</option></select></label>
-            <label className="text-xs font-bold text-slate-600">输出色彩<select value={settings.colorMode} disabled={videoDisabled} onChange={event => { setPresetId(''); setSettings(current => ({ ...current, colorMode: event.target.value as VideoTranscodeSettings['colorMode'], ...(['hdr10', 'hlg'].includes(event.target.value) ? { bitDepth: '10' as const } : {}) })); }} className="form-input mt-1 disabled:opacity-50"><option value="auto">跟随来源</option><option value="sdr">Rec.709 SDR</option><option value="hdr10">HDR10 · PQ/BT.2020</option><option value="hlg">HLG · BT.2020</option></select></label>
-            <label className="text-xs font-bold text-slate-600">位深<select value={settings.bitDepth} disabled={videoDisabled || ['hdr10', 'hlg'].includes(settings.colorMode) || settings.videoMode === 'prores'} onChange={event => setSetting('bitDepth', event.target.value as VideoTranscodeSettings['bitDepth'])} className="form-input mt-1 disabled:opacity-50"><option value="auto">跟随来源</option><option value="8">8-bit</option><option value="10">10-bit</option></select></label>
-            <label className="text-xs font-bold text-slate-600">旋转<select value={settings.rotation} disabled={videoDisabled} onChange={event => setSetting('rotation', event.target.value as VideoTranscodeSettings['rotation'])} className="form-input mt-1 disabled:opacity-50"><option value="auto">自动应用来源方向</option><option value="0">不旋转</option><option value="90">顺时针 90°</option><option value="180">180°</option><option value="270">逆时针 90°</option></select></label>
-            <label className="text-xs font-bold text-slate-600">像素宽高比<select value={settings.aspectMode} disabled={videoDisabled} onChange={event => setSetting('aspectMode', event.target.value as VideoTranscodeSettings['aspectMode'])} className="form-input mt-1 disabled:opacity-50"><option value="preserve">保留 SAR/DAR</option><option value="square-pixels">转为方形像素</option></select></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.resolution.b92421")}<select value={settings.resolution} disabled={videoDisabled} onChange={event => setSetting('resolution', event.target.value as VideoTranscodeSettings['resolution'])} className="form-input mt-1 disabled:opacity-50"><option value="original">{t("ui.keep.original.resolution.500180")}</option><option value="2160p">{t("ui.up.to.4k.a270b3")}</option><option value="1080p">{t("ui.up.to.1080p.b8f678")}</option><option value="720p">{t("ui.up.to.720p.f1460e")}</option></select></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.output.color.06ffae")}<select value={settings.colorMode} disabled={videoDisabled} onChange={event => { setPresetId(''); setSettings(current => ({ ...current, colorMode: event.target.value as VideoTranscodeSettings['colorMode'], ...(['hdr10', 'hlg'].includes(event.target.value) ? { bitDepth: '10' as const } : {}) })); }} className="form-input mt-1 disabled:opacity-50"><option value="auto">{t("ui.match.source.caa65b")}</option><option value="sdr">Rec.709 SDR</option><option value="hdr10">HDR10 · PQ/BT.2020</option><option value="hlg">HLG · BT.2020</option></select></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.bit.depth.092203")}<select value={settings.bitDepth} disabled={videoDisabled || ['hdr10', 'hlg'].includes(settings.colorMode) || settings.videoMode === 'prores'} onChange={event => setSetting('bitDepth', event.target.value as VideoTranscodeSettings['bitDepth'])} className="form-input mt-1 disabled:opacity-50"><option value="auto">{t("ui.match.source.caa65b")}</option><option value="8">8-bit</option><option value="10">10-bit</option></select></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.rotate.68eb90")}<select value={settings.rotation} disabled={videoDisabled} onChange={event => setSetting('rotation', event.target.value as VideoTranscodeSettings['rotation'])} className="form-input mt-1 disabled:opacity-50"><option value="auto">{t("ui.apply.source.orientation.5efb85")}</option><option value="0">{t("ui.no.rotation.1a2962")}</option><option value="90">{t("ui.90.clockwise.4aff55")}</option><option value="180">180°</option><option value="270">{t("ui.90.counterclockwise.bff6a8")}</option></select></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.pixel.aspect.ratio.72888c")}<select value={settings.aspectMode} disabled={videoDisabled} onChange={event => setSetting('aspectMode', event.target.value as VideoTranscodeSettings['aspectMode'])} className="form-input mt-1 disabled:opacity-50"><option value="preserve">{t("ui.keep.sar.dar.80060d")}</option><option value="square-pixels">{t("ui.convert.to.square.pixels.961a48")}</option></select></label>
           </div>
         </section>
         <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <h3 className="mb-4 text-sm font-bold text-slate-800">帧率</h3>
+          <h3 className="mb-4 text-sm font-bold text-slate-800">{t("ui.frame.rate.f9404b")}</h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="text-xs font-bold text-slate-600">帧率模式<select value={settings.frameRateMode} disabled={videoDisabled} onChange={event => { setPresetId(''); setSettings(current => ({ ...current, frameRateMode: event.target.value as VideoTranscodeSettings['frameRateMode'], ...(event.target.value === 'cfr' ? {} : { frameRate: 'original' as const }) })); }} className="form-input mt-1 disabled:opacity-50"><option value="preserve">保持时间戳</option><option value="cfr">CFR 固定帧率</option><option value="vfr">VFR 可变帧率</option></select></label>
-            {settings.frameRateMode === 'cfr' && <label className="text-xs font-bold text-slate-600">目标帧率<select value={settings.frameRate} disabled={videoDisabled} onChange={event => setSetting('frameRate', event.target.value as VideoTranscodeSettings['frameRate'])} className="form-input mt-1 disabled:opacity-50"><option value="original">来源帧率</option>{['24', '25', '30', '50', '60'].map(value => <option key={value} value={value}>{value} fps</option>)}</select></label>}
+            <label className="text-xs font-bold text-slate-600">{t("ui.frame.rate.mode.e399ed")}<select value={settings.frameRateMode} disabled={videoDisabled} onChange={event => { setPresetId(''); setSettings(current => ({ ...current, frameRateMode: event.target.value as VideoTranscodeSettings['frameRateMode'], ...(event.target.value === 'cfr' ? {} : { frameRate: 'original' as const }) })); }} className="form-input mt-1 disabled:opacity-50"><option value="preserve">{t("ui.keep.timestamps.b86891")}</option><option value="cfr">{t("ui.constant.frame.rate.cfr.59ca51")}</option><option value="vfr">{t("ui.variable.frame.rate.vfr.4b9ee7")}</option></select></label>
+            {settings.frameRateMode === 'cfr' && <label className="text-xs font-bold text-slate-600">{t("ui.target.frame.rate.aaddfc")}<select value={settings.frameRate} disabled={videoDisabled} onChange={event => setSetting('frameRate', event.target.value as VideoTranscodeSettings['frameRate'])} className="form-input mt-1 disabled:opacity-50"><option value="original">{t("ui.source.frame.rate.7c0082")}</option>{['24', '25', '30', '50', '60'].map(value => <option key={value} value={value}>{value} fps</option>)}</select></label>}
           </div>
         </section>
         <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <h3 className="mb-4 text-sm font-bold text-slate-800">音频与字幕</h3>
+          <h3 className="mb-4 text-sm font-bold text-slate-800">{t("ui.audio.and.subtitles.78ff80")}</h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="text-xs font-bold text-slate-600">音轨<select value={settings.audioTrack} disabled={disabled || settings.audioMode === 'remove'} onChange={event => setSetting('audioTrack', event.target.value as VideoTranscodeSettings['audioTrack'])} className="form-input mt-1"><option value="all">全部音轨</option><option value="first">仅第一音轨</option></select></label>
-            <label className="text-xs font-bold text-slate-600">音频处理<select value={settings.audioMode} disabled={disabled} onChange={event => setSetting('audioMode', event.target.value as VideoTranscodeSettings['audioMode'])} className="form-input mt-1"><option value="copy">复制编码</option><option value="aac">AAC</option><option value="remove">移除音频</option></select></label>
-            {settings.audioMode === 'aac' && <label className="text-xs font-bold text-slate-600">AAC 码率<select value={settings.audioBitrateKbps} disabled={disabled} onChange={event => setSetting('audioBitrateKbps', Number(event.target.value) as VideoTranscodeSettings['audioBitrateKbps'])} className="form-input mt-1 disabled:opacity-50">{[96, 128, 160, 192, 256, 320].map(value => <option key={value} value={value}>{value} kbps</option>)}</select></label>}
-            <label className="text-xs font-bold text-slate-600">字幕<select value={settings.subtitleMode} disabled={disabled} onChange={event => setSetting('subtitleMode', event.target.value as VideoTranscodeSettings['subtitleMode'])} className="form-input mt-1"><option value="copy">复制字幕轨</option><option value="burn">烧录第一字幕轨</option><option value="remove">移除字幕</option></select></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.audio.track.b6dd16")}<select value={settings.audioTrack} disabled={disabled || settings.audioMode === 'remove'} onChange={event => setSetting('audioTrack', event.target.value as VideoTranscodeSettings['audioTrack'])} className="form-input mt-1"><option value="all">{t("ui.all.audio.tracks.ff7ac8")}</option><option value="first">{t("ui.first.audio.track.only.28871b")}</option></select></label>
+            <label className="text-xs font-bold text-slate-600">{t("ui.audio.processing.8e13cd")}<select value={settings.audioMode} disabled={disabled} onChange={event => setSetting('audioMode', event.target.value as VideoTranscodeSettings['audioMode'])} className="form-input mt-1"><option value="copy">{t("ui.copy.stream.e7de44")}</option><option value="aac">AAC</option><option value="remove">{t("ui.remove.audio.c8b8b3")}</option></select></label>
+            {settings.audioMode === 'aac' && <label className="text-xs font-bold text-slate-600">{t("ui.aac.bitrate.06294c")}<select value={settings.audioBitrateKbps} disabled={disabled} onChange={event => setSetting('audioBitrateKbps', Number(event.target.value) as VideoTranscodeSettings['audioBitrateKbps'])} className="form-input mt-1 disabled:opacity-50">{[96, 128, 160, 192, 256, 320].map(value => <option key={value} value={value}>{value} kbps</option>)}</select></label>}
+            <label className="text-xs font-bold text-slate-600">{t("ui.subtitles.60033a")}<select value={settings.subtitleMode} disabled={disabled} onChange={event => setSetting('subtitleMode', event.target.value as VideoTranscodeSettings['subtitleMode'])} className="form-input mt-1"><option value="copy">{t("ui.copy.subtitle.tracks.250b1e")}</option><option value="burn">{t("ui.burn.in.first.subtitle.track.f52c2c")}</option><option value="remove">{t("ui.remove.subtitles.6ce8c9")}</option></select></label>
           </div>
         </section>
       </div>
-      {settingsOnly && <div className="flex items-center gap-3"><button type="button" disabled={inspection.isRunning || task.isRunning} onClick={() => inspection.start(['--inspect-only'], '正在检测媒体运行库与硬件编码能力…')} className="rounded-md border border-blue-300 px-4 py-2 text-sm font-bold text-blue-700 disabled:opacity-40">{inspection.isRunning ? '正在检测…' : '检测编码器与滤镜能力'}</button><span className="text-xs text-slate-500">{capabilities ? `可用硬件：${capabilities.usableHardwareEncoders?.join('、') || '无'}；滤镜：${capabilities.filters.join('、') || '基础集'}` : inspection.statusMsg}</span></div>}
-      {!settingsOnly && paths.length > 0 && !inspection.isRunning && lastRequestedInspectionKeyRef.current === inspectionKey && !inspectionReady && <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800"><span>媒体探测未成功，必须重新探测后才能开始编码。</span><button type="button" onClick={() => { lastRequestedInspectionKeyRef.current = ''; activeInspectionKeyRef.current = inspectionKey; startInspectionRef.current([...taskArguments, '--inspect-only'], '正在重新探测媒体…'); }} className="shrink-0 rounded border border-amber-300 bg-white px-2.5 py-1 font-bold">重试探测</button></div>}
-      {blockingErrors.map(message => <div key={message} className="flex gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs leading-5 text-red-800"><AlertCircle size={15} className="mt-0.5 shrink-0"/>{message}</div>)}
-      {warnings.map(message => <div key={message} className="flex gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"><AlertCircle size={15} className="mt-0.5 shrink-0"/>{message}</div>)}
-      {mediaInfo.filter(item => item.dynamicHdr).map(item => <div key={`dynamic-hdr:${item.path}`} className="flex gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"><AlertCircle size={15} className="mt-0.5 shrink-0"/>{item.name} 含 {item.dynamicHdr} 动态元数据；跟随来源模式会阻止有损转码，请复制视频流或明确指定 SDR/HDR10/HLG 输出。</div>)}
+      {settingsOnly && <div className="flex items-center gap-3"><button type="button" disabled={inspection.isRunning || task.isRunning} onClick={() => inspection.start(['--inspect-only'], '正在检测媒体运行库与硬件编码能力…')} className="rounded-md border border-blue-300 px-4 py-2 text-sm font-bold text-blue-700 disabled:opacity-40">{inspection.isRunning ? t("ui.detecting.e8b970") : t("ui.detect.encoder.and.filter.capabilities.c0dee2")}</button><span className="text-xs text-slate-500">{capabilities ? t("ui.available.hardware.value0.filters.value1.cd3e33", { value0: capabilities.usableHardwareEncoders?.join('、') || t("ui.none.484d55"), value1: capabilities.filters.join('、') || t("ui.basic.set.a63e6e") }) : inspection.statusMsg}</span></div>}
+      {!settingsOnly && paths.length > 0 && !inspection.isRunning && lastRequestedInspectionKeyRef.current === inspectionKey && !inspectionReady && <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800"><span>{t("ui.media.probing.failed.probe.again.before.87475c")}</span><button type="button" onClick={() => { lastRequestedInspectionKeyRef.current = ''; activeInspectionKeyRef.current = inspectionKey; startInspectionRef.current([...taskArguments, '--inspect-only'], '正在重新探测媒体…'); }} className="shrink-0 rounded border border-amber-300 bg-white px-2.5 py-1 font-bold">{t("ui.retry.probe.c22e41")}</button></div>}
+      {blockingErrors.map(message => <div key={message} className="flex gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs leading-5 text-red-800"><AlertCircle size={15} className="mt-0.5 shrink-0"/><LocalizedText value={message}/></div>)}
+      {warnings.map(message => <div key={message} className="flex gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"><AlertCircle size={15} className="mt-0.5 shrink-0"/><LocalizedText value={message}/></div>)}
+      {mediaInfo.filter(item => item.dynamicHdr).map(item => <div key={`dynamic-hdr:${item.path}`} className="flex gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"><AlertCircle size={15} className="mt-0.5 shrink-0"/>{t("message.f3b4268226f7", { value0: item.name, value1: item.dynamicHdr })}</div>)}
       {!settingsOnly && <>
-        <div className="flex flex-wrap items-center gap-3"><span className="text-sm text-slate-600">{mediaInfo.length > 0 && !inspection.isRunning && lastRequestedInspectionKeyRef.current === inspectionKey ? `${mediaInfo.length} 个视频 · 预计输出 ${formatMediaBytes(estimatedOutputBytes)}` : automaticEstimateStatus}</span></div>
-        {mediaInfo.length > 0 && <div className="max-h-56 overflow-auto rounded-lg border border-slate-200"><table className="w-full text-left text-xs"><thead className="sticky top-0 bg-slate-100 text-slate-600"><tr><th className="p-2">文件</th><th className="p-2">画面</th><th className="p-2">色彩</th><th className="p-2">轨道</th><th className="p-2">预计输出</th></tr></thead><tbody>{mediaInfo.map(item => <tr key={item.path} className="border-t border-slate-100"><td className="max-w-48 truncate p-2" title={item.path}>{item.name}</td><td className="p-2">{item.codec} · {item.pixelFormat}<br/>{item.width}×{item.height} · {item.frameRate} fps<br/>SAR {item.sar} / DAR {item.dar} / {item.rotation}°</td><td className="p-2">{item.hdrKind} · {item.bitDepth}-bit<br/>{item.primaries}/{item.transfer}/{item.matrix}</td><td className="p-2">音频 {item.audioTracks} · 字幕 {item.subtitleTracks}</td><td className="p-2">{formatMediaBytes(item.estimatedOutputBytes)}</td></tr>)}</tbody></table></div>}
-        <div role="radiogroup" aria-label="转码后如何保存" className="grid gap-3 md:grid-cols-2"><TranscodeOutputChoice selected={outputMode === 'new'} disabled={disabled} title="另存为新视频" description={activeSourceFolders.length ? '输出到来源文件夹旁的新“_转码”目录，并保留目录结构。' : '保存在原视频旁，文件名增加“_转码”。'} onSelect={() => setOutputMode('new')}/><TranscodeOutputChoice selected={outputMode === 'delete-original'} disabled={disabled} title="替换原视频" description="转码结果校验通过后替换原视频，原视频将移入回收站；失败时保留原视频。" onSelect={() => setOutputMode('delete-original')}/></div>
-        {task.completion?.event.report?.length ? <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">技术校验完成：{task.completion.event.report.length} 个输出有效{task.completion.event.failedCount ? `，${task.completion.event.failedCount} 个失败` : ''}。</div> : null}
-        <TaskProgress logs={task.logs} progress={task.progress} isRunning={task.isRunning} reportToTaskCenter={false} idleMessage={sourcesLoading || resolvingKinds ? '正在读取来源…' : task.statusMsg} statusMessage={sourcesLoading || resolvingKinds ? '正在读取来源…' : task.statusMsg} action={<div className="flex gap-2">{task.isRunning && !task.isCancelling && <button type="button" onClick={() => void task.setPaused(!task.isPaused)} className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-bold text-slate-700">{task.isPaused ? <Play size={17}/> : <Pause size={17}/>}{task.isPaused ? '继续' : '暂停'}</button>}<button type="button" onClick={task.isRunning ? () => void task.cancel() : startTranscode} disabled={task.isCancelling || !task.isRunning && !canStartTranscode} className={`flex items-center gap-2 rounded-lg px-6 py-2.5 font-bold transition ${task.isRunning ? 'bg-red-600 text-white hover:bg-red-500' : canStartTranscode ? 'bg-blue-600 text-white hover:bg-blue-500' : 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400'}`}>{task.isRunning ? task.isCancelling ? <Loader2 size={17} className="animate-spin"/> : <X size={17}/> : <Play size={17} fill="currentColor"/>}{task.isRunning ? task.isCancelling ? '正在取消…' : '取消队列' : '开始编码'}</button></div>}/>
+        <div className="flex flex-wrap items-center gap-3"><span className="text-sm text-slate-600">{mediaInfo.length > 0 && !inspection.isRunning && lastRequestedInspectionKeyRef.current === inspectionKey ? t("ui.videos.value0.expected.output.value1.21210a", { value0: mediaInfo.length, value1: formatMediaBytes(estimatedOutputBytes) }) : renderText(automaticEstimateStatus)}</span></div>
+        {mediaInfo.length > 0 && <div className="max-h-56 overflow-auto rounded-lg border border-slate-200"><table className="w-full text-left text-xs"><thead className="sticky top-0 bg-slate-100 text-slate-600"><tr><th className="p-2">{t("ui.file.39932f")}</th><th className="p-2">{t("ui.image.d051df")}</th><th className="p-2">{t("ui.color.e40fff")}</th><th className="p-2">{t("ui.tracks.9532dd")}</th><th className="p-2">{t("ui.expected.output.2980b8")}</th></tr></thead><tbody>{mediaInfo.map(item => <tr key={item.path} className="border-t border-slate-100"><td className="max-w-48 truncate p-2" title={item.path}>{item.name}</td><td className="p-2">{item.codec} · {item.pixelFormat}<br/>{item.width}×{item.height} · {item.frameRate} fps<br/>SAR {item.sar} / DAR {item.dar} / {item.rotation}°</td><td className="p-2">{item.hdrKind} · {item.bitDepth}-bit<br/>{item.primaries}/{item.transfer}/{item.matrix}</td><td className="p-2">{t("message.66bb41c63c74", { value0: item.audioTracks, value1: item.subtitleTracks })}</td><td className="p-2">{formatMediaBytes(item.estimatedOutputBytes)}</td></tr>)}</tbody></table></div>}
+        <div role="radiogroup" aria-label={t("ui.save.transcoded.video.34beec")} className="grid gap-3 md:grid-cols-2"><TranscodeOutputChoice selected={outputMode === 'new'} disabled={disabled} title={t("ui.save.as.new.video.3321d9")} description={activeSourceFolders.length ? t("ui.save.in.a.new.folder.beside.600901") : t("ui.save.beside.the.original.video.with.8a3283")} onSelect={() => setOutputMode('new')}/><TranscodeOutputChoice selected={outputMode === 'delete-original'} disabled={disabled} title={t("ui.replace.original.video.fdffcb")} description={t("ui.after.verification.replace.the.original.and.d3390c")} onSelect={() => setOutputMode('delete-original')}/></div>
+        {task.completion?.event.report?.length ? <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{t("message.4405d23b28d6", { value0: task.completion.event.report.length, value1: task.completion.event.failedCount ? t("legacy.message.0432e99b9c66", { value0: task.completion.event.failedCount }) : '' })}</div> : null}
+        <TaskProgress logs={task.logs} progress={task.progress} isRunning={task.isRunning} reportToTaskCenter={false} idleMessage={sourcesLoading || resolvingKinds ? t("ui.loading.sources.7924ad") : task.statusMsg} statusMessage={sourcesLoading || resolvingKinds ? t("ui.loading.sources.7924ad") : task.statusMsg} action={<div className="flex gap-2">{task.isRunning && !task.isCancelling && <button type="button" onClick={() => void task.setPaused(!task.isPaused)} className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-bold text-slate-700">{task.isPaused ? <Play size={17}/> : <Pause size={17}/>}{task.isPaused ? t("ui.continue.7c9691") : t("ui.pause.8d12fc")}</button>}<button type="button" onClick={task.isRunning ? () => void task.cancel() : startTranscode} disabled={task.isCancelling || !task.isRunning && !canStartTranscode} className={`flex items-center gap-2 rounded-lg px-6 py-2.5 font-bold transition ${task.isRunning ? 'bg-red-600 text-white hover:bg-red-500' : canStartTranscode ? 'bg-blue-600 text-white hover:bg-blue-500' : 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400'}`}>{task.isRunning ? task.isCancelling ? <Loader2 size={17} className="animate-spin"/> : <X size={17}/> : <Play size={17} fill="currentColor"/>}{task.isRunning ? task.isCancelling ? t("ui.cancelling.e8e08b") : t("ui.cancel.queue.5d8350") : t("ui.start.encoding.222b0d")}</button></div>}/>
       </>}
     </div>
   </div>;
 };
 
 const VideoSplitView = ({ embedded = false, initialTargetPath = '', initialTargetPaths = [], settingsOnly = false }: { embedded?: boolean; initialTargetPath?: string; initialTargetPaths?: string[]; settingsOnly?: boolean }) => {
+  useLocale();
   const initialTargetKey = (initialTargetPaths.length ? initialTargetPaths : initialTargetPath ? [initialTargetPath] : []).join('\n');
   const [targetPaths, setTargetPaths] = useState<string[]>(() => initialTargetKey.split('\n').filter(Boolean));
   const { pathKinds, resolvingKinds } = useSourcePathKinds(targetPaths);
@@ -2635,19 +2641,17 @@ const VideoSplitView = ({ embedded = false, initialTargetPath = '', initialTarge
   return (
     <div className="w-full space-y-4">
       {!embedded && <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Scissors size={24} /> 视频切割
-      </h2>}
+          <Scissors size={24} /> {t("ui.split.video.cd6df3")}</h2>}
       <div className={`space-y-4 ${embedded ? '' : 'rounded-xl border border-slate-200 bg-white p-6'}`}>
 
         <div className="space-y-2">
           <p className="text-sm text-slate-600">
-            原视频保持不变，分段文件写入原视频所在目录。
-          </p>
+            {t("ui.the.original.stays.unchanged.segments.are.a4a069")}</p>
         </div>
 
-        {!settingsOnly && <SourcePathPicker paths={targetPaths} pathKinds={pathKinds} folderPreviewExtensions={VIDEO_SOURCE_PREVIEW_EXTENSIONS} onChange={setTargetPaths} onChooseFiles={chooseVideos} onChooseFolder={chooseFolder} fileButtonLabel="追加视频" folderButtonLabel="追加文件夹" loading={resolvingKinds} disabled={isRunning} title="已选择" itemLabel="个来源" description="文件夹会作为一个来源显示；执行时扫描子目录，分段写入原目录" emptyTitle="拖入视频或文件夹"/>}
+        {!settingsOnly && <SourcePathPicker paths={targetPaths} pathKinds={pathKinds} folderPreviewExtensions={VIDEO_SOURCE_PREVIEW_EXTENSIONS} onChange={setTargetPaths} onChooseFiles={chooseVideos} onChooseFolder={chooseFolder} fileButtonLabel={t("legacy.1522d8f7910e")} folderButtonLabel={t("legacy.04580ea496bd")} loading={resolvingKinds} disabled={isRunning} title={t("ui.selected.3f4ebc")} itemLabel={t("legacy.68450f43fd47")} description={t("ui.folders.appear.as.one.source.subfolders.1e60b0")} emptyTitle={t("legacy.7de325e03a18")}/>}
 
-        <div className="grid gap-3 md:grid-cols-2"><label className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"><span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400">分段大小</span><span className="mt-1 block text-sm font-bold text-slate-700">约 3.95 GB（固定）</span></label><label className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"><span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400">输出名称</span><span className="mt-1 block truncate text-sm font-bold text-slate-700">{targetPaths.length === 1 && pathKinds[sourcePathIdentity(targetPaths[0])] === 'folder' ? '文件夹内每个视频分别生成 _part001' : targetPaths.length === 1 ? <span className="font-mono">{targetPaths[0].split(/[\\/]/).pop()?.replace(/(\.[^.]+)$/u, '_part001$1')}</span> : targetPaths.length > 1 ? `按 ${targetPaths.length} 个来源分别处理` : '视频名_part001.mp4'}</span></label></div>
+        <div className="grid gap-3 md:grid-cols-2"><label className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"><span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400">{t("ui.segment.size.8e7981")}</span><span className="mt-1 block text-sm font-bold text-slate-700">{t("ui.about.3.95.gb.fixed.e78258")}</span></label><label className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"><span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400">{t("ui.output.name.d8018b")}</span><span className="mt-1 block truncate text-sm font-bold text-slate-700">{targetPaths.length === 1 && pathKinds[sourcePathIdentity(targetPaths[0])] === 'folder' ? t("ui.each.video.generates.its.own.part001.cd04e2") : targetPaths.length === 1 ? <span className="font-mono">{targetPaths[0].split(/[\\/]/).pop()?.replace(/(\.[^.]+)$/u, '_part001$1')}</span> : targetPaths.length > 1 ? t("ui.process.sources.separately.value0.336fdc", { value0: targetPaths.length }) : t("ui.video.name.part001.mp4.9c7565")}</span></label></div>
 
         {!settingsOnly && <TaskProgress
           logs={logs}
@@ -2665,7 +2669,7 @@ const VideoSplitView = ({ embedded = false, initialTargetPath = '', initialTarge
             }`}
           >
             {isCancelling ? <Loader2 className="animate-spin" size={18}/> : isRunning ? <X size={18}/> : <Scissors size={18} fill="currentColor"/>}
-            {isCancelling ? '正在取消…' : isRunning ? '取消切割' : `开始切割${targetPaths.length > 1 ? `（${targetPaths.length} 项）` : ''}`}
+            {isCancelling ? t("ui.cancelling.e8e08b") : isRunning ? t("ui.cancel.split.96be36") : t("ui.start.splitting.value0.a40944", { value0: targetPaths.length > 1 ? t("ui.value0.items.6d4418", { value0: targetPaths.length }) : '' })}
           </button>}
         />}
       </div>

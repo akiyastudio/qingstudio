@@ -3,7 +3,7 @@
   "productName": "照片流开源版",
   "private": true,
   "license": "Apache-2.0",
-  "version": "26.9.19.1",
+  "version": "26.9.20.1",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -16,7 +16,7 @@
     "build:video-surface-host": "node scripts/build-video-surface-host.cjs",
     "build:job-object-launcher": "node scripts/build-job-object-launcher.cjs",
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/generate-i18n-catalogs.cjs --check && tsc -b && vite build",
     "build:python": "node scripts/build-python.cjs",
     "setup:python": "node scripts/setup-python.cjs",
     "check:python": "node scripts/check-python-environment.cjs",
@@ -30,7 +30,8 @@
     "test": "node scripts/test-public-source.cjs && node scripts/test-file-publication-platform.cjs && node scripts/test-component-status-refresh-policy.cjs && npm run test:examples",
     "test:smoke": "node scripts/test-public-smoke.cjs",
     "test:examples": "node scripts/test-component-examples.cjs && node scripts/mock-component-service.cjs examples/hello-component/service.cjs",
-    "prepare:components:dev": "node scripts/prepare-development-components.cjs"
+    "prepare:components:dev": "node scripts/prepare-development-components.cjs",
+    "i18n:generate": "node scripts/generate-i18n-catalogs.cjs"
   },
   "build": {
     "appId": "cn.qingstudio.opensource",

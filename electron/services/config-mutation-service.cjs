@@ -117,6 +117,7 @@ const mergeRestoredConfig = (current, restored, destination, legacySettingsAdopt
   return adoptLegacyComponentSettings({
     ...current,
     ...restored,
+    language: current?.language || 'zh-CN',
     telemetry: current?.telemetry || restored.telemetry,
     workspacePath,
     workspacePaths: workspacePath ? [workspacePath] : [],

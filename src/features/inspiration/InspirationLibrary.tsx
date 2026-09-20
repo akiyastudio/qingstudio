@@ -1,3 +1,7 @@
+import { LocalizedText } from "../../i18n/LocalizedText";
+import { localizedMessage } from "../../i18n/messages";
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Edit, Folder, FolderInput, FolderPlus, Lightbulb, Loader2, Trash2 } from 'lucide-react';
@@ -70,6 +74,7 @@ export const InspirationLibraryNavigator = ({
   onOpenInNewTab: (relativePath: string) => void;
   onOpenSettings: () => void;
 }) => {
+  useLocale();
   const toast = useUserFacingToast();
   const onNotice = useCallback((message: string, duration?: number) => { toast.show(message, duration); }, [toast]);
   type InspirationFolder = { name: string; relativePath: string; parentRelativePath: string; depth: number };
@@ -372,7 +377,7 @@ export const InspirationLibraryNavigator = ({
     const requestedRootPath = rootPath;
     const requestedGeneration = rootGeneration;
     const requestedCurrentPath = currentRelativePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-    const answer = await appDialog.prompt({ title: '新建文件夹', message: `在“${folder.name}”中输入新文件夹名称。`, defaultValue: '新建文件夹', confirmLabel: '新建' });
+    const answer = await appDialog.prompt({ title: localizedMessage("ui.new.folder.84244a"), message: localizedMessage("ui.enter.a.new.folder.name.in.29e636", { value0: folder.name }), defaultValue: '新建文件夹', confirmLabel: localizedMessage("ui.new.50ef2f") });
     const folderName = answer?.trim();
     if (!folderName) return;
     if (!rootRequestIsCurrent(requestedRootPath, requestedGeneration)) return;
@@ -414,7 +419,7 @@ export const InspirationLibraryNavigator = ({
     const requestedGeneration = rootGeneration;
     const requestedCurrentPath = currentRelativePath.replace(/\\/g, '/');
     setFolderMenu(null);
-    const confirmed = await appDialog.confirm({ title: `删除“${folder.name}”吗？`, message: '文件夹及其中内容将移入系统回收站。', confirmLabel: '删除文件夹', tone: 'danger' });
+    const confirmed = await appDialog.confirm({ title: localizedMessage("ui.delete.value0.bc4f8f", { value0: folder.name }), message: localizedMessage("ui.the.folder.and.its.contents.will.7f3ec3"), confirmLabel: localizedMessage("ui.delete.folder.780dfc"), tone: 'danger' });
     if (!rootRequestIsCurrent(requestedRootPath, requestedGeneration) || !confirmed) return;
     setBusyPath(folder.relativePath);
     setPendingFolderMutation({ kind: 'delete', sourcePath: folder.relativePath });
@@ -454,8 +459,8 @@ export const InspirationLibraryNavigator = ({
     const folder = relativePath ? folderByPath.get(relativePath) : undefined;
     const renaming = renamingPath === relativePath;
     return <div ref={selected ? selectedFolderRef : undefined} key={relativePath || '__root__'} onContextMenu={event => { if (!folder) return; event.preventDefault(); window.dispatchEvent(new Event('photoflow-menu-open')); setFolderMenu({ folder, x: event.clientX, y: event.clientY }); }} className={`group flex min-w-0 items-center rounded-lg ${selected ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`} style={{ paddingLeft: 5 + depth * 14 }}>
-      <button type="button" disabled={!hasChildren} onClick={() => toggleCollapsed(relativePath)} aria-label={`${collapsed ? '展开' : '收起'} ${label}`} className="flex h-8 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-200 disabled:invisible">{collapsed ? <ChevronRight size={14}/> : <ChevronDown size={14}/>}</button>
-      {renaming && folder ? <form className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2" onSubmit={event => { event.preventDefault(); void commitRename(folder); }}><Folder size={16} className="shrink-0 text-blue-500"/><input autoFocus value={renameValue} onChange={event => setRenameValue(event.target.value)} onFocus={event => event.currentTarget.select()} onBlur={() => void commitRename(folder)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setRenamingPath(''); } }} disabled={busyPath === relativePath} aria-label={`重命名 ${label}`} className="min-w-0 flex-1 rounded border border-blue-400 bg-white px-1.5 py-0.5 text-sm text-slate-800 outline-none ring-2 ring-blue-100"/></form> : <button type="button" draggable={!busyPath} onDragStart={event => {
+      <button type="button" disabled={!hasChildren} onClick={() => toggleCollapsed(relativePath)} aria-label={`${collapsed ? t("ui.expand.00bd39") : t("ui.collapse.afd4b7")} ${label}`} className="flex h-8 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-200 disabled:invisible">{collapsed ? <ChevronRight size={14}/> : <ChevronDown size={14}/>}</button>
+      {renaming && folder ? <form className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2" onSubmit={event => { event.preventDefault(); void commitRename(folder); }}><Folder size={16} className="shrink-0 text-blue-500"/><input autoFocus value={renameValue} onChange={event => setRenameValue(event.target.value)} onFocus={event => event.currentTarget.select()} onBlur={() => void commitRename(folder)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setRenamingPath(''); } }} disabled={busyPath === relativePath} aria-label={t("ui.rename.value0.e05a2a", { value0: label })} className="min-w-0 flex-1 rounded border border-blue-400 bg-white px-1.5 py-0.5 text-sm text-slate-800 outline-none ring-2 ring-blue-100"/></form> : <button type="button" draggable={!busyPath} onDragStart={event => {
         event.dataTransfer.effectAllowed = 'copy';
         event.dataTransfer.setData('application/x-photoflow-folder-tab', JSON.stringify({ kind: 'inspiration', rootPath, relativePath }));
         event.dataTransfer.setData('text/plain', label);
@@ -463,11 +468,11 @@ export const InspirationLibraryNavigator = ({
       }} onDragEnd={() => window.dispatchEvent(new Event('photoflow:folder-tab-drag-end'))} onClick={() => onNavigate(relativePath)} title={label} className={`flex min-w-0 flex-1 items-center gap-2 py-2 pr-2 text-left text-sm ${selected ? 'font-bold' : ''}`}><Folder size={16} className="shrink-0 text-blue-500"/><span className="truncate">{label}</span></button>}
     </div>;
   };
-  return <nav aria-label="灵感库导航" className="flex min-h-0 flex-1 flex-col bg-white">
-    {folderMenu && createPortal(<div className="fixed inset-0 z-[420]" onPointerDown={() => setFolderMenu(null)} onContextMenu={event => { event.preventDefault(); setFolderMenu(null); }}><div role="menu" aria-label={`${folderMenu.folder.name} 文件夹菜单`} onPointerDown={event => event.stopPropagation()} className="project-context-menu fixed w-60 rounded-lg border border-slate-200 bg-white p-1.5 shadow-2xl" style={{ left: Math.min(folderMenu.x, Math.max(8, window.innerWidth - 248)), top: Math.min(folderMenu.y, Math.max(8, window.innerHeight - 250)) }}><button type="button" className="project-menu-item" onClick={() => { const path = folderMenu.folder.relativePath; setFolderMenu(null); onOpenInNewTab(path); }}><FolderPlus size={14}/>在新标签页打开</button><div className="my-1 border-t border-slate-100"/><button type="button" className="project-menu-item" onClick={() => void createChildFolder(folderMenu.folder)}><FolderPlus size={14}/>新建文件夹</button><div className="my-1 border-t border-slate-100"/><button type="button" className="project-menu-item" onClick={() => startRename(folderMenu.folder)}><Edit size={14}/>重命名</button><button type="button" disabled={!targetProjectsAvailable} className="project-menu-item" onClick={() => addFolderToProject(folderMenu.folder)}><FolderInput size={14}/>添加到项目{targetProject ? `“${targetProject.name}”` : '…'}</button>{targetProject && <button type="button" className="project-menu-item" onClick={() => addFolderToProject(folderMenu.folder, true)}><ChevronDown size={14}/>选择其他项目…</button>}<div className="my-1 border-t border-slate-100"/><button type="button" className="project-menu-item project-menu-danger" onClick={() => void deleteFolder(folderMenu.folder)}><Trash2 size={14}/>删除文件夹</button></div></div>, document.body)}
-    <div className="flex items-center gap-2 px-4 pb-3 pt-3 text-sm font-bold text-slate-800"><Lightbulb size={18} className="text-amber-500"/><span className="min-w-0 flex-1 truncate">灵感库</span><button type="button" disabled={!collapsibleFolderPaths.length} onClick={toggleAllFolders} aria-label={allFoldersCollapsed ? '展开全部文件夹' : '折叠全部文件夹'} title={allFoldersCollapsed ? '展开全部文件夹' : '折叠全部文件夹'} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-default disabled:opacity-30">{allFoldersCollapsed ? <ChevronsUpDown size={16}/> : <ChevronsDownUp size={16}/>}</button></div>
+  return <nav aria-label={t("ui.inspiration.library.navigation.939361")} className="flex min-h-0 flex-1 flex-col bg-white">
+    {folderMenu && createPortal(<div className="fixed inset-0 z-[420]" onPointerDown={() => setFolderMenu(null)} onContextMenu={event => { event.preventDefault(); setFolderMenu(null); }}><div role="menu" aria-label={t("ui.value0.folder.menu.1e444c", { value0: folderMenu.folder.name })} onPointerDown={event => event.stopPropagation()} className="project-context-menu fixed w-60 rounded-lg border border-slate-200 bg-white p-1.5 shadow-2xl" style={{ left: Math.min(folderMenu.x, Math.max(8, window.innerWidth - 248)), top: Math.min(folderMenu.y, Math.max(8, window.innerHeight - 250)) }}><button type="button" className="project-menu-item" onClick={() => { const path = folderMenu.folder.relativePath; setFolderMenu(null); onOpenInNewTab(path); }}><FolderPlus size={14}/>{t("ui.open.in.new.tab.79c5e0")}</button><div className="my-1 border-t border-slate-100"/><button type="button" className="project-menu-item" onClick={() => void createChildFolder(folderMenu.folder)}><FolderPlus size={14}/>{t("ui.new.folder.84244a")}</button><div className="my-1 border-t border-slate-100"/><button type="button" className="project-menu-item" onClick={() => startRename(folderMenu.folder)}><Edit size={14}/>{t("ui.rename.0d0cba")}</button><button type="button" disabled={!targetProjectsAvailable} className="project-menu-item" onClick={() => addFolderToProject(folderMenu.folder)}><FolderInput size={14}/>{t("message.fb0d370ff144", { value0: targetProject ? `“${targetProject.name}”` : '…' })}</button>{targetProject && <button type="button" className="project-menu-item" onClick={() => addFolderToProject(folderMenu.folder, true)}><ChevronDown size={14}/>{t("ui.choose.another.project.952baa")}</button>}<div className="my-1 border-t border-slate-100"/><button type="button" className="project-menu-item project-menu-danger" onClick={() => void deleteFolder(folderMenu.folder)}><Trash2 size={14}/>{t("ui.delete.folder.780dfc")}</button></div></div>, document.body)}
+    <div className="flex items-center gap-2 px-4 pb-3 pt-3 text-sm font-bold text-slate-800"><Lightbulb size={18} className="text-amber-500"/><span className="min-w-0 flex-1 truncate">{t("ui.inspiration.library.9ac871")}</span><button type="button" disabled={!collapsibleFolderPaths.length} onClick={toggleAllFolders} aria-label={allFoldersCollapsed ? t("ui.expand.all.folders.94df70") : t("ui.collapse.all.folders.30c500")} title={allFoldersCollapsed ? t("ui.expand.all.folders.94df70") : t("ui.collapse.all.folders.30c500")} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-default disabled:opacity-30">{allFoldersCollapsed ? <ChevronsUpDown size={16}/> : <ChevronsDownUp size={16}/>}</button></div>
     <div ref={treeScrollRef} onScroll={event => writeInspirationNavigatorScroll(rootPath, event.currentTarget.scrollTop)} className="inspiration-navigator-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-3">
-      {rootPath ? <div className="space-y-0.5">{treeRow('灵感库文件夹', '', 0, folders.length > 0)}{loading && !folders.length ? <p className="flex items-center gap-2 px-3 py-3 text-xs text-slate-400"><Loader2 size={14} className="animate-spin"/>正在读取目录…</p> : visibleFolders.map(folder => treeRow(folder.name, folder.relativePath, folder.depth + 1, parentPaths.has(folder.relativePath))) }{treeError && <p className="px-3 py-2 text-xs leading-5 text-amber-600">{treeError}</p>}</div> : <p className="px-3 py-4 text-xs leading-5 text-slate-400">首次进入灵感库时请选择文件夹。</p>}
+      {rootPath ? <div className="space-y-0.5">{treeRow('灵感库文件夹', '', 0, folders.length > 0)}{loading && !folders.length ? <p className="flex items-center gap-2 px-3 py-3 text-xs text-slate-400"><Loader2 size={14} className="animate-spin"/>{t("ui.loading.folders.36517d")}</p> : visibleFolders.map(folder => treeRow(folder.name, folder.relativePath, folder.depth + 1, parentPaths.has(folder.relativePath))) }{treeError && <p className="px-3 py-2 text-xs leading-5 text-amber-600"><LocalizedText value={treeError}/></p>}</div> : <p className="px-3 py-4 text-xs leading-5 text-slate-400">{t("ui.choose.a.folder.to.start.using.c34982")}</p>}
     </div>
     <SidebarSettingsButton onClick={onOpenSettings}/>
   </nav>;
@@ -500,6 +505,7 @@ export const InspirationLibraryPage = ({
   navigationRequest?: { path: string; id: number };
   onOpenDirectoryPage: (relativePath: string) => void;
 }) => {
+  useLocale();
   const toast = useUserFacingToast();
   const onNotice = useCallback((message: string, duration?: number) => { toast.show(message, duration); }, [toast]);
   const rootPath = config.inspirationLibrary.rootPath.trim();
@@ -531,7 +537,7 @@ export const InspirationLibraryPage = ({
   }, [onDirectoryChange, pageId]);
 
   if (!rootPath) {
-    return <div className="flex h-full items-center justify-center p-8 text-center"><div><Folder size={42} className="mx-auto text-slate-300"/><h2 className="mt-4 text-xl font-bold text-slate-800">设置灵感库文件夹</h2><p className="mt-2 text-sm text-slate-500">首次使用灵感库，需要先选择用于收集和整理素材的文件夹。</p><button type="button" onClick={() => void chooseRoot()} disabled={choosingRoot} className="dialog-primary mt-5 disabled:opacity-50">{choosingRoot ? '正在选择…' : '选择灵感库文件夹'}</button></div></div>;
+    return <div className="flex h-full items-center justify-center p-8 text-center"><div><Folder size={42} className="mx-auto text-slate-300"/><h2 className="mt-4 text-xl font-bold text-slate-800">{t("ui.set.inspiration.library.folder.aa0e4f")}</h2><p className="mt-2 text-sm text-slate-500">{t("ui.choose.a.folder.for.collecting.and.d9b360")}</p><button type="button" onClick={() => void chooseRoot()} disabled={choosingRoot} className="dialog-primary mt-5 disabled:opacity-50">{choosingRoot ? t("ui.selecting.07b9d2") : t("ui.choose.inspiration.library.folder.7bc982")}</button></div></div>;
   }
   const project: WorkspaceProject = {
     id: `inspiration:${rootPath}`,

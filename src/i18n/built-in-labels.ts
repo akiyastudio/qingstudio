@@ -1,0 +1,32 @@
+import * as availability from '../features/components/component-availability-model';
+import { formatVideoShortcutChord as originalShortcutChord } from '../contracts/video-shortcuts';
+import { renderText } from './messages';
+import zh from '../../electron/locales/zh-CN.json';
+import { t, type MessageKey } from './runtime';
+import * as metadata from '../features/metadata/metadata-labels';
+import * as filters from '../features/workspace/project-file-filter-options';
+import * as panels from '../features/workspace/workspace-panel-model';
+import * as versions from '../features/versioning/versioning-v2-model';
+import * as edges from '../features/versioning/version-tree-edge-model';
+import { VIDEO_ACTIONS as actions } from '../contracts/video-shortcuts';
+const labelKeys = new Map(Object.entries(zh).map(([key, source]) => [source, key as MessageKey]));
+/** Only application-owned labels. Never call this on file names, user text or metadata values. */
+export const localizeBuiltInLabel = (source: string) => { const key = labelKeys.get(source); return key ? t(key) : source; };
+export const metadataFieldLabel = (name: string) => localizeBuiltInLabel(metadata.metadataFieldLabel(name));
+export const metadataGroupLabel = (name: string) => localizeBuiltInLabel(metadata.metadataGroupLabel(name));
+const localizedOptions = <T extends { label: string }>(options: readonly T[]) => options.map(option => ({ ...option, get label() { return localizeBuiltInLabel(option.label); } }));
+export const PROJECT_FILE_FILTER_OPTIONS = localizedOptions(filters.PROJECT_FILE_FILTER_OPTIONS);
+export const PROJECT_BINARY_RATING_FILTER_OPTIONS = localizedOptions(filters.PROJECT_BINARY_RATING_FILTER_OPTIONS);
+export const PROJECT_STAR_RATING_FILTER_OPTIONS = localizedOptions(filters.PROJECT_STAR_RATING_FILTER_OPTIONS);
+export const VIDEO_ACTIONS = localizedOptions(actions);
+export const WORKSPACE_PANEL_LABELS = Object.fromEntries(Object.keys(panels.WORKSPACE_PANEL_LABELS).map(key => [key, ''])) as typeof panels.WORKSPACE_PANEL_LABELS;
+for (const key of Object.keys(WORKSPACE_PANEL_LABELS) as Array<keyof typeof WORKSPACE_PANEL_LABELS>) Object.defineProperty(WORKSPACE_PANEL_LABELS, key, { enumerable: true, get: () => localizeBuiltInLabel(panels.WORKSPACE_PANEL_LABELS[key]) });
+export const trackingStateLabel = (...args: Parameters<typeof versions.trackingStateLabel>) => localizeBuiltInLabel(versions.trackingStateLabel(...args));
+export const versionTreeNodeBadgeLabel = (...args: Parameters<typeof versions.versionTreeNodeBadgeLabel>) => localizeBuiltInLabel(versions.versionTreeNodeBadgeLabel(...args));
+export const progressTrackingActionLabel = (...args: Parameters<typeof versions.progressTrackingActionLabel>) => localizeBuiltInLabel(versions.progressTrackingActionLabel(...args));
+export const versionTreeRelationLabel = (...args: Parameters<typeof edges.versionTreeRelationLabel>) => localizeBuiltInLabel(edges.versionTreeRelationLabel(...args));
+export const VERSION_PANEL_DEFINITIONS = Object.fromEntries(Object.entries(versions.VERSION_PANEL_DEFINITIONS).map(([id, value]) => [id, { ...value, get title() { return localizeBuiltInLabel(value.title); } }])) as typeof versions.VERSION_PANEL_DEFINITIONS;
+
+export const componentCapabilityUnavailableMessage = (components: Parameters<typeof availability.componentCapabilityUnavailableMessage>[0], capability: string, displayName: string) => renderText(availability.componentCapabilityUnavailableMessage(components, capability, localizeBuiltInLabel(displayName)));
+export const componentUnavailableMessage = (components: Parameters<typeof availability.componentUnavailableMessage>[0], componentId: string, displayName: string) => renderText(availability.componentUnavailableMessage(components, componentId, localizeBuiltInLabel(displayName)));
+export const formatVideoShortcutChord = (chord: string) => originalShortcutChord(chord).split('+').map(part => renderText(part)).join('+');

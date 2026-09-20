@@ -51,7 +51,8 @@ const createComponentRuntimeExecutionService = ({ broker, ensureWorkspace, getPr
     if (!descriptor.service?.capabilities?.includes('component.runtime.execute')) throw hostError(CODES.PERMISSION_DENIED, 'Component runtime execution is not granted');
     if(action==='playback'){
       fields(payload,['action','relativePaths','inputGrants','input','playback'],['action','playback']);
-      const needsSource=['source','backends','start','frames'].includes(payload.playback?.action);
+      if(['capture','publish-frame'].includes(payload.playback?.action)&&!descriptor.service?.permissions?.includes('project.output.write'))throw hostError(CODES.PERMISSION_DENIED,'Frame publication requires project.output.write');
+      const needsSource=['source','backends','start','frames','publish-frame'].includes(payload.playback?.action);
       let sourcePayload=payload;
       if(payload.playback.outputPath!==undefined){
         const outputPath=String(payload.playback.outputPath);

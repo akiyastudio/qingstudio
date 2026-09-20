@@ -1,13 +1,17 @@
+import { projectStatusLabel } from '../../i18n/project-labels';
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
-import { projectStatusLabel, type WorkspaceProject } from '../../types';
+import { type WorkspaceProject } from '../../types';
 import { ViewportContextMenu } from './ProjectWorkspaceLayout';
 
 export const ProjectStatusMenu = ({ open, status, statuses, onOpenChange, onSelect }: {
   open: boolean; status: WorkspaceProject['status']; statuses: WorkspaceProject['status'][];
   onOpenChange: (value: boolean) => void; onSelect: (status: WorkspaceProject['status']) => void;
 }) => {
+  useLocale();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   useEffect(() => {
     if (!open) return;
@@ -17,13 +21,13 @@ export const ProjectStatusMenu = ({ open, status, statuses, onOpenChange, onSele
     return () => { window.removeEventListener('resize', close); window.removeEventListener('scroll', onScroll, true); };
   }, [open, onOpenChange]);
   return <div className="relative" onClick={event => event.stopPropagation()}>
-    <button aria-label="修改项目状态" aria-haspopup="menu" aria-expanded={open} onClick={event => {
+    <button aria-label={t("ui.change.project.status.2eb185")} aria-haspopup="menu" aria-expanded={open} onClick={event => {
       const next = !open; const rect = event.currentTarget.getBoundingClientRect();
       window.dispatchEvent(new Event('photoflow-menu-open'));
       setPosition({ x: rect.left, y: rect.bottom + 4 }); onOpenChange(next);
     }} className="flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-600 hover:bg-blue-100">{projectStatusLabel(status)} <ChevronDown size={14}/></button>
     {open && createPortal(<ViewportContextMenu x={position.x} y={position.y} widthClass="w-36">
-      {statuses.map(value => <button key={value} role="menuitem" onClick={() => onSelect(value)} className={`project-menu-item ${value === status ? 'bg-blue-50 font-bold text-blue-600' : ''}`}>{projectStatusLabel(value)}{value === status ? '（当前）' : ''}</button>)}
+      {statuses.map(value => <button key={value} role="menuitem" onClick={() => onSelect(value)} className={`project-menu-item ${value === status ? 'bg-blue-50 font-bold text-blue-600' : ''}`}>{projectStatusLabel(value)}{value === status ? t("ui.current.58d8cd") : ''}</button>)}
     </ViewportContextMenu>, document.body)}
   </div>;
 };

@@ -1,3 +1,5 @@
+import { useLocale } from "../i18n/react";
+import { t } from "../i18n/runtime";
 type Props = {
   value: number;
   minimumVisible?: number;
@@ -6,8 +8,9 @@ type Props = {
 };
 
 export const ProgressBar = ({ value, minimumVisible = 0, trackClassName, barClassName }: Props) => {
+  useLocale();
   const determinate = Number.isFinite(value);
   const normalized = Math.min(100, Math.max(0, determinate ? value : 0));
   const percentage = normalized > 0 ? Math.max(minimumVisible, normalized) : 0;
-  return <div role="progressbar" aria-label={determinate ? '进度' : '正在处理'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={determinate ? normalized : undefined} className={trackClassName}><div className={barClassName} style={{ width: `${percentage}%` }}/></div>;
+  return <div role="progressbar" aria-label={determinate ? t("ui.progress.f81ff5") : t("ui.processing.3b7e27")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={determinate ? normalized : undefined} className={trackClassName}><div className={barClassName} style={{ width: `${percentage}%` }}/></div>;
 };

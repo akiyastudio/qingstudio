@@ -1,3 +1,5 @@
+const { localizeDialogOptions } = require("../services/localization.cjs");
+const { t: translateNative } = require("../services/localization.cjs");
 const { applicationHostFor, sendToApplicationRenderers } = require('../services/application-windows.cjs');
 const path = require('path');
 
@@ -21,7 +23,7 @@ const registerArchiveIpc = ({ archiveService, dialog, getMainWindow, ipcMain: el
     return { success: true, queued: true, accepted: true, taskId: result.taskId, deduplicated: Boolean(result.deduplicated) };
   };
   ipcMain.handle('archive-choose-target', async (_event, currentPath = '') => {
-    const result = await dialog.showOpenDialog(getMainWindow(), { title: '选择 PhotoFlow 项目归档盘', defaultPath: currentPath || undefined, properties: ['openDirectory', 'createDirectory'] });
+    const result = await dialog.showOpenDialog(getMainWindow(), localizeDialogOptions({ title: translateNative("native.fb79caa1aeeb"), defaultPath: currentPath || undefined, properties: ['openDirectory', 'createDirectory'] }));
     if (result.canceled || !result.filePaths[0]) return { cancelled: true };
     return { cancelled: false, path: archiveService.approveTarget(result.filePaths[0]) };
   });

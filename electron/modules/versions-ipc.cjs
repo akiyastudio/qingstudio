@@ -1,3 +1,5 @@
+const { localizeDialogOptions } = require("../services/localization.cjs");
+const { t: translateNative } = require("../services/localization.cjs");
 const { registerVersionTrackingIpc } = require('./version-tracking-ipc.cjs');
 const { getProtectedProjectFolderRegistry } = require('../services/protected-project-folder.cjs');
 
@@ -1017,11 +1019,11 @@ const registerVersionIpc = context => {
       if (force && (!pendingDecision || pendingDecision.expiresAt <= now)) throw new Error('重新定位确认已失效，请重新选择文件');
       let filePath = request.filePath ? path.resolve(request.filePath) : '';
       if (!filePath) {
-        const choice = await dialog.showOpenDialog(mainWindow, {
-          title: '重新定位版本文件',
+        const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({
+          title: translateNative("native.89028bf55687"),
           properties: ['openFile'],
-          filters: [{ name: '图片和视频', extensions: [...new Set([...IMAGE_EXTENSIONS, ...RAW_EXTENSIONS, ...VIDEO_EXTENSIONS])].map(value => value.slice(1)) }, { name: '所有文件', extensions: ['*'] }]
-        });
+          filters: [{ name: translateNative("native.1a3617edf78a"), extensions: [...new Set([...IMAGE_EXTENSIONS, ...RAW_EXTENSIONS, ...VIDEO_EXTENSIONS])].map(value => value.slice(1)) }, { name: translateNative("ui.all.files.ec36ca"), extensions: ['*'] }]
+        }));
         if (choice.canceled || !choice.filePaths.length) return { success: true, cancelled: true, versions: [] };
         filePath = path.resolve(choice.filePaths[0]);
       }

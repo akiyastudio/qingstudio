@@ -1,3 +1,6 @@
+import { LocalizedText } from "../../i18n/LocalizedText";
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -25,26 +28,27 @@ import { PanelTaskScope, useTaskCenter } from '../background-tasks/TaskCenter';
 import { isActivePresentedBackgroundTaskForPanel, panelTaskSessionKey } from '../background-tasks/panel-task-session-model';
 
 const TOOL_MODAL_DETAILS: Record<string, { description: string; icon: React.ReactNode }> = {
-  import: { description: '分析 SD 卡素材并导入当前项目。', icon: <MemoryStick size={18}/> },
-  'negative-import': { description: '从文件或文件夹导入并登记原始素材。', icon: <Aperture size={18}/> },
-  broll: { description: '批量导入图片与视频花絮。', icon: <FolderInput size={18}/> },
-  'file-import': { description: '从当前文件夹或右键菜单进入，目标目录已确定。', icon: <FileInput size={18}/> },
-  match: { description: '按完整文件名预检，确认后再复制。', icon: <FileText size={18}/> },
-  research: { description: '识别视频转场并挑选清晰画面。', icon: <Video size={18}/> },
-  'video-transcode': { description: '转换视频封装、编码、画质与音频。', icon: <Gauge size={18}/> },
-  'video-split': { description: '批量将视频无损切成约 3.95 GB 的连续分段。', icon: <Cut size={18}/> },
-  converter: { description: '批量将常见图片格式转换为 JPG。', icon: <ImageIcon size={18}/> },
-  'screenshot-main-image': { description: '先分析候选范围，确认后再生成主图。', icon: <Crop size={18}/> },
-  'office-extract': { description: '提取 Word、PowerPoint 或 Excel 中的图片。', icon: <FileImage size={18}/> },
-  trash: { description: '将整个项目及其内容移入系统回收站。', icon: <Trash2 size={18}/> },
-  'version-create': { description: '创建可跟踪的图片或视频版本节点。', icon: <FolderPlus size={18}/> },
-  'version-create-next': { description: '从当前版本创建下一版本或可跟踪分支。', icon: <ArrowRight size={18}/> },
-  'version-import': { description: '将已有项目文件夹登记为可跟踪版本。', icon: <FolderInput size={18}/> },
-  'version-modify': { description: '修改版本信息与跟踪策略。', icon: <GitBranch size={18}/> },
-  'folder-mark': { description: '将文件夹标记为原始素材、进度或花絮。', icon: <GitBranch size={18}/> },
+  import: { get description() { return t("ui.analyze.sd.card.media.and.import.fab2c4"); }, icon: <MemoryStick size={18}/> },
+  'negative-import': { get description() { return t("ui.import.files.or.folders.and.register.4d2f65"); }, icon: <Aperture size={18}/> },
+  broll: { get description() { return t("ui.batch.import.behind.the.scenes.images.3fc252"); }, icon: <FolderInput size={18}/> },
+  'file-import': { get description() { return t("ui.opened.from.the.current.folder.or.688211"); }, icon: <FileInput size={18}/> },
+  match: { get description() { return t("ui.check.full.file.names.before.copying.84181d"); }, icon: <FileText size={18}/> },
+  research: { get description() { return t("ui.detect.scene.transitions.and.choose.clear.bd6c70"); }, icon: <Video size={18}/> },
+  'video-transcode': { get description() { return t("ui.convert.video.containers.codecs.quality.and.b8761f"); }, icon: <Gauge size={18}/> },
+  'video-split': { get description() { return t("ui.split.videos.losslessly.into.consecutive.segments.25565c"); }, icon: <Cut size={18}/> },
+  converter: { get description() { return t("ui.batch.convert.common.image.formats.to.eea4ce"); }, icon: <ImageIcon size={18}/> },
+  'screenshot-main-image': { get description() { return t("ui.analyze.candidate.areas.then.generate.main.0cd512"); }, icon: <Crop size={18}/> },
+  'office-extract': { get description() { return t("ui.extract.images.from.word.powerpoint.or.8d7dbf"); }, icon: <FileImage size={18}/> },
+  trash: { get description() { return t("ui.move.the.entire.project.and.its.fa0f74"); }, icon: <Trash2 size={18}/> },
+  'version-create': { get description() { return t("ui.create.tracked.image.or.video.version.5104df"); }, icon: <FolderPlus size={18}/> },
+  'version-create-next': { get description() { return t("ui.create.the.next.version.or.a.3235e7"); }, icon: <ArrowRight size={18}/> },
+  'version-import': { get description() { return t("ui.register.an.existing.project.folder.as.31b3b8"); }, icon: <FolderInput size={18}/> },
+  'version-modify': { get description() { return t("ui.edit.version.information.and.tracking.policy.351728"); }, icon: <GitBranch size={18}/> },
+  'folder-mark': { get description() { return t("ui.mark.a.folder.as.original.media.77fdfa"); }, icon: <GitBranch size={18}/> },
 };
 
 export const ToolModal = ({ title, ownerPageId, panelKind, open, busy = false, useBackgroundTaskBusyFallback = true, onClose, children }: { title: string; ownerPageId: string; panelKind: string; open: boolean; busy?: boolean; useBackgroundTaskBusyFallback?: boolean; onClose: () => void; children: React.ReactNode }) => {
+  useLocale();
   const { backgroundTasks, panelTasks, reportPanelTask, dismissPanelTask } = useTaskCenter();
   const backdropRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -113,14 +117,14 @@ export const ToolModal = ({ title, ownerPageId, panelKind, open, busy = false, u
   }, [busy, dismissPanelTask, ownerPageId, panelKind, reportBusyAsPanelTask, reportPanelTask, task, taskKey, title]);
 
   const detail = TOOL_MODAL_DETAILS[panelKind];
-  return createPortal(<div ref={backdropRef} aria-hidden={!open} className={open ? 'tool-panel-backdrop fixed inset-x-0 bottom-0 top-10 z-[360] flex cursor-default items-center justify-center p-4' : 'hidden'}><PanelTaskScope ownerPageId={ownerPageId} panelKind={panelKind} title={title}><section ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} className="tool-panel-window flex max-h-[90vh] w-full max-w-[960px] flex-col overflow-hidden border bg-white"><header className="tool-panel-header flex shrink-0 items-center gap-3 border-b border-slate-200 px-5"><span className="tool-panel-title-icon flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-blue-50 text-blue-600">{detail?.icon}</span><div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-bold text-slate-800">{title}</h3>{detail?.description && <p className="mt-0.5 truncate text-[10px] text-slate-400">{detail.description}</p>}</div><button type="button" onClick={onClose} aria-label={effectiveBusy ? '收起到后台' : '关闭'} title={effectiveBusy ? '收起到后台，任务会继续运行' : '关闭'} className={`rounded-md text-slate-500 hover:bg-slate-100 ${effectiveBusy ? 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold' : 'p-1.5'}`}>{effectiveBusy ? <><Minimize2 size={15}/>收起到后台</> : <X size={18}/>}</button></header><div className="tool-panel-body min-h-0 flex-1 overflow-y-auto p-[22px]">{children}</div></section></PanelTaskScope></div>, document.body);
+  return createPortal(<div ref={backdropRef} aria-hidden={!open} className={open ? 'tool-panel-backdrop fixed inset-x-0 bottom-0 top-10 z-[360] flex cursor-default items-center justify-center p-4' : 'hidden'}><PanelTaskScope ownerPageId={ownerPageId} panelKind={panelKind} title={title}><section ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} className="tool-panel-window flex max-h-[90vh] w-full max-w-[960px] flex-col overflow-hidden border bg-white"><header className="tool-panel-header flex shrink-0 items-center gap-3 border-b border-slate-200 px-5"><span className="tool-panel-title-icon flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-blue-50 text-blue-600">{detail?.icon}</span><div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-bold text-slate-800">{title}</h3>{detail?.description && <p className="mt-0.5 truncate text-[10px] text-slate-400">{detail.description}</p>}</div><button type="button" onClick={onClose} aria-label={effectiveBusy ? t("ui.minimize.to.background.a466fe") : t("common.close")} title={effectiveBusy ? t("ui.minimize.to.background.the.task.keeps.8f7ffd") : t("common.close")} className={`rounded-md text-slate-500 hover:bg-slate-100 ${effectiveBusy ? 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold' : 'p-1.5'}`}>{effectiveBusy ? <><Minimize2 size={15}/>{t("ui.minimize.to.background.a466fe")}</> : <X size={18}/>}</button></header><div className="tool-panel-body min-h-0 flex-1 overflow-y-auto p-[22px]">{children}</div></section></PanelTaskScope></div>, document.body);
 };
 
-export const ImportCompletionNotice = ({ message, onClose }: { message: string; onClose: () => void }) => (
+export const ImportCompletionNotice = ({ message, onClose }: { message: string; onClose: () => void }) => { useLocale(); return ((
   <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50/70 px-6 py-10 text-center">
     <CheckCircle2 size={42} className="text-emerald-600"/>
-    <p className="mt-4 text-lg font-bold text-slate-800">导入完成</p>
-    <p className="mt-2 text-sm text-slate-600">{message}</p>
-    <button type="button" onClick={onClose} className="dialog-primary mt-6">关闭</button>
+    <p className="mt-4 text-lg font-bold text-slate-800">{t("ui.import.complete.d613fe")}</p>
+    <p className="mt-2 text-sm text-slate-600"><LocalizedText value={message}/></p>
+    <button type="button" onClick={onClose} className="dialog-primary mt-6">{t("common.close")}</button>
   </div>
-);
+)); };

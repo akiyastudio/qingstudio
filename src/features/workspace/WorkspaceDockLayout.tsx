@@ -1,7 +1,10 @@
+import { WORKSPACE_PANEL_LABELS } from "../../i18n/built-in-labels";
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { useEscapeLayer } from '../../components/LayerProvider';
 import { ColumnResizeHandle } from '../app/AppShellLayout';
-import { movePanelBefore, panelDropBefore, PANEL_LAYOUT_CHANGED_EVENT, WORKSPACE_PANEL_LABELS, type WorkspacePanelId } from './workspace-panel-model';
+import { movePanelBefore, panelDropBefore, PANEL_LAYOUT_CHANGED_EVENT, type WorkspacePanelId } from './workspace-panel-model';
 
 type DockDrag = { source: WorkspacePanelId; line: number; valid: boolean };
 export const WorkspaceDockLayout = ({ containerRef, order, visible, onReorder, onResize, children, labels: customLabels = {} }: {
@@ -13,6 +16,7 @@ export const WorkspaceDockLayout = ({ containerRef, order, visible, onReorder, o
   onResize: (left: WorkspacePanelId, right: WorkspacePanelId, delta: number) => void;
   children: ReactNode;
 }) => {
+  useLocale();
   const labels = { ...WORKSPACE_PANEL_LABELS, ...customLabels };
   const [drag, setDrag] = useState<DockDrag | null>(null);
   const [announcement, setAnnouncement] = useState('');
@@ -107,9 +111,9 @@ export const WorkspaceDockLayout = ({ containerRef, order, visible, onReorder, o
     setAnnouncement(`${labels[source]}面板位置已调整`);
   }}>
     {children}
-    {visible.slice(1).map((right, index) => <div key={right} className="workspace-panel-boundary" style={{ order: order.indexOf(right) * 2 - 1 }}><ColumnResizeHandle label={`调整${labels[visible[index]]}和${labels[right]}宽度`} onDrag={delta => onResize(visible[index], right, delta)}/></div>)}
-    {!visible.length && <div className="m-auto p-6 text-center text-sm text-slate-400">面板已隐藏，可通过顶部“面板”按钮重新显示。</div>}
-    {drag && <div className="workspace-panel-drag-overlay" aria-hidden="true"><span className="workspace-panel-drag-label">移动{labels[drag.source]} · Esc 取消</span>{drag.valid && <span className="workspace-panel-drop-line" style={{ left: drag.line }}/>}</div>}
+    {visible.slice(1).map((right, index) => <div key={right} className="workspace-panel-boundary" style={{ order: order.indexOf(right) * 2 - 1 }}><ColumnResizeHandle label={t("ui.resize.value0.and.value1.66d7ae", { value0: labels[visible[index]], value1: labels[right] })} onDrag={delta => onResize(visible[index], right, delta)}/></div>)}
+    {!visible.length && <div className="m-auto p-6 text-center text-sm text-slate-400">{t("ui.panel.hidden.show.it.again.using.6bcc58")}</div>}
+    {drag && <div className="workspace-panel-drag-overlay" aria-hidden="true"><span className="workspace-panel-drag-label">{t("message.72b4d5f20eea", { value0: labels[drag.source] })}</span>{drag.valid && <span className="workspace-panel-drop-line" style={{ left: drag.line }}/>}</div>}
     <span role="status" aria-live="polite" className="sr-only">{announcement}</span>
   </div>;
 };

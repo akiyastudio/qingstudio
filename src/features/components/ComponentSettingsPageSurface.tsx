@@ -1,3 +1,6 @@
+import { renderText } from "../../i18n/messages";
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useEffect, useRef, useState } from 'react';
 import type { ComponentSettingsPageContribution } from '../../types';
 
@@ -12,6 +15,7 @@ type ComponentSettingsPageSurfaceProps = {
 const hiddenBounds = { x: 0, y: 0, width: 0, height: 0 };
 
 export const ComponentSettingsPageSurface = ({ page, onError, onReady, visible = true }: ComponentSettingsPageSurfaceProps) => {
+  useLocale();
   const surfaceRef = useRef<HTMLDivElement>(null);
   const onErrorRef = useRef(onError);
   const onReadyRef = useRef(onReady);
@@ -66,5 +70,5 @@ export const ComponentSettingsPageSurface = ({ page, onError, onReady, visible =
     };
   }, [instanceId, visible]);
 
-  return <div ref={surfaceRef} aria-label={`${page.pageTitle} 组件设置页`} className="pf-canvas h-full w-full"/>;
+  return <div ref={surfaceRef} aria-label={t("ui.value0.component.settings.0fd2ca", { value0: renderText(page.pageTitle) })} className="pf-canvas h-full w-full"/>;
 };

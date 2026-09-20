@@ -2,6 +2,23 @@ import { useEffect, useState } from 'react';
 import type { WorkspaceWindowContext } from '../../contracts/workspace-windows';
 import { BACKGROUND_TASK_DRAWER_STORAGE_KEY } from './app-shell-layout-model';
 
+export const useSidebarToggleShortcut = (toggleSidebar: () => void) => {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || event.defaultPrevented || event.isComposing
+        || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable
+        || target.closest('input, textarea, select, [role="textbox"]'))) return;
+      if (document.querySelector('[aria-modal="true"], dialog[open]')) return;
+      event.preventDefault();
+      if (!event.repeat) toggleSidebar();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toggleSidebar]);
+};
+
 export const useSidebarWidthPersistence = (sidebarWidth: number) => {
   useEffect(() => {
     window.localStorage.setItem('photoflow:sidebar-width', String(Math.round(sidebarWidth)));

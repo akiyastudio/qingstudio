@@ -1,3 +1,4 @@
+import { normalizeLanguage, setLanguage, t } from './i18n/runtime';
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
@@ -27,6 +28,8 @@ const renderApp = () => ReactDOM.createRoot(document.getElementById('root')!).re
   </React.StrictMode>,
 )
 void initializeWorkspaceWindow().then(async () => {
+  const savedLanguageConfig = await window.electronAPI?.loadConfig?.();
+  setLanguage(normalizeLanguage(savedLanguageConfig?.language, savedLanguageConfig ? 'zh-CN' : 'system'));
   const context = workspaceWindowContext();
   if (context && !context.root) await preloadPageKind(context.seed.kind);
   installPageTransferState(workspaceWindowContext()?.seed.transfer?.state);
@@ -34,5 +37,5 @@ void initializeWorkspaceWindow().then(async () => {
 }).catch(error => {
   console.error('窗口初始化失败', error);
   void window.electronAPI?.workspaceWindows?.ready(String(error.message || error)).catch(() => undefined);
-  document.getElementById('root')!.textContent = '窗口初始化失败，请关闭后重新打开软件。';
+  document.getElementById('root')!.textContent = t('startup.failed');
 });

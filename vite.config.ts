@@ -38,6 +38,14 @@ export default defineConfig({
   build: {
     outDir: 'artifacts/web',
     emptyOutDir: true,
-    rollupOptions: { input: { main: resolve(import.meta.dirname, 'index.html'), toastView: resolve(import.meta.dirname, 'toast-view.html') } },
+    rollupOptions: {
+      input: { main: resolve(import.meta.dirname, 'index.html'), toastView: resolve(import.meta.dirname, 'toast-view.html') },
+      output: {
+        manualChunks: id => {
+          const locale = /\/electron\/locales\/([A-Za-z0-9-]+)\.json$/.exec(id.replaceAll('\\', '/'))?.[1];
+          return locale ? 'locale-' + locale : undefined;
+        },
+      },
+    },
   },
 })

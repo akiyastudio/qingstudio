@@ -1,5 +1,7 @@
 # PhotoFlow component UI contract
 
+English | [简体中文](README.zh-CN.md)
+
 Use `application.settingsForm` for ordinary component preferences. PhotoFlow validates the declaration, renders native settings rows, applies defaults, and persists values through `component.settings` without loading component HTML.
 
 When ordinary preferences also need account authorization, environment installation, or diagnostics, add `customPage` to the same `application.settingsForm`. PhotoFlow keeps one navigation item and renders the native form together with the isolated advanced region. Standalone `application.settingsPage` remains available for pages with no declarative fields. Custom pages should import `component-sdk/ui.css` and call `mountUiTheme()` from `component-sdk/index.js`.
@@ -11,3 +13,7 @@ Declarative field types in schema version 1 are `toggle`, `select`, `text`, `num
 Settings forms may declare `help`, an array of up to 16 plain-text entries with `title` (160 characters) and `description` (2000 characters). Help appears before settings and third-party notices and does not create writable preferences. An informational form can have empty `groups` when it contains at least one help entry or notice.
 
 For an existing native playback session, `host.setPlaybackPaused(sessionId, paused)` sends play/pause directly to the Host player without a component service round trip. It requires `component.runtime.execute` capability and permission, and validates the owning page and project scope. Its promise acknowledges dispatch; use `onPlaybackState` for the actual decoder state. Components supporting older Hosts should feature-detect this method and retain their playback RPC fallback.
+
+## Display language
+
+`getContext()` includes the host display language as `locale`. Subscribe with `mountUiLanguage(onChange)` to update document language and receive subsequent changes without restarting component work. The returned function removes the subscription. Older hosts default to `zh-CN`. Component pages keep their own dictionaries; language changes must not alter project identifiers, file names or stored user data.

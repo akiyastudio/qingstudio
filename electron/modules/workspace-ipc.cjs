@@ -1,3 +1,5 @@
+const { localizeDialogOptions } = require("../services/localization.cjs");
+const { t: translateNative } = require("../services/localization.cjs");
 const { sendToApplicationRenderers } = require('../services/application-windows.cjs');
 const { getProtectedProjectFolderRegistry } = require('../services/protected-project-folder.cjs');
 const { createProjectFileTask } = require('../services/project-file-task-service.cjs');
@@ -1217,7 +1219,7 @@ const registerWorkspaceIpc = context => {
 
   ipcMain.handle('workspace-choose-existing-project', async () => {
     try {
-      const choice = await dialog.showOpenDialog(mainWindow, { title: '选择已有项目文件夹', properties: ['openDirectory'] });
+      const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({ title: translateNative("native.ba101b418a48"), properties: ['openDirectory'] }));
       if (choice.canceled || !choice.filePaths.length) return { success: true, cancelled: true };
       const inspection = await inspectExistingProject(choice.filePaths[0]);
       return { success: true, ...inspection, inspectionToken: cacheExistingProjectInspection(inspection) };

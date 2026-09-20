@@ -1,0 +1,15 @@
+{
+  "baseLanguage": "zh-CN",
+  "languages": [
+    {
+      "id": "zh-CN",
+      "name": "简体中文",
+      "direction": "ltr"
+    },
+    {
+      "id": "en-US",
+      "name": "English",
+      "direction": "ltr"
+    }
+  ]
+}

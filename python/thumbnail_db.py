@@ -1169,7 +1169,10 @@ class ThumbnailDatabase:
                         root_index += 1
                     entry_offset = 0
                 else:
-                    entry_offset = max(entry_offset, current_offset)
+                    # A restarted iterator can find a new name before the old
+                    # offset. Report its actual position so subsequent replay
+                    # pages advance instead of appearing stalled at that offset.
+                    entry_offset = current_offset
                 if inserted_count or not exhausted:
                     break
             scan_rows = self.connection.execute(

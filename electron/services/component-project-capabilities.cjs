@@ -1,3 +1,5 @@
+const { localizeDialogOptions } = require("./localization.cjs");
+const { t: translateNative } = require("./localization.cjs");
 const { sendToRequestingRenderer } = require('./application-windows.cjs');
 const { requestAppConfirmation } = require('./app-dialog-confirmation.cjs');
 const { COMPONENT_HOST_ERROR_CODES: CODES, hostError } = require('../contracts/component-host-errors.cjs');
@@ -404,7 +406,7 @@ const registerComponentProjectCapabilities = ({
     };
     if (requested.has('thumbnail')) await requestVariant('thumbnail', 320);
     if (requested.has('preview')) await requestVariant('preview', 1600);
-    if (requested.has('original')) result.original = { url: originalUrl, byteLength: stat.size, derived: false };
+    if (requested.has('original')) result.original = { url: originalUrl, byteLength: stat.size, derived: false, sourceRevision: crypto.createHash('sha256').update(JSON.stringify([String(stat.dev), String(stat.ino), stat.size, stat.mtimeMs, stat.ctimeMs])).digest('hex') };
     for (const variant of Object.values(result)) context.grantMediaUrl?.(variant.url);
     const input = requested.has('original') ? grantInput(media.filePath, descriptor, context) : null;
     return {
@@ -1150,11 +1152,11 @@ const registerComponentProjectCapabilities = ({
     if (!['openFiles', 'openDirectory'].includes(payload.kind)) throw hostError(CODES.INVALID_REQUEST, 'Unknown safe dialog kind');
     const extensions = [...new Set((payload.extensions || []).map(value => String(value).replace(/^\./, '').toLowerCase()).filter(value => /^[a-z0-9]{1,12}$/.test(value)))].slice(0, 64);
     const selectingDirectory = payload.kind === 'openDirectory';
-    const choice = await dialog.showOpenDialog(mainWindow, {
-      title: String(payload.title || (selectingDirectory ? '选择输入文件夹' : '选择输入文件')).slice(0, 120),
+    const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({
+      title: String(payload.title || (selectingDirectory ? translateNative("native.af1af22e7558") : translateNative("native.81309f7e827a"))).slice(0, 120),
       properties: selectingDirectory ? ['openDirectory'] : ['openFile', ...(payload.multiple === false ? [] : ['multiSelections'])],
-      ...(!selectingDirectory && extensions.length ? { filters: [{ name: '允许的文件', extensions }] } : {}),
-    });
+      ...(!selectingDirectory && extensions.length ? { filters: [{ name: translateNative("native.393fbf1996b1"), extensions }] } : {}),
+    }));
     if (choice.canceled) return { cancelled: true, inputs: [] };
     pruneExpiringMaps(fs, Date.now());
     const availableTokens = Math.max(0, MAX_INPUT_TOKENS - inputGrants.size);

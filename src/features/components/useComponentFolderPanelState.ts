@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { usePageState } from '../../platform/page-transfer-state';
 import { componentWorkspacePanelId, type ComponentWorkspacePanelId } from '../../contracts/workspace-panels';
 import type { ComponentContribution } from '../../types';
-import type { PanelControl } from '../workspace/useWorkspacePanelControls';
+import type { PanelControl } from '../../contracts/workspace-panels';
 import { componentPanelTaskKind } from '../background-tasks/panel-task-session-model';
 
 export const useComponentFolderPanelState = (pageId: string, kind: string, contributions: ComponentContribution[], active = true) => {

@@ -1,3 +1,6 @@
+import { LocalizedText } from "../../i18n/LocalizedText";
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useScopedPageState } from '../../platform/page-transfer-state';
 import { File, FileImage, FileVideo, Folder, Loader2, Search, X } from 'lucide-react';
@@ -897,7 +900,7 @@ const discoverSources = async (config: AppConfig): Promise<{ sources: GlobalSear
   const sources: GlobalSearchSource[] = inspirationRoot ? [{
     id: `inspiration:${normalizePathKey(inspirationRoot)}`,
     kind: 'inspiration' as const,
-    label: '灵感库',
+    label: t("ui.inspiration.library.9ac871"),
     workspacePath: inspirationRoot,
     project: {
       id: `inspiration:${inspirationRoot}`,
@@ -1000,6 +1003,7 @@ export const SearchAllPage = ({ active, config, onOpenFolder, onNotice }: {
   onOpenFolder: (source: GlobalSearchSource, relativePath: string) => void;
   onNotice: (message: string, durationOrTone?: number | 'info' | 'success' | 'warning' | 'error') => void;
 }) => {
+  useLocale();
   const [query, setQuery] = useScopedPageState('search:query', '');
   const [debouncedQuery, setDebouncedQuery] = useScopedPageState('search:debouncedQuery', '');
   const [groups, setGroups] = useState<SearchGroup[]>([]);
@@ -1242,24 +1246,24 @@ export const SearchAllPage = ({ active, config, onOpenFolder, onNotice }: {
     <header className="shrink-0 border-b border-slate-200 bg-white px-7 py-5">
       <div className="mx-auto max-w-6xl">
         <div className="flex items-center justify-between gap-4">
-          <div><h1 className="text-xl font-bold text-slate-900">全局搜索</h1><p className="mt-1 text-xs text-slate-500">检索所有项目工作目录与灵感库中的文件</p></div>
-          {loading && <p role="status" aria-live="polite" className="flex shrink-0 items-center gap-2 text-xs text-blue-600"><Loader2 size={14} className="animate-spin"/>正在检索 {completedSources}/{sourceCount || '…'}</p>}
+          <div><h1 className="text-xl font-bold text-slate-900">{t("ui.global.search.f1c10d")}</h1><p className="mt-1 text-xs text-slate-500">{t("ui.search.all.project.workspaces.and.inspiration.081527")}</p></div>
+          {loading && <p role="status" aria-live="polite" className="flex shrink-0 items-center gap-2 text-xs text-blue-600"><Loader2 size={14} className="animate-spin"/>{t("message.42f2848525ab", { value0: completedSources, value1: sourceCount || '…' })}</p>}
         </div>
         <div className="mt-4 flex h-11 items-center gap-3 rounded-xl border border-slate-300 bg-slate-50 px-4 shadow-sm focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100">
           <Search size={19} className="shrink-0 text-slate-400"/>
-          <input ref={inputRef} value={query} onChange={event => setQuery(event.target.value)} placeholder="输入文件名关键词" aria-label="全局搜索文件" className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"/>
-          {query && <button type="button" onClick={() => setQuery('')} aria-label="清除搜索" title="清除搜索" className="rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"><X size={16}/></button>}
+          <input ref={inputRef} value={query} onChange={event => setQuery(event.target.value)} placeholder={t("ui.enter.file.name.keywords.a150e4")} aria-label={t("ui.search.all.files.6b6b24")} className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"/>
+          {query && <button type="button" onClick={() => setQuery('')} aria-label={t("ui.clear.search.ee32f2")} title={t("ui.clear.search.ee32f2")} className="rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"><X size={16}/></button>}
         </div>
-        {debouncedQuery && <p role="status" aria-live="polite" className="mt-3 text-xs text-slate-500">{loading ? '已找到' : '找到'} <span className="font-bold text-slate-700">{resultCount}</span> 个文件{groupsFinalized ? `，分布在 ${groupCount} 个文件夹中` : ''}{degraded ? '（兼容磁盘索引）' : ''}</p>}
-        {error && <p role="alert" className="mt-2 text-xs text-amber-600">{error}</p>}
+        {debouncedQuery && <p role="status" aria-live="polite" className="mt-3 text-xs text-slate-500">{loading ? t("ui.found.de03ee") : t("ui.found.0ccc28")} <span className="font-bold text-slate-700">{resultCount}</span> {t("message.90fd6e784f7d", { count: resultCount, value0: groupsFinalized ? t("legacy.message.3b9f977492e2", { value0: groupCount }) : '', value1: degraded ? t("ui.compatible.disk.index.87ec9e") : '' })}</p>}
+        {error && <p role="alert" className="mt-2 text-xs text-amber-600"><LocalizedText value={error}/></p>}
       </div>
     </header>
     <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-7 py-5">
       <div ref={resultContentRef} className="mx-auto max-w-6xl pb-8">
-        {!debouncedQuery && <div className="flex min-h-[360px] items-center justify-center text-center"><div><span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-500"><Search size={30}/></span><h2 className="mt-5 text-base font-bold text-slate-700">查找项目中的任意文件</h2><p className="mt-2 text-sm text-slate-400">输入文件名关键词，结果会按项目和文件夹整理</p></div></div>}
-        {debouncedQuery && loading && !windowHitCount && <p className="py-20 text-center text-sm text-slate-400"><Loader2 size={18} className="mr-2 inline animate-spin"/>正在搜索全部位置…</p>}
-        {debouncedQuery && !loading && !resultCount && <div className="py-20 text-center"><Search size={32} className="mx-auto text-slate-300"/><p className="mt-4 text-sm text-slate-500">没有找到包含“{debouncedQuery}”的文件</p></div>}
-        <div role="list" aria-label="全局搜索结果">
+        {!debouncedQuery && <div className="flex min-h-[360px] items-center justify-center text-center"><div><span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-500"><Search size={30}/></span><h2 className="mt-5 text-base font-bold text-slate-700">{t("ui.find.any.file.in.your.projects.b8b487")}</h2><p className="mt-2 text-sm text-slate-400">{t("ui.enter.file.name.keywords.results.are.817a4b")}</p></div></div>}
+        {debouncedQuery && loading && !windowHitCount && <p className="py-20 text-center text-sm text-slate-400"><Loader2 size={18} className="mr-2 inline animate-spin"/>{t("ui.searching.all.locations.9de4cc")}</p>}
+        {debouncedQuery && !loading && !resultCount && <div className="py-20 text-center"><Search size={32} className="mx-auto text-slate-300"/><p className="mt-4 text-sm text-slate-500">{t("message.07220178fa1a", { value0: debouncedQuery })}</p></div>}
+        <div role="list" aria-label={t("ui.global.search.results.e63bed")}>
           <div aria-hidden="true" style={{ height: virtualWindow.topSpacer }}/>
           <div className="grid w-full content-start gap-x-3" style={{ gridTemplateColumns: `repeat(${virtualWindow.columns}, minmax(0, 1fr))` }}>
             {windowHits.map(({ group, entry }, windowIndex) => {
@@ -1269,7 +1273,7 @@ export const SearchAllPage = ({ active, config, onOpenFolder, onNotice }: {
                   <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-slate-200/80"><SearchResultIcon entry={entry} config={config} queueOrder={windowIndex}/></div>
                   <p className="mt-2 truncate text-xs font-medium text-slate-700">{entry.name}</p><p className="mt-0.5 truncate text-[10px] uppercase text-slate-400">{entryTypeLabel(entry)}</p>
                 </button>
-                <button type="button" onClick={() => void openFolder(group)} title={`打开 ${group.source.label} / ${group.folderPath || '项目根目录'}`} className="mt-1 flex w-full min-w-0 items-center gap-1 px-2 text-left text-[10px] text-slate-400 hover:text-blue-600"><Folder size={11} className="shrink-0"/><span className="truncate">{group.source.label} / {group.folderPath || '项目根目录'}</span></button>
+                <button type="button" onClick={() => void openFolder(group)} title={t("ui.open.value0.value1.91fe29", { value0: group.source.label, value1: group.folderPath || t("ui.project.root.3db07c") })} className="mt-1 flex w-full min-w-0 items-center gap-1 px-2 text-left text-[10px] text-slate-400 hover:text-blue-600"><Folder size={11} className="shrink-0"/><span className="truncate">{group.source.label} / {group.folderPath || t("ui.project.root.3db07c")}</span></button>
               </div>;
             })}
           </div>

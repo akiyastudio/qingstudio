@@ -1,3 +1,5 @@
+import { useLocale } from "../i18n/react";
+import { t } from "../i18n/runtime";
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, SyntheticEvent } from 'react';
 import { Play } from 'lucide-react';
@@ -19,6 +21,7 @@ type VideoHoverThumbnailProps = {
 };
 
 const VideoHoverThumbnail = ({ src, poster, name, large, initialRatio, onError }: VideoHoverThumbnailProps) => {
+  useLocale();
   const videoRef = useRef<HTMLVideoElement>(null);
   const onErrorRef = useRef(onError);
   const ratioRef = useRef(initialRatio);
@@ -124,7 +127,7 @@ const VideoHoverThumbnail = ({ src, poster, name, large, initialRatio, onError }
     <video ref={videoRef} key={src} src={src} muted playsInline preload="auto" poster={poster} draggable={false} className="h-full w-full object-contain" onLoadedMetadata={event => setDuration(event.currentTarget.duration)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={restartPlayback} onError={() => onErrorRef.current()}/>
     {!playing && <Play size={large ? 25 : 15} fill="currentColor" className="pointer-events-none absolute text-white drop-shadow-[0_1px_4px_rgba(0,0,0,.8)]"/>}
     {duration > 0 && <span className="absolute inset-x-0 bottom-0 z-10 flex items-center gap-1.5 bg-gradient-to-t from-black/85 to-black/20 px-2 pb-1.5 pt-3" onMouseMove={event => event.stopPropagation()} onPointerMove={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
-      <input type="range" min="0" max={duration} step="0.05" value={Math.min(time, duration)} onChange={seekVideo} aria-label={`调整 ${name} 的播放进度`} className="video-hover-seek min-w-0 flex-1" style={{ '--seek-progress': `${progress}%` } as React.CSSProperties}/>
+      <input type="range" min="0" max={duration} step="0.05" value={Math.min(time, duration)} onChange={seekVideo} aria-label={t("ui.seek.in.value0.eba703", { value0: name })} className="video-hover-seek min-w-0 flex-1" style={{ '--seek-progress': `${progress}%` } as React.CSSProperties}/>
     </span>}
   </span>;
 };

@@ -1,3 +1,7 @@
+import { legacyNoticeMessage, renderMessage, sameLocalizedMessage, type LocalizedMessage } from '../../i18n/messages';
+import { t } from "../../i18n/runtime";
+import { getLocale } from '../../i18n/runtime';
+import { useLocale } from '../../i18n/react';
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { useHostRendererToken } from '../../components/LayerProvider';
@@ -7,7 +11,7 @@ import { hostNoticeTone, topToastTonePolicy, topToastTonePresentation } from './
 
 export type ToastTone = NonNullable<TopToastNotice['tone']>;
 export type ToastLifecycle = 'auto' | 'persistent';
-export interface ToastOptions { tone?: ToastTone; dedupeKey?: string; lifecycle?: ToastLifecycle; durationMs?: number }
+export interface ToastOptions { localizedMessage?: LocalizedMessage; tone?: ToastTone; dedupeKey?: string; lifecycle?: ToastLifecycle; durationMs?: number }
 export interface ToastUpdate extends ToastOptions { message?: string }
 export interface ToastHandle { readonly id: number; update: (update: string | ToastUpdate) => void; dismiss: () => void }
 export interface ToastActivityHandle extends ToastHandle {
@@ -64,7 +68,7 @@ export const TopToastProvider = ({ children }: { children: ReactNode }) => {
     const target = typeof idOrKey === 'number' ? noticesRef.current.find(notice => notice.id === idOrKey) : noticesRef.current.find(notice => notice.dedupeKey === idOrKey);
     if (!target) return;
     const patch = typeof value === 'string' ? { message: value } : value;
-    const message = (patch.message ?? target.message).trim() || '发生未知错误';
+    const message = (patch.message ?? (patch.localizedMessage ? renderMessage(patch.localizedMessage) : target.message)).trim() || '发生未知错误';
     const tone = patch.tone || target.tone || hostNoticeTone(message);
     const lifecycle = patch.lifecycle || (target.persistent ? 'persistent' : 'auto');
     const dedupeKey = patch.dedupeKey ?? target.dedupeKey;
@@ -73,7 +77,7 @@ export const TopToastProvider = ({ children }: { children: ReactNode }) => {
     const policy = schedule(target.id, { ...patch, lifecycle }, tone);
     commit(current => {
       const retained = current.filter(notice => notice.id !== target.id && notice.id !== conflict?.id);
-      const result = upsertTopToastNotice(retained, { ...target, ...policy, message, tone, dedupeKey });
+      const result = upsertTopToastNotice(retained, { ...target, ...policy, localizedMessage: patch.localizedMessage ?? (patch.message !== undefined ? legacyNoticeMessage(message) : target.localizedMessage), message, tone, dedupeKey });
       clearTopToastNoticeTimers(timersRef.current, result.evictedIds, timer => window.clearTimeout(timer));
       return result.notices;
     });
@@ -81,6 +85,7 @@ export const TopToastProvider = ({ children }: { children: ReactNode }) => {
   const show = useCallback((rawMessage: string, rawOptions?: ToastOptions | ToastTone | number): ToastHandle => {
     const message = rawMessage.trim() || '发生未知错误';
     const options = normalizeOptions(message, rawOptions);
+    const localizedMessage = options.localizedMessage ?? legacyNoticeMessage(message);
     const tone = options.tone || hostNoticeTone(message);
     const existing = options.dedupeKey ? noticesRef.current.find(notice => notice.dedupeKey === options.dedupeKey) : undefined;
     if (existing) {
@@ -89,14 +94,14 @@ export const TopToastProvider = ({ children }: { children: ReactNode }) => {
     }
     const defaultDuration = topToastTonePolicy(tone).durationMs;
     const persistentDuplicate = !options.dedupeKey && (options.lifecycle === 'persistent' || (options.durationMs === undefined && defaultDuration === null))
-      ? noticesRef.current.find(notice => notice.persistent && notice.message === message)
+      ? noticesRef.current.find(notice => notice.persistent && !notice.sourceComponentId && (localizedMessage && notice.localizedMessage ? sameLocalizedMessage(localizedMessage, notice.localizedMessage) : notice.message === message))
       : undefined;
     if (persistentDuplicate) {
       commit(current => current.map(notice => notice.id === persistentDuplicate.id ? { ...notice, count: notice.count + 1 } : notice));
       return { id: persistentDuplicate.id, update: value => update(persistentDuplicate.id, value), dismiss: () => dismiss(persistentDuplicate.id) };
     }
     const id = ++sequenceRef.current;
-    const incoming: TopToastNotice = { id, message, tone, dedupeKey: options.dedupeKey, count: 1, ...schedule(id, options, tone) };
+    const incoming: TopToastNotice = { id, message, localizedMessage, tone, dedupeKey: options.dedupeKey, count: 1, ...schedule(id, options, tone) };
     commit(current => {
       const result = upsertTopToastNotice(current, incoming);
       clearTopToastNoticeTimers(timersRef.current, result.evictedIds, timer => window.clearTimeout(timer));
@@ -166,6 +171,7 @@ export const TopToastViewport = () => {
   const { notices, stackRef } = context;
   const presentation = useFileTransferToastPresentation();
   const [nativePresentationVisible, setNativePresentationVisible] = useState(false);
+  const language = useLocale();
   const snapshotRevisionRef = useRef(0);
   const snapshotFrameRef = useRef<number | null>(null);
   const snapshotContentRef = useRef({ notices, visibleTasks: presentation.visibleTasks, overflowCount: presentation.overflowCount });
@@ -182,6 +188,7 @@ export const TopToastViewport = () => {
     const latest = snapshotContentRef.current;
     void window.electronAPI.updateToastView({
       revision,
+      language: getLocale(),
       dark: document.documentElement.classList.contains('dark'),
       top: hasContent && rect ? Math.max(0, Math.round(rect.top)) : 0,
       width: viewWidth,
@@ -195,7 +202,7 @@ export const TopToastViewport = () => {
     if (snapshotFrameRef.current !== null) return;
     snapshotFrameRef.current = window.requestAnimationFrame(flushSnapshot);
   }, [flushSnapshot]);
-  useLayoutEffect(scheduleSnapshot, [notices, presentation.overflowCount, presentation.visibleTasks, scheduleSnapshot]);
+  useLayoutEffect(scheduleSnapshot, [language, notices, presentation.overflowCount, presentation.visibleTasks, scheduleSnapshot]);
   useEffect(() => {
     const stack = stackRef.current;
     if (!stack) return;
@@ -228,14 +235,15 @@ export const TopToastViewport = () => {
   }, []);
   const nativeOwnsPresentation = nativePresentationVisible;
   const reflowKey = JSON.stringify({
-    notices: notices.map(notice => [notice.id, notice.message, notice.count]),
+    language,
+    notices: notices.map(notice => [notice.id, notice.localizedMessage ? renderMessage(notice.localizedMessage) : notice.message, notice.count]),
     tasks: presentation.visibleTasks.map(task => [task.id, task.state]),
     overflow: presentation.overflowCount > 0,
   });
   return <>
     <div ref={stackRef} className={`top-toast-stack${nativeOwnsPresentation ? ' top-toast-stack--model' : ''}`} data-toast-view-model aria-hidden={nativeOwnsPresentation ? 'true' : undefined}>
       {notices.map(notice => { const presentation = topToastTonePresentation(notice.tone || 'info'); const ToneIcon = presentation.icon === 'check' ? CheckCircle2 : presentation.icon === 'warning' ? AlertTriangle : presentation.icon === 'error' ? XCircle : Info; return <div key={notice.id} data-top-toast-id={`notice:${notice.id}`} data-toast-tone={presentation.tone} role={presentation.role} aria-live={presentation.ariaLive} className="app-notice-toast animate-in fade-in slide-in-from-top-2">
-        <ToneIcon size={16} aria-hidden="true" className="app-notice-toast__tone-icon shrink-0"/><span className="app-notice-toast__message">{notice.message}{notice.count > 1 && <span className="app-notice-toast__count">×{notice.count}</span>}</span><button type="button" onClick={() => context.api.dismiss(notice.id)} aria-label="关闭提示" title="关闭提示" className="app-notice-toast__dismiss"><X size={15}/></button>
+        <ToneIcon size={16} aria-hidden="true" className="app-notice-toast__tone-icon shrink-0"/><span className="app-notice-toast__message">{notice.localizedMessage ? renderMessage(notice.localizedMessage) : notice.message}{notice.count > 1 && <span className="app-notice-toast__count">×{notice.count}</span>}</span><button type="button" onClick={() => context.api.dismiss(notice.id)} aria-label={t("ui.dismiss.notice.d301bc")} title={t("ui.dismiss.notice.d301bc")} className="app-notice-toast__dismiss"><X size={15}/></button>
       </div>; })}
       <FileTransferToast stackRef={stackRef} presentation={presentation} reflowKey={reflowKey}/>
     </div>

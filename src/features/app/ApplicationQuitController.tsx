@@ -1,3 +1,5 @@
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useAppDialog } from '../../components/AppDialogProvider';
@@ -6,6 +8,7 @@ import type { ApplicationQuitState } from '../../types';
 import { flushApplicationBeforeQuit } from './application-quit-client';
 
 export const ApplicationQuitController = () => {
+  useLocale();
   const dialog = useAppDialog();
   const [state, setState] = useState<ApplicationQuitState>({ phase: 'idle' });
   const [showSaving, setShowSaving] = useState(false);
@@ -32,9 +35,9 @@ export const ApplicationQuitController = () => {
       const detail = tasks.slice(0, 5).map(task => `• ${task.title || '未命名任务'}（${labels[task.state] || '未完成'}）`).join('\n')
         + (tasks.length > 5 ? `\n另有 ${tasks.length - 5} 个任务` : '');
       const confirmed = !tasks.length || await dialog.confirm({
-        title: '确认退出', message: '还有任务未完成，确定要退出吗？',
-        detail: `退出后，以下任务将停止：\n${detail}`,
-        confirmLabel: '仍然退出', cancelLabel: '暂不退出', tone: 'danger', priority: true,
+        title: t("ui.confirm.exit.ab942a"), message: t("ui.there.are.unfinished.tasks.exit.anyway.4f4169"),
+        detail: t("ui.these.tasks.will.stop.when.you.0a0ce3", { value0: detail }),
+        confirmLabel: t("ui.exit.anyway.147b9a"), cancelLabel: t("ui.stay.c27b13"), tone: 'danger', priority: true,
       });
       if (!confirmed) {
         await window.electronAPI.respondToApplicationQuit(requestId, false);
@@ -61,9 +64,9 @@ export const ApplicationQuitController = () => {
     <section ref={surface} tabIndex={-1} onKeyDown={event => { if (event.key === 'Tab') { event.preventDefault(); (surface.current?.querySelector<HTMLButtonElement>('button') || surface.current)?.focus(); } }} role="dialog" aria-modal="true" aria-labelledby="application-quit-title" className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl">
       <div className="flex items-center gap-3">
         <Loader2 className="animate-spin text-blue-500" size={20}/>
-        <h3 id="application-quit-title" className="font-bold text-slate-800">正在保存并结束任务</h3>
+        <h3 id="application-quit-title" className="font-bold text-slate-800">{t("ui.saving.and.finishing.tasks.18478a")}</h3>
       </div>
-      <p className="mt-3 text-sm leading-6 text-slate-500">请稍候，完成必要的保存后会自动关闭。</p>
+      <p className="mt-3 text-sm leading-6 text-slate-500">{t("ui.please.wait.the.application.will.close.0038d8")}</p>
     </section>
   </div>;
 };

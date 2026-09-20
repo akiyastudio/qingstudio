@@ -1,10 +1,12 @@
-# 声明式设置示例
+# Declarative settings example
 
-当前 `component.json` 演示“工具页面 + Host 服务 + 声明式设置”。这一结构仍受支持：工具页面调用服务，设置表单由主程序根据插件声明渲染。无需修改此示例的服务和 UI 来适配纯设置页支持。
+English | [简体中文](README.zh-CN.md)
 
-## 只需要设置入口时
+The current `component.json` demonstrates a tool page, Host service, and declarative settings. This remains supported: the tool page calls the service, while the host renders the declared settings form. No service or UI changes are needed to accommodate settings-only support.
 
-已有运行库或命令行插件若不需要工具页面，可将清单中的 `componentHost` 声明为下面的结构。它不包含 `workspace.toolbarAction`、`component.fullPage` 或 `service`：
+## When only a settings entry is needed
+
+A runtime or command-line plugin without a tool page can use this `componentHost` value. It omits `workspace.toolbarAction`, `component.fullPage`, and `service`:
 
 ```json
 {
@@ -13,19 +15,19 @@
     {
       "type": "application.settingsForm",
       "id": "settings",
-      "label": "运行库设置",
-      "title": "运行库设置",
+      "label": "Runtime settings",
+      "title": "Runtime settings",
       "form": {
         "schemaVersion": 1,
         "groups": [
           {
             "id": "general",
-            "title": "常规",
+            "title": "General",
             "fields": [
               {
                 "id": "enabled",
                 "type": "toggle",
-                "label": "启用自动处理",
+                "label": "Enable automatic processing",
                 "default": true
               }
             ]
@@ -37,16 +39,16 @@
 }
 ```
 
-这段内容是 `componentHost` 的值，不是完整组件清单。保留插件实际使用的顶层 `entrypoints`、运行文件和平台声明；运行库入口与 Host UI 服务是两回事。同步移除不再使用的 `requiredFiles` 和开发文件映射，不要留下指向已删除 UI 或服务文件的声明。设置保存到该组件独立的 `componentSettings` 中，不会启动服务；插件实际执行功能时自行使用这些参数，声明表单本身不会添加处理逻辑。
+This is the value of `componentHost`, not a complete manifest. Retain the top-level `entrypoints`, runtime files, and platform declarations the plugin actually uses; a runtime entry is different from a Host UI service. Remove unused `requiredFiles` and development mappings so no declaration refers to deleted UI or service files. Values are saved in the component's own `componentSettings` without starting a service. The plugin must use those values when it runs; declaring a form does not add processing behavior.
 
-只有全部贡献均为 `application.settingsForm`、且没有 `customPage` 时，才能省略 Host 服务。需要自定义页面或 RPC 时，继续使用现有的服务和权限声明。
+A Host service may be omitted only when every contribution is `application.settingsForm` and none has a `customPage`. Keep the service and permission declarations when custom pages or RPC are needed.
 
-## 图标和许可
+## Icons and notices
 
-图标使用顶层 `icon` 声明包内文件，开发映射及打包内容应包含该文件。主程序从插件注册列表读取名称、设置页和图标，不需要修改侧栏代码。
+Declare the packaged icon through top-level `icon`, and include it in development mappings and package contents. The host reads the name, settings pages, and icon from the component registry; sidebar code does not need changes.
 
-第三方软件说明可放在 `form.notices` 中，每项包含 `title`、`description`、`license`、`sourceUrl`、`licenseUrl`。链接必须是无凭据的 HTTPS 地址。仅展示许可的页面可以使用 `groups: []`，但至少要有一条 notice；所有版本和许可内容应填写该插件实际使用的依赖信息。
+Use `form.notices` for third-party notices, with `title`, `description`, `license`, `sourceUrl`, and `licenseUrl`. URLs must use HTTPS without credentials. A notices-only page may use `groups: []` but must have at least one notice. Use the versions and licenses of the dependencies the plugin actually includes.
 
-实现标准视频播放后端的插件可按能力声明 `form.preferenceScope: "videoPlayback"`，访问共享播放器的 `hdrMode`、`toneMapping`、`targetPeakNits` 显示偏好。Host 校验字段和后端能力。普通插件应省略此字段，使用独立组件设置。
+A standard video-playback backend may declare `form.preferenceScope: "videoPlayback"` to access the shared player's `hdrMode`, `toneMapping`, and `targetPeakNits` display preferences, subject to Host field and backend-capability validation. Ordinary plugins omit this field and use isolated component settings.
 
-完整约定见 [插件开发说明](../../docs/PLUGIN_DEVELOPMENT.md)。
+See the [development guide](../../docs/PLUGIN_DEVELOPMENT.md) for the full contract.

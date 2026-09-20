@@ -11,6 +11,7 @@ export type ToastViewPresentation = {
 };
 
 export type ToastViewSnapshot = {
+  language?: import('../../i18n/runtime').Locale;
   revision: number;
   dark: boolean;
   top: number;

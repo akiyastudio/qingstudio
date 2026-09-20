@@ -1,3 +1,4 @@
+const applicationLocalization = require('./services/localization.cjs');
 const { app, BrowserWindow, WebContentsView, View, ipcMain: electronIpcMain, Menu, shell, dialog: nativeDialog, protocol, nativeImage, clipboard, screen, safeStorage, session, net: electronNet } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -703,13 +704,6 @@ const getUserBirthdaysPath = () => {
   return path.join(getConfigDir(), 'birthdays.json');
 };
 
-const getResourceBirthdaysPath = () => {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'python', 'birthdays.json');
-  }
-  return path.join(__dirname, '../python/birthdays.json');
-};
-
 // 获取系统盘符列表
 
 const WORKSPACE_STATUSES = ['未分类', '策划中', '待拍摄', '后期中', '已归档'];
@@ -1172,6 +1166,7 @@ app.whenReady().then(async () => {
   const deletedCaptureTimeCacheFiles = await cleanupRetiredCaptureTimeCache({ app, fs, path, onError: nativeConsoleError });
   writeLog('info', 'Application started', { version: app.getVersion(), packaged: app.isPackaged, platform: process.platform, deletedExpiredLogFiles: deletedLogFiles, deletedCaptureTimeCacheFiles });
   const savedStartupConfig = readSavedConfig() || {};
+  applicationLocalization.setLanguage(applicationLocalization.normalizeLanguage(savedStartupConfig.language, Object.keys(savedStartupConfig).length ? 'zh-CN' : 'system'), app.getLocale());
   const savedCacheDirectory = String(savedStartupConfig.mediaCache?.directory || '').trim();
   if (savedCacheDirectory) approvedMediaCacheDirectories.add(path.resolve(savedCacheDirectory));
   const startupMediaCacheConfig = {
@@ -1242,7 +1237,7 @@ app.whenReady().then(async () => {
   registerComponentHostIpc({ ipcMain, manager: componentViewManager, mainWindow });
   const componentRpcIpcMain = createComponentRpcIpcProxy({ ipcMain, manager: componentViewManager });
 
-  const { componentTransactionReady } = registerSystemIpc({ Array, Boolean, BrowserWindow, Date, Error, JSON, Object, String, abortComponentNetworkRequests, app, approvedMediaCacheDirectories, backgroundTasks, checkForUpdates, clearComponentSecretData, componentCapabilityBroker, componentServiceManager, componentViewManager, configMutationService, console, crypto, dialog, domainCommandJournal, domainHealthService, exiftoolPath, filePublicationService, fileSystemService, findLatestPhotoshop, fs, getConfigPath, getLogDir, getResourceBirthdaysPath, getRunConfig, getUserBirthdaysPath, ipcMain: componentRpcIpcMain, mainWindow, mediaRuntimeState, openAllowedExternalUrl, path, pluginService, privacyService, process, processSupervisor, readSavedConfig, releaseWorkspaceWatchPath, screen, shell, spawn, suppressWorkspaceWatchPath, telemetryService, thumbnailService, undefined, writeLog });
+  const { componentTransactionReady } = registerSystemIpc({ Array, Boolean, BrowserWindow, Date, Error, JSON, Object, String, abortComponentNetworkRequests, app, approvedMediaCacheDirectories, backgroundTasks, checkForUpdates, clearComponentSecretData, componentCapabilityBroker, componentServiceManager, componentViewManager, configMutationService, console, crypto, dialog, domainCommandJournal, domainHealthService, exiftoolPath, filePublicationService, fileSystemService, findLatestPhotoshop, fs, getConfigPath, getLogDir, getRunConfig, getUserBirthdaysPath, ipcMain: componentRpcIpcMain, mainWindow, mediaRuntimeState, openAllowedExternalUrl, path, pluginService, privacyService, process, processSupervisor, readSavedConfig, releaseWorkspaceWatchPath, screen, shell, spawn, suppressWorkspaceWatchPath, telemetryService, thumbnailService, undefined, writeLog });
   await componentTransactionReady;
   for (const descriptor of componentHostRegistry.list()) componentCapabilityBroker.assertCapabilities(descriptor);
   registerWorkspaceIpc({ getReadyProjectPath, Array, Boolean, CANCELLED_CODE, Date, Error, HIDDEN_SYSTEM_ENTRY_NAMES, IMAGE_EXTENSIONS, Math, Number, Object, Promise, RAW_EXTENSIONS, Set, String, VIDEO_EXTENSIONS, WORKSPACE_STATUSES, activeProjectFileOperations, acquireFileRootWatcher, app, assertDiskSpace, assertExistingInside, assertInside, assertRegularFile, assertUndoIdentity, backgroundTasks, cancelMediaTrackingScan, capturePathIdentity, cleanProjectName, clipboard, collectCopyPlan, copyFileAtomic, copyPlannedFiles, componentServiceManager, crypto, dialog, ensureWorkspace, extractVideoTimelineFrames, fileSystemService, findLatestPhotoshop, fs, getProjectPath, getWorkspaceDataRoot, ipcMain: componentRpcIpcMain, mainWindow, mediaRuntimeState, mediaService, moveFileAtomic, movePathAtomic, publishPathNoClobber, mutateWorkspaceCatalog, normalizeMediaCacheSizeGB, path, pathExists, pluginService, projectVirtualPaths, pushUndoOperation, removeUndoOperation, reconcileWorkspaceCatalog, recycleBinService, refreshWorkspaceCatalog, releaseFileRootWatcher, releaseWorkspaceWatchPath, removeCopiedSources, renameHistory, resolveProjectEntry, resolveWorkspaceRoot, resumeFileRootWatcher, runPythonJsonAction, samePathIdentity, scheduleMediaTrackingScan, shell, shellNewService, spawn, suspendFileRootWatcher, suppressWorkspaceWatchPath, telemetryService, thumbnailService, throwIfCancelled, undefined, uniqueDestination, versionService, watchWorkspace, workspaceCatalogs, workspaceMaintenanceRepository, workspaceRepository, writeLog });

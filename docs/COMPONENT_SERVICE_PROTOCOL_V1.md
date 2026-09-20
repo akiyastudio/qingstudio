@@ -1,5 +1,7 @@
 # Component Service Protocol V1
 
+English | [简体中文](COMPONENT_SERVICE_PROTOCOL_V1.zh-CN.md)
+
 Component Service Protocol V1 is the current process transport used by
 Component Host V2. The protocol version describes the JSON Lines envelope; it
 is independent from the unversioned current Host API and
@@ -35,13 +37,14 @@ The authoritative vocabulary is `HostCapabilityMap` in
   `project.input.tokens`, `project.media.metadata`, `project.media.ratings`,
   `project.media.ratings.write`, `project.media.process`;
 - project files and versions: `project.files.page`, `project.files.search`,
-  `project.files.mutate`, `project.versions.page`, `project.version.graph`,
+  `project.files.inputToken`, `project.files.watch`, `project.files.mutate`, `project.versions.page`, `project.version.graph`,
   `project.version.update`, `project.version.delete`, `project.progress`,
   `project.progress.manage`, `project.import`, `project.output`, `version.create`;
 - component services: `component.storage`, `component.settings`,
   `component.events`, `component.lifecycle`, `component.media`,
-  `component.runtime.execute`, `component.secrets`, `network.fetch`;
-- host interaction: `tasks`, `dialogs`, `notifications`.
+  `component.runtime.execute`, `component.secrets`, `component.transfer`,
+  `component.panel`, `network.fetch`;
+- host interaction: `tasks`, `dialogs`, `notifications`, `project.preview`.
 
 Capability names are stable Host API method names and do not carry `.vN`.
 Component-owned RPC methods and emitted component events remain explicitly
@@ -91,8 +94,7 @@ the destination paths. Project content is written only through transactional
 Host API capabilities such as `project.output`, `version.create`,
 `project.files.mutate` or the bounded import/progress capabilities.
 
-Legacy data is accepted only through explicit adoption grants and compatibility
-adapters. New component business tables, routes and fields must not be added to
+Legacy data is accepted only through migration paths authorized by explicit adoption grants. New component business tables, routes and fields must not be added to
 the host database or general Electron modules.
 
 ## Sources of truth

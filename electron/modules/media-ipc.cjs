@@ -1,3 +1,5 @@
+const { localizeDialogOptions } = require("../services/localization.cjs");
+const { t: translateNative } = require("../services/localization.cjs");
 const { createBatchedSliceMetricsReporter, runSlicedMaintenance } = require('../services/sliced-maintenance-runner.cjs');
 
 const registerMediaIpc = context => {
@@ -146,7 +148,7 @@ const registerMediaIpc = context => {
   });
 
   ipcMain.handle('choose-cache-directory', async () => {
-    const choice = await dialog.showOpenDialog(mainWindow, { title: '选择缩略图缓存目录', properties: ['openDirectory', 'createDirectory'] });
+    const choice = await dialog.showOpenDialog(mainWindow, localizeDialogOptions({ title: translateNative("native.71a5ac555465"), properties: ['openDirectory', 'createDirectory'] }));
     if (!choice.canceled && choice.filePaths[0]) approvedMediaCacheDirectories.add(path.resolve(choice.filePaths[0]));
     return choice.canceled ? { cancelled: true } : { path: choice.filePaths[0] };
   });

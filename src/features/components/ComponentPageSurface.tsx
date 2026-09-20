@@ -1,7 +1,10 @@
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useEffect, useRef } from 'react';
 import type { ComponentPageInstance } from '../../types';
 
 export const ComponentPageSurface = ({ page, active }: { page: ComponentPageInstance; active: boolean }) => {
+  useLocale();
   const surfaceRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!page.instanceId || !active) return;
@@ -25,5 +28,5 @@ export const ComponentPageSurface = ({ page, active }: { page: ComponentPageInst
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, [active, page.instanceId]);
-  return <div ref={surfaceRef} aria-label={`${page.title} 组件页面`} className={active ? 'h-full w-full bg-white' : 'hidden'}/>;
+  return <div ref={surfaceRef} aria-label={t("ui.value0.component.page.9249fb", { value0: page.title })} className={active ? 'h-full w-full bg-white' : 'hidden'}/>;
 };

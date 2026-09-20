@@ -1,5 +1,7 @@
 # Component installation transactions
 
+English | [简体中文](COMPONENT_TRANSACTIONS.zh-CN.md)
+
 The component platform protects ordinary application crashes, conflicting host
 operations, and accidental deletion outside owned paths. It does not attempt to
 make its private JSON files tamper-proof against another process running as the
@@ -87,12 +89,8 @@ paths contained in retired receipts. Unknown files are preserved. There is no
 GC marker or separate GC transaction. Filtered recovery never sweeps another
 component's admission directory.
 
-## Verification
+## Verification scope
 
-`npm run test:component-transactions` covers interrupted publication, interrupted
-rollback, real child-process exits, Host commit failure, partial deletion,
-user-data cleanup retry, invalid ownership, state replacement failure, metadata
-cleanup failure, large receipts and concurrent operations/recovery.
+The upstream component transaction suite covers interrupted publication and rollback, real child-process exits, Host commit failures, partial deletion, user-data cleanup retries, invalid ownership, state replacement failures, metadata cleanup failures, large receipts, and concurrent operations/recovery. The upstream component release gate includes these tests; lifecycle, quit, Host API, and Windows Job Object suites cover surrounding boundaries.
 
-The component release gate includes these tests. The unchanged lifecycle, quit,
-Host API and Windows Job Object suites cover the surrounding safety boundaries.
+Those upstream suite commands are not provided by this public checkout. Available commands are listed in `package.json` and the root README. No local verification was run for this source update.

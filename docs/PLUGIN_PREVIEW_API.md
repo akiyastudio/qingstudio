@@ -1,39 +1,39 @@
-# 文件夹面板、播放联动与通用预览解码器
+# Folder panels, playback integration, and preview decoders
 
-本页描述当前源码接口。具体字幕解析、PSD、DOCX 等解码算法由插件实现，主程序负责挂载面板、提供预览状态、执行跳转和显示解码结果。
+English | [简体中文](PLUGIN_PREVIEW_API.zh-CN.md)
 
-## 文件夹页面的常驻面板
+This page describes current source interfaces. Plugins implement subtitle parsing and decoders such as PSD or DOCX. The host mounts panels, provides preview state, handles seeking, and displays decoded output.
 
-在已有 `component.sidePanel` contribution 上声明：
+## Persistent folder-page panels
+
+Declare a placement on an existing `component.sidePanel` contribution:
 
 ```json
 {
   "type": "component.sidePanel",
   "id": "subtitles",
-  "label": "字幕",
+  "label": "Subtitles",
   "pageId": "subtitle-ui",
   "placement": "workspace.folderPanel",
   "rpcMethods": ["subtitle.load.v1"]
 }
 ```
 
-仍需声明引用的 `component.fullPage`。插件面板直接加入文件夹、预览、详细信息使用的统一面板列表，不再单独分组。菜单和顶部栏共享固定/关闭状态，支持与原生面板混合拖动排序、Alt+左右键排序、相邻边界缩放。多个插件面板可同时显示；关闭或切换文件页时隐藏视图，重新打开保留正文实例，关闭来源页或卸载时释放。固定状态、排序和宽度会保存；未固定面板会和原生预览一样在点击文件区空白处时收起。“恢复默认布局”统一重置顺序/宽度，恢复原生面板并收起默认关闭的插件面板。
+Declare the referenced `component.fullPage` too. Plugin panels join the same list as folder, preview, and details panels. Menus and headers share pin/close state; panels support mixed native/plugin drag ordering, Alt+Left/Right ordering, and adjacent-edge resizing. Multiple plugin panels can appear together. Closing a panel or switching file pages hides its view while retaining the body instance; closing its source page or uninstalling releases it. Pin state, order, and width are persisted. In the current source, new plugin panels are open by default, and blank-space clicks do not collapse them. Restore defaults resets order/width, restores native panels, and opens plugin panels unpinned.
 
-顶部栏由主程序共用的 `WorkspacePanelHeader` 绘制，插件只绘制正文。清单 `label` 是菜单名，`title` 是标题，`description` 是默认副标题。需要更新当前文档信息时，声明 `component.panel` capability 和同名 permission，再调用：
+The host's shared `WorkspacePanelHeader` draws the header; plugins draw only the body. Manifest `label` is the menu label, `title` the heading, and `description` the default subtitle. To show current document information, declare both capability and permission `component.panel`:
 
 ```ts
-await host.setPanelInfo({ title: '字幕', subtitle: '当前视频 · 120 行字幕' });
+await host.setPanelInfo({ title: 'Subtitles', subtitle: 'Current video · 120 lines' });
 ```
 
-服务也可 `callHost(parentId, 'component.panel', {action:'update',title,subtitle})`，或 `{action:'get'}` 读取信息。只允许当前文件夹面板修改自己的纯文本标题（1–160 字符）和副标题（0–240 字符）；布局位置、固定状态及标准按钮由用户和主程序控制。不要在正文里重复创建顶部栏、关闭按钮或宽度滑杆。
+Services can call `callHost(parentId, 'component.panel', {action:'update',title,subtitle})` or read with `{action:'get'}`. Only the current folder panel may change its own plain-text title (1–160 characters) and subtitle (0–240). Layout, pin state, and standard controls belong to the user and host. Do not duplicate headers, close buttons, or width sliders in the body.
 
-切换目录或选择项后重新绑定 scope/selection，UI 通过已有 `onContextChange` 接收更新。`workspace.folderPanel` 只允许 `component.sidePanel` 使用，不改变旧浮动面板和 `workspace.videoTools` 的行为。
+Directory or selection changes rebind scope/selection and reach the UI through `onContextChange`. `workspace.folderPanel` is exclusive to `component.sidePanel`; floating panels and `workspace.videoTools` keep their existing behavior.
 
-## 当前视频、播放位置和跳转
+## Current video, position, and seeking
 
-声明 `project.preview` capability 和 `project.preview.read` permission；需要跳转时再声明 `project.preview.control`。仅具有来源文件页的项目/灵感库组件上下文可用，不对全局设置页开放。
-
-UI 可以直接使用 SDK：
+Declare capability `project.preview` and permission `project.preview.read`; seeking additionally needs `project.preview.control`. This applies only to project/inspiration component contexts with a source file page, never global settings.
 
 ```ts
 const stop = await host.onPreviewChange(({ video }) => {
@@ -41,21 +41,18 @@ const stop = await host.onPreviewChange(({ video }) => {
     clearSubtitleHighlight();
     return;
   }
-  // sessionId 变化表示预览会话变化，应重新匹配和读取字幕。
+  // A new sessionId means a new preview session: rematch and read subtitles.
   selectSubtitlesFor(video.relativePath, video.sessionId);
   highlightSubtitleAt(video.time);
 });
-
 const snapshot = await host.getPreview();
 if (snapshot.video?.canSeek) {
   await host.seekPreview(snapshot.video.sessionId, subtitleStartSeconds);
 }
-// 页面退出时调用 stop()。
+// Call stop() when leaving the page.
 ```
 
-服务也可 `callHost(parentId, 'project.preview', {action:'get'})` 或 `{action:'seek',sessionId,time}`。subscribe/unsubscribe 需要存活组件页面；普通字幕 UI 优先使用 SDK 通知方法。
-
-快照形状：
+Services can call `project.preview` with `{action:'get'}` or `{action:'seek',sessionId,time}`. Subscribe/unsubscribe requires a live component page; ordinary subtitle UIs should use SDK notifications.
 
 ```ts
 {
@@ -63,59 +60,59 @@ if (snapshot.video?.canSeek) {
   video: null | {
     sessionId: string,
     relativePath: string,
-    time: number,       // 秒
-    duration: number,   // 秒
+    time: number,       // seconds
+    duration: number,   // seconds
     paused: boolean,
     canSeek: boolean
   }
 }
 ```
 
-位置约每 250ms 发布一次，同时反映暂停和时长；打开、切换或关闭视频会更新快照。尚未加载、预览关闭、切到非视频或视频不在插件 scope 内时可能返回 null/canSeek:false。此频率适合字幕行高亮，不保证逐帧同步。消息只含项目相对路径，不公开本地播放进程 ID、原生窗口或物理路径。
+Position is published approximately every 250 ms with pause and duration state. Opening, switching, or closing a video updates the snapshot. Unloaded/closed previews, non-video selection, or out-of-scope video can return `null` or `canSeek:false`. This is suitable for subtitle highlighting, not frame-accurate synchronization. Messages contain only project-relative paths, with no player PID, native handle, or physical path.
 
-状态按应用窗口、来源文件页、工作区、项目及插件 scope 隔离。seek 必须带刚读到的 sessionId，视频已切换、不可跳转或时间越界时返回冲突；三秒没有收到页面回执则超时。`accepted:true` 表示同一预览会话接受了跳转请求，最终位置以之后的播放状态为准。Chromium 和原生视频后端复用同一播放器跳转入口。
+State is isolated by application window, source page, workspace, project, and plugin scope. Seek must carry the recently read session ID. Changed sessions, non-seekable media, or out-of-range times conflict; lack of a page acknowledgment times out after three seconds. `accepted:true` confirms that the same preview session accepted the request; subsequent playback state gives the final position. Chromium and native backends share the player seek entry point.
 
-## 任意输入格式的解码器
+## Decoders for any input format
 
-清单的 `componentHost.service.previewDecoders` 声明解码器。输入扩展名没有固定格式白名单；可以使用任意合法扩展名，包括 Unicode 后缀，也可以使用 `*` 接收无扩展名和未知格式，再由插件检查文件内容。
+Register in `componentHost.service.previewDecoders`. There is no fixed input-format allowlist: any valid extension, including Unicode, is accepted. `*` can receive extensionless and unknown files for content inspection.
 
 ```json
 {
   "id": "documents",
-  "label": "文档预览",
-  "extensions": [".docx", ".psd", ".自定义"],
+  "label": "Document preview",
+  "extensions": [".docx", ".psd", ".custom"],
   "method": "preview.decode.v1",
   "priority": 10
 }
 ```
 
-method 必须出现在 service.rpcMethods 中，宿主会将其列为 host-only 方法，不能暴露给普通组件页面。每组件最多 16 个解码器，每个最多 64 个扩展匹配规则，priority 为 -100～100。同一后缀按优先级、组件 ID 和解码器 ID 确定顺序；明确后缀匹配优先于 `*`。插件卸载或停用后刷新支持列表。
+The method must belong to `service.rpcMethods`; the host marks it host-only, so ordinary component pages cannot expose it. Limits are 16 decoders per component, 64 extension rules per decoder, and priority -100 to 100. Matching order is priority, component ID, then decoder ID; explicit extensions precede `*`. Uninstall/disable refreshes supported formats.
 
-纯解码器允许 `componentHost.contributions:[]`，不必创建空白页面或无用工具栏按钮。仍需要 service 声明和正常组件安装、完整性检查。
+A decoder-only component may use `componentHost.contributions:[]` without empty pages or toolbar buttons. It still requires service declarations, normal installation, and integrity checks.
 
-解码器至少声明 `project.input.tokens`、`component.transfer` capabilities，以及 `project.input.read` permission。每次调用包含：
+Declare at least `project.input.tokens` and `component.transfer`, with permission `project.input.read`. Calls contain:
 
 ```ts
 {
   input: { token: string, expiresAt: number },
   name: string,
   extension: string,
-  pageIndex: number,   // 从 0 开始
-  maxEdge: number      // 请求的最长边，64～4096
+  pageIndex: number,   // zero-based
+  maxEdge: number      // requested longest edge, 64–4096
 }
 ```
 
-1. 用 project.input.tokens 物化 input，得到只给服务使用的输入快照。
-2. 调用插件自带的解析/解码引擎生成请求页的 PNG，宽高都不能超过 maxEdge。
-3. 通过 component.transfer 的 create/write/finish 获得输出输入令牌，然后关闭传输会话。
-4. 返回 `{inputToken,mimeType:'image/png',pageIndex,pageCount}`。每次只返回一页，总页数为 1～10,000。
+1. Materialize the input through `project.input.tokens` into a service-only snapshot.
+2. Decode the requested page into PNG using the plugin's engine. Neither dimension may exceed `maxEdge`.
+3. Use `component.transfer` create/write/finish to obtain an output input-token, then close the session.
+4. Return `{inputToken,mimeType:'image/png',pageIndex,pageCount}`. Return one page per call, with 1–10,000 total pages.
 
-宿主会检查来源 scope、输出令牌归属、PNG 头和尺寸，再实际解码、重新编码为图片交给预览页。输出 PNG 文件最多 32 MiB；不接受插件返回的 HTML、脚本、任意 URL 或物理文件路径。**输入格式可任意扩展，当前输出显示契约是位图预览**；文本选择、原始文档编辑、3D 交互或音频播放不包含在这份静态预览协议中。视频首先使用现有播放器/播放后端；播放失败且存在匹配的静态解码器时可显示其预览。
+The host checks source scope, token ownership, PNG header/dimensions, then decodes and re-encodes the image for display. Output PNGs are limited to 32 MiB. HTML, scripts, arbitrary URLs, and physical paths are rejected. **Input formats are extensible; the current display contract is a bitmap preview.** Text selection, source-document editing, 3D interaction, and audio playback are outside this static protocol. Videos use the existing player/backends first; a matching static decoder can provide a preview if playback fails.
 
-## 点击和失败行为
+## Click and failure behavior
 
-非媒体文件有已启用的匹配解码器时，点击显示预览，不再立即使用系统应用打开。没有匹配解码器则保留原打开行为。普通点击在双击打开模式下也能显示已支持的文件预览；Ctrl/Shift 多选仍遵循文件页原规则。
+Clicking a non-media file with an enabled matching decoder previews it instead of immediately opening a system application. With no decoder, existing open behavior remains. Single-click preview also works in double-click-to-open mode; Ctrl/Shift selection follows file-page rules.
 
-解码失败显示错误、重试和外部打开按钮，不自动启动外部程序。翻页重新请求指定页；快速切换文件时丢弃旧响应，不把旧图片显示到新文件上。每文件页同时只执行一个解码，全宿主最多 8 个；占用期间短暂等待重试。普通服务超时仍为 60 秒。切换文件会停止等待旧结果，但不承诺终止插件已经开始的任意本机解码算法；组件卸载沿用服务监管流程。
+Decode failure shows an error, retry, and external-open button without launching another application automatically. Paging requests the specified page again. Rapid file switches discard stale responses. Each source page allows one active decode, with eight across the host; busy requests wait briefly and retry. Ordinary service timeout remains 60 seconds. Changing files stops waiting for old results but does not promise to terminate arbitrary native decoder work already started. Uninstall uses normal service supervision.
 
-开放接口不等于内置所有解码器。只有实际安装并启用的插件，才能为相应格式提供正确预览。
+An open interface does not include every decoder. Correct format previews require an installed and enabled plugin.

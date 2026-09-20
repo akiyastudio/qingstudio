@@ -1,3 +1,8 @@
+import { retainConfigReferences } from './features/settings/remote-config-model';
+import { localizedMessage } from "./i18n/messages";
+import { t } from "./i18n/runtime";
+import { normalizeLanguage, setLanguage } from './i18n/runtime';
+import { useLocale } from './i18n/react';
 import { lazyPage } from './features/app/lazyPage';
 import { useWorkspaceWindow } from './features/app/useWorkspaceWindow';
 import { useSharedAppTabs } from './features/app/useSharedAppTabs';
@@ -53,6 +58,7 @@ const SearchAllPage = lazyPage<React.ComponentProps<typeof import('./features/se
 type WorkspaceToolKind = 'version';
 // --- 主组件 ---
 const App: React.FC = () => {
+  useLocale();
   const appDialog = useAppDialog();
   const initialWindow = workspaceWindowContext();
   const nativeSeed = initialWindow?.seed;
@@ -321,12 +327,12 @@ const App: React.FC = () => {
         restoreDecisionAttempts += 1;
         const decision = result.requiresDecision;
         const policy = await appDialog.choice({
-          title: '原位置已有同名项目',
+          title: localizedMessage("ui.a.project.with.this.name.already.eacd4b"),
           message: decision.message,
           detail: decision.detail,
           choices: [
-            { value: 'rename', label: '改名恢复' },
-            { value: 'overwrite', label: '覆盖恢复', tone: 'danger' },
+            { value: 'rename', label: localizedMessage("ui.restore.with.a.new.name.dca594") },
+            { value: 'overwrite', label: localizedMessage("ui.replace.and.restore.ac3865"), tone: 'danger' },
           ],
           defaultValue: 'rename',
         });
@@ -357,13 +363,15 @@ const App: React.FC = () => {
     if (config) handleConfigUpdate({ ...config, homeOrder: next });
   };
   const handleConfigUpdate = async (newConfig: AppConfig, options?: { applyAfterSave?: boolean }) => {
-    if (!options?.applyAfterSave) setConfig(newConfig);
+    const applyAfterSave = options?.applyAfterSave || newConfig.language !== config?.language;
+    if (!applyAfterSave) setConfig(newConfig);
     try {
       if (window.electronAPI?.saveConfig) {
         const result = await window.electronAPI.saveConfig(newConfig);
         if (result.success) {
           const savedConfig = result.savedConfig || newConfig;
-          if (options?.applyAfterSave) setConfig(savedConfig);
+          setLanguage(normalizeLanguage(savedConfig.language));
+          if (applyAfterSave) setConfig(current => current ? retainConfigReferences(current, savedConfig) : savedConfig);
           else setConfig(current => current ? { ...current, componentSettings: savedConfig.componentSettings, componentSettingsRevisions: savedConfig.componentSettingsRevisions } : savedConfig);
           console.log('✅ Configuration saved successfully');
           return true;
@@ -373,7 +381,7 @@ const App: React.FC = () => {
           return false;
         }
       }
-      if (options?.applyAfterSave) setConfig(newConfig);
+      if (applyAfterSave) setConfig(newConfig);
       return true;
     } catch (error) {
       window.electronAPI.reportRendererError('保存设置异常', error instanceof Error ? error.stack : String(error));
@@ -515,11 +523,11 @@ const App: React.FC = () => {
     if (closingActiveTab) setActiveTab('project');
   };
   const showHomeTab = () => {
-    if (nativeTabsEnabled && nativeSeed?.kind !== 'home') { openNativeWorkspaceTab({ kind: 'home', label: '主页', key: 'home' }); return; }
+    if (nativeTabsEnabled && nativeSeed?.kind !== 'home') { openNativeWorkspaceTab({ kind: 'home', label: t("ui.home.3e0d67"), key: 'home' }); return; }
     setSelectedProject(null); setProjectDestination(null); setActiveTab('home');
   };
   const openSearchAllTab = () => {
-    if (nativeTabsEnabled) { openNativeWorkspaceTab({ kind: 'search-all', label: '全局搜索', key: 'search-all' }); return; }
+    if (nativeTabsEnabled) { openNativeWorkspaceTab({ kind: 'search-all', label: t("ui.global.search.f1c10d"), key: 'search-all' }); return; }
     setSearchAllTabOpen(true);
     setSelectedProject(null);
     setProjectDestination(null);
@@ -573,14 +581,14 @@ const App: React.FC = () => {
   };
   const { navigationRequests: browserNavigationRequests, openInNewTab: openInspirationDirectoryPage, navigateCurrent: navigateInspiration, sourceDragActive: folderTabSourceDragActive, dropProps: folderTabDropProps } = useFolderTabNavigation({ rootPath: config?.inspirationLibrary.rootPath.trim() || '', pages: projectPages, activePageId, createPage, requestInspirationPath, activateInspiration, openProjectInNewTab: project => openProjectDirectoryPage(project, '') });
   const openSettingsTab = async () => {
-    if (nativeTabsEnabled) { openNativeWorkspaceTab({ kind: 'settings', label: '设置', key: 'settings', settingsSection }); return; }
+    if (nativeTabsEnabled) { openNativeWorkspaceTab({ kind: 'settings', label: t("ui.settings.df3d58"), key: 'settings', settingsSection }); return; }
     if (activeTab === 'component') await componentHost.deactivate(); setSettingsTabOpen(true);
     setActiveTab('settings');
   };
   const openBackupSettings = (project?: WorkspaceProject) => {
     setBackupProjectFocus(project || null);
     setSettingsSection('backup');
-    if (nativeTabsEnabled) { openNativeWorkspaceTab({ kind: 'settings', label: '备份设置', key: 'settings:backup', settingsSection: 'backup', project }); return; }
+    if (nativeTabsEnabled) { openNativeWorkspaceTab({ kind: 'settings', label: t("ui.backup.settings.78a42d"), key: 'settings:backup', settingsSection: 'backup', project }); return; }
     openSettingsTab();
   };
   const closeSettingsTab = () => {
@@ -645,10 +653,10 @@ const App: React.FC = () => {
         <div className="flex flex-col items-center gap-6 text-center">
           <img src="./app-logo.svg" className="brand-logo h-20 w-20" alt="照片流" />
           <div className="space-y-2">
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">照片流</h2>
-            <p className="text-sm text-slate-400">正在启动…</p>
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">{t("ui.photoflow.cae155")}</h2>
+            <p className="text-sm text-slate-400">{t("ui.starting.43f3dc")}</p>
           </div>
-          <span className="win11-spinner" aria-label="正在加载" />
+          <span className="win11-spinner" aria-label={t("ui.loading.f020e4")} />
         </div>
       </div>
       </StartupWindowFrame>
@@ -656,7 +664,7 @@ const App: React.FC = () => {
     );
   }
   if (updateInfo?.mandatory) return <StartupWindowFrame><UpdateModal {...updateInfo} onClose={() => undefined}/></StartupWindowFrame>;
-  if (privacyConsentRequired) return <StartupWindowFrame><PrivacyConsentPage onAccept={acceptInternalBetaPrivacy}/></StartupWindowFrame>;
+  if (privacyConsentRequired) return <StartupWindowFrame><PrivacyConsentPage config={config} onSaveLanguage={language => handleConfigUpdate({ ...config, language }, { applyAfterSave: true })} onAccept={acceptInternalBetaPrivacy}/></StartupWindowFrame>;
   if (config.usagePreferencesVersion < USAGE_PREFERENCES_VERSION) return <StartupWindowFrame><UsagePreferencesOnboarding config={config} onSave={nextConfig => handleConfigUpdate(nextConfig, { applyAfterSave: true })}/></StartupWindowFrame>;
 
   return (
@@ -741,7 +749,7 @@ const App: React.FC = () => {
         />
         <SidebarSettingsButton onClick={openSettingsTab}/></>}
       </aside>
-      {!sidebarCollapsed && <ColumnResizeHandle label="调整项目栏宽度" onDrag={deltaX => setSidebarWidth(width => clampNumber(width + deltaX, 128, 420))}/>}
+      {!sidebarCollapsed && <ColumnResizeHandle label={t("ui.resize.project.sidebar.4b302b")} onDrag={deltaX => setSidebarWidth(width => clampNumber(width + deltaX, 128, 420))}/>}
 
       {/* Main Content */}
       <main aria-busy={Boolean(windowTabs.transferring)} style={windowTabs.transferring ? { pointerEvents: 'none' } : undefined} onKeyDownCapture={event => { if (windowTabs.transferring) { event.preventDefault(); event.stopPropagation(); } }} className={`relative min-w-0 flex-1 bg-slate-50 ${activeTab.startsWith('project') || activeTab === 'search-all' || activeTab === 'inspiration' || activeTab === 'component' || (activeTab === 'settings' && selectedComponentSettingsPage) ? 'overflow-hidden p-0' : activeTab === 'settings' ? 'overflow-auto p-0' : 'overflow-auto p-8'}`}>
@@ -764,13 +772,13 @@ const App: React.FC = () => {
               : <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <button type="button" onClick={openInspirationTab} className="group flex min-w-0 items-center gap-4 rounded-xl border border-slate-200 bg-white px-5 py-5 text-left transition hover:border-blue-400 hover:bg-blue-50 hover:shadow-sm">
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600"><Lightbulb size={22}/></span>
-                    <span className="min-w-0 flex-1"><span className="block text-base font-bold text-slate-800">灵感库</span><span className="mt-1 block truncate text-xs text-slate-500">整理和浏览灵感素材</span></span>
+                    <span className="min-w-0 flex-1"><span className="block text-base font-bold text-slate-800">{t("ui.inspiration.library.9ac871")}</span><span className="mt-1 block truncate text-xs text-slate-500">{t("ui.organize.and.browse.inspiration.media.fe5884")}</span></span>
                     <ChevronRight size={19} className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-500"/>
                   </button>
                   <BackupHomeCard status={backupStatus} onOpen={() => openBackupSettings()} onRun={() => { void window.electronAPI.runBackup(config.workspacePath, 'manual').then(result => { if (!result.success) showNotice(result.error || '无法开始备份', 'error'); else void refreshBackupStatus(); }); }}/>
                   <button type="button" onClick={openSearchAllTab} className="group flex min-w-0 items-center gap-4 rounded-xl border border-slate-200 bg-white px-5 py-5 text-left transition hover:border-blue-400 hover:bg-blue-50 hover:shadow-sm">
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Search size={22}/></span>
-                    <span className="min-w-0 flex-1"><span className="block text-base font-bold text-slate-800">全局搜索</span><span className="mt-1 block truncate text-xs text-slate-500">检索工作目录和灵感库文件</span></span>
+                    <span className="min-w-0 flex-1"><span className="block text-base font-bold text-slate-800">{t("ui.global.search.f1c10d")}</span><span className="mt-1 block truncate text-xs text-slate-500">{t("ui.search.workspace.and.inspiration.library.files.f10750")}</span></span>
                     <ChevronRight size={19} className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-500"/>
                   </button>
                 </div>;
@@ -844,7 +852,7 @@ const App: React.FC = () => {
         {activeTab === 'video_split' && <VideoSplitView />}
       </main>
       {backgroundTaskDrawerOpen && <ColumnResizeHandle
-        label="调整后台任务面板宽度"
+        label={t("ui.resize.background.task.panel.7f64e6")}
         value={renderedBackgroundTaskDrawerWidth}
         minimum={BACKGROUND_TASK_DRAWER_MIN_WIDTH}
         maximum={backgroundTaskDrawerMaximumWidth}

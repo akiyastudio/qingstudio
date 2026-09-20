@@ -1,3 +1,5 @@
+const { localizeDialogOptions } = require("../services/localization.cjs");
+const { t: translateNative } = require("../services/localization.cjs");
 const { applicationHostFor, sendToApplicationRenderers } = require('../services/application-windows.cjs');
 const path = require('path');
 
@@ -26,11 +28,11 @@ const registerBackupIpc = ({ backupService, credentialService, dialog, ipcMain: 
     return domain;
   };
   ipcMain.handle('backup-choose-target', async (_event, currentPath = '') => {
-    const result = await dialog.showOpenDialog(getMainWindow(), {
-      title: '选择 PhotoFlow 备份位置',
+    const result = await dialog.showOpenDialog(getMainWindow(), localizeDialogOptions({
+      title: translateNative("native.2ec6efce7b3f"),
       defaultPath: currentPath || undefined,
       properties: ['openDirectory', 'createDirectory'],
-    });
+    }));
     if (result.canceled || !result.filePaths[0]) return { cancelled: true };
     return { cancelled: false, path: backupService.approveTarget(result.filePaths[0]) };
   });
@@ -149,10 +151,10 @@ const registerBackupIpc = ({ backupService, credentialService, dialog, ipcMain: 
 
   ipcMain.handle('backup-restore-workspace', async (_event, workspacePath, snapshotId) => {
     try {
-      const selected = await dialog.showOpenDialog(getMainWindow(), {
-        title: '选择空文件夹恢复工作区',
+      const selected = await dialog.showOpenDialog(getMainWindow(), localizeDialogOptions({
+        title: translateNative("native.72f2063aaa16"),
         properties: ['openDirectory', 'createDirectory'],
-      });
+      }));
       if (selected.canceled || !selected.filePaths[0]) return { success: false, cancelled: true };
       const result = await backupService.restoreWorkspace(workspacePath, snapshotId, selected.filePaths[0]);
       return { success: true, workspacePath: result?.result?.workspacePath || path.resolve(selected.filePaths[0]), savedConfig: result?.result?.savedConfig };

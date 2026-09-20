@@ -1,3 +1,5 @@
+import { useLocale } from "../../i18n/react";
+import { t } from "../../i18n/runtime";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { ComponentStatus } from '../../types';
@@ -6,12 +8,13 @@ import { useUserFacingToast } from './useUserFacingToast';
 type DomainHealthSnapshot = Awaited<ReturnType<Window['electronAPI']['getDomainHealth']>>;
 
 const DOMAIN_LABELS: Record<string, string> = {
-  workspace: '项目目录', 'workspace-maintenance': '工作区维护', 'file-operations': '文件操作',
-  'media-background': '媒体索引', 'media-interaction': '媒体浏览', 'media-scan': '媒体扫描',
-  'tracking-scan': '版本跟踪', components: '组件数据',
+  get workspace() { return t("ui.project.folders.f1e172"); }, get 'workspace-maintenance'() { return t("ui.workspace.maintenance.d0077c"); }, get 'file-operations'() { return t("ui.file.operations.a6a7e4"); },
+  get 'media-background'() { return t("ui.media.index.8a7074"); }, get 'media-interaction'() { return t("ui.media.browsing.c89ef5"); }, get 'media-scan'() { return t("ui.media.scan.0e7411"); },
+  get 'tracking-scan'() { return t("ui.version.tracking.c4c7df"); }, get components() { return t("ui.component.data.09f600"); },
 };
 
 export const DomainHealthBanner = ({ components }: { components: ComponentStatus[] }) => {
+  useLocale();
   const toast = useUserFacingToast();
   const [snapshot, setSnapshot] = useState<DomainHealthSnapshot>({ success: true, domains: [], commands: [] });
   const [retryBusy, setRetryBusy] = useState(false);
@@ -70,7 +73,7 @@ export const DomainHealthBanner = ({ components }: { components: ComponentStatus
   };
   return <div role="status" title={domains.map(domainLabel).join('、')} className={`app-titlebar-control flex h-8 max-w-sm shrink-0 items-center gap-2 rounded-md border px-2 text-[11px] ${hasFailure ? 'border-red-200 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
     <AlertTriangle size={15} className="shrink-0"/>
-    <span className="min-w-0 flex-1 truncate"><strong>部分功能已隔离</strong> · {domains.map(domain => domainLabel(domain)).join('、') || '跨域任务'}</span>
-    {commands.some(command => command.status === 'dead') && <button type="button" disabled={retryBusy} aria-busy={retryBusy} onClick={() => void retryDead()} className="shrink-0 rounded border border-current px-1.5 py-0.5 font-bold hover:bg-white/60 disabled:cursor-wait disabled:opacity-60">{retryBusy ? '重试中…' : '重试'}</button>}
+    <span className="min-w-0 flex-1 truncate"><strong>{t("ui.some.features.are.isolated.3e1569")}</strong> · {domains.map(domain => domainLabel(domain)).join('、') || t("ui.cross.domain.tasks.17e0fd")}</span>
+    {commands.some(command => command.status === 'dead') && <button type="button" disabled={retryBusy} aria-busy={retryBusy} onClick={() => void retryDead()} className="shrink-0 rounded border border-current px-1.5 py-0.5 font-bold hover:bg-white/60 disabled:cursor-wait disabled:opacity-60">{retryBusy ? t("ui.retrying.ed1410") : t("ui.retry.b8784c")}</button>}
   </div>;
 };

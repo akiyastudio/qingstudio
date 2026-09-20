@@ -241,6 +241,8 @@ export interface StorageUsageOverview {
 }
 
 export interface AppConfig {
+  /** Missing in legacy snapshots: preserve the original Chinese interface. */
+  language?: import('./i18n/runtime').LanguagePreference;
   theme: Theme;
   telemetry: {
     enabled: boolean;

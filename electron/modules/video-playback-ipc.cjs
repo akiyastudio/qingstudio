@@ -1,3 +1,5 @@
+const { localizeDialogOptions } = require("../services/localization.cjs");
+const { t: translateNative } = require("../services/localization.cjs");
 const { applicationWindowFor } = require('../services/application-windows.cjs');
 const { createVideoPlaybackProcessService } = require('../services/video-playback-process-service.cjs');
 const { createVideoPlaybackBroker } = require('../services/video-playback-broker.cjs');
@@ -48,7 +50,7 @@ const registerVideoPlaybackIpc = ({ BrowserWindow, app, crypto, dialog, fs, ipcM
       return { success: true, backends: await playbackBroker.listDescriptors(sourcePath, browserProbe) };
     } catch (error) { return { success: false, backends: [], error: error.message || String(error) }; }
   });
-  ipcMain.handle('video-player-publish-frame', async (_event, filePath, bytes) => {
+  const publishFrame = async (_event, filePath, bytes) => {
     let temporaryPath = '';
     try {
       const sourcePath = await mediaService.authorizeInput(filePath);
@@ -68,7 +70,8 @@ const registerVideoPlaybackIpc = ({ BrowserWindow, app, crypto, dialog, fs, ipcM
       if (temporaryPath) await fs.promises.unlink(temporaryPath).catch(() => undefined);
       return { success: false, error: error.message || String(error) };
     }
-  });
+  };
+  ipcMain.handle('video-player-publish-frame', publishFrame);
   // Legacy IPC aliases remain for renderer compatibility; current UI uses video-player-* only.
   ipcMain.handle('advanced-video-start', async (event, filePath, arrowKeyAction, playerId, requestId) => {
     try { return { success: true, ...(await service.start(event, filePath, arrowKeyAction, playerId, requestId)) }; }
@@ -88,21 +91,22 @@ const registerVideoPlaybackIpc = ({ BrowserWindow, app, crypto, dialog, fs, ipcM
   ipcMain.on('advanced-video-control', (event, sessionId, request) => service.control(event, sessionId, request));
   ipcMain.on('video-player-control', (event, sessionId, request) => service.control(event, sessionId, request));
   ipcMain.on('video-player-bounds', (event, sessionId, bounds) => service.setBounds(event, sessionId, bounds));
-  ipcMain.handle('video-player-subtitle-choose', async (event, sessionId) => {
+  const chooseSubtitle = async (event, sessionId, ownerOverride) => {
     try {
       if (!service.ownsSession(sessionId, event.sender.id)) return { success: false, error: '视频播放会话不存在' };
-      const owner = applicationWindowFor(event.sender, BrowserWindow);
-      const result = await dialog.showOpenDialog(owner, { title: '添加本地字幕', properties: ['openFile'], filters: [{ name: '字幕文件', extensions: ['srt', 'ass', 'ssa', 'vtt'] }] });
+      const owner = ownerOverride || applicationWindowFor(event.sender, BrowserWindow);
+      const result = await dialog.showOpenDialog(owner, localizeDialogOptions({ title: translateNative("ui.add.local.subtitles.a6787d"), properties: ['openFile'], filters: [{ name: translateNative("native.5959fa726e9d"), extensions: ['srt', 'ass', 'ssa', 'vtt'] }] }));
       if (result.canceled || !result.filePaths[0]) return { success: true, cancelled: true };
       // The path crosses the Electron boundary only after the trusted native dialog returns it.
       service.addSubtitle(event, sessionId, result.filePaths[0]);
       return { success: true, path: result.filePaths[0] };
     } catch (error) { return { success: false, error: error.message || String(error) }; }
-  });
+  };
+  ipcMain.handle('video-player-subtitle-choose', chooseSubtitle);
   ipcMain.handle('video-subtitle-choose-file', async event => {
     try {
       const owner = applicationWindowFor(event.sender, BrowserWindow);
-      const result = await dialog.showOpenDialog(owner, { title: '添加本地字幕', properties: ['openFile'], filters: [{ name: '字幕文件', extensions: ['vtt', 'srt', 'ass', 'ssa'] }] });
+      const result = await dialog.showOpenDialog(owner, localizeDialogOptions({ title: translateNative("ui.add.local.subtitles.a6787d"), properties: ['openFile'], filters: [{ name: translateNative("native.5959fa726e9d"), extensions: ['vtt', 'srt', 'ass', 'ssa'] }] }));
       if (result.canceled || !result.filePaths[0]) return { success: true, cancelled: true };
       const subtitlePath = path.resolve(result.filePaths[0]); const format = path.extname(subtitlePath).slice(1).toLowerCase();
       if (!['vtt', 'srt', 'ass', 'ssa'].includes(format) || !fs.existsSync(subtitlePath)) throw new Error('字幕文件不存在或格式不受支持');
@@ -124,6 +128,9 @@ const registerVideoPlaybackIpc = ({ BrowserWindow, app, crypto, dialog, fs, ipcM
   ipcMain.handle('video-player-stop', (event, sessionId) => ({ success: service.stop(sessionId, event.sender.id) }));
   ipcMain.handle('advanced-video-stop', (event, sessionId) => ({ success: service.stop(sessionId, event.sender.id) }));
   service.describeBackends = (sourcePath,browserProbe) => playbackBroker.listDescriptors(sourcePath,browserProbe);
+  service.publishFrame = publishFrame;
+  service.chooseSubtitle = chooseSubtitle;
+  service.describeDisplay = owner => ({ success: true, display: displayOutputService.describe(owner) });
   return service;
 };
 

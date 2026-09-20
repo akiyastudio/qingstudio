@@ -1,3 +1,4 @@
+import { LocalizedText } from "../i18n/LocalizedText";
 import React, { useCallback, useEffect, useRef } from 'react';
 import type { LogEntry } from '../types';
 import { ProgressBar } from './ProgressBar';
@@ -97,7 +98,7 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex items-center justify-between gap-4 text-sm">
-            <p className={`min-w-0 truncate font-medium ${color}`} title={message} role="status">{message}</p>
+            <p className={`min-w-0 truncate font-medium ${color}`} title={message} role="status"><LocalizedText value={message}/></p>
             <span className="shrink-0 font-mono text-blue-600">{percentage.toFixed(Number.isInteger(percentage) ? 0 : 1)}%</span>
           </div>
           <ProgressBar value={percentage} trackClassName="h-2 overflow-hidden rounded-full bg-slate-200" barClassName="h-full rounded-full bg-blue-500 transition-all duration-300"/>

@@ -11,6 +11,7 @@ English is the preferred documentation entry point. Each document has a matching
 | Host API | [Read](PLUGIN_HOST_API.md) | [阅读](PLUGIN_HOST_API.zh-CN.md) |
 | File resources and transfers | [Read](PLUGIN_FILE_RESOURCES_API.md) | [阅读](PLUGIN_FILE_RESOURCES_API.zh-CN.md) |
 | Panels and previews | [Read](PLUGIN_PREVIEW_API.md) | [阅读](PLUGIN_PREVIEW_API.zh-CN.md) |
+| Host player and timeline | [Read](HOST_PLAYER_API.md) | [阅读](HOST_PLAYER_API.zh-CN.md) |
 | Development registration | [Read](COMPONENT_DEVELOPMENT.md) | [阅读](COMPONENT_DEVELOPMENT.zh-CN.md) |
 | Service protocol | [Read](COMPONENT_SERVICE_PROTOCOL_V1.md) | [阅读](COMPONENT_SERVICE_PROTOCOL_V1.zh-CN.md) |
 | Installation transactions | [Read](COMPONENT_TRANSACTIONS.md) | [阅读](COMPONENT_TRANSACTIONS.zh-CN.md) |

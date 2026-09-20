@@ -11,6 +11,7 @@
 | Host API | [Read](PLUGIN_HOST_API.md) | [阅读](PLUGIN_HOST_API.zh-CN.md) |
 | 文件资源与传输 | [Read](PLUGIN_FILE_RESOURCES_API.md) | [阅读](PLUGIN_FILE_RESOURCES_API.zh-CN.md) |
 | 面板与预览 | [Read](PLUGIN_PREVIEW_API.md) | [阅读](PLUGIN_PREVIEW_API.zh-CN.md) |
+| 宿主播放器与时间线 | [Read](HOST_PLAYER_API.md) | [阅读](HOST_PLAYER_API.zh-CN.md) |
 | 开发注册 | [Read](COMPONENT_DEVELOPMENT.md) | [阅读](COMPONENT_DEVELOPMENT.zh-CN.md) |
 | 服务协议 | [Read](COMPONENT_SERVICE_PROTOCOL_V1.md) | [阅读](COMPONENT_SERVICE_PROTOCOL_V1.zh-CN.md) |
 | 安装事务 | [Read](COMPONENT_TRANSACTIONS.md) | [阅读](COMPONENT_TRANSACTIONS.zh-CN.md) |

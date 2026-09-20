@@ -18,7 +18,8 @@ const createComponentHostCapabilityRuntime = dependencies => {
   const projectDomain = registerComponentProjectCapabilities({ ...dependencies, broker: componentCapabilityBroker });
   const fileResources = registerComponentFileResources({ ...dependencies, broker: componentCapabilityBroker, projectDomain });
   const preview = createComponentPreviewService({ ...dependencies, fileResources });
-  setPreviewRuntime({ preview, fileResources, projectDomain, dependencies });
+  const videoPreviews = require('./component-preview-video-service.cjs').createPreviewVideoService({ dependencies, projectDomain });
+  setPreviewRuntime({ preview, videoPreviews, fileResources, projectDomain, dependencies });
   componentCapabilityBroker.register('project.preview', preview.invoke);
   const transfers = registerComponentTransferCapabilities({ ...dependencies, broker: componentCapabilityBroker, projectDomain, fileResources });
   registerComponentProjectReadCapabilities({ ...dependencies, broker: componentCapabilityBroker });
@@ -27,7 +28,7 @@ const createComponentHostCapabilityRuntime = dependencies => {
   const secretsService = createComponentSecretsService(dependencies); const networkService = createComponentNetworkService({ ...dependencies, secretsService });
   componentCapabilityBroker.register('component.secrets', secretsService.invoke);
   componentCapabilityBroker.register('network.fetch', networkService.invoke);
-  const clearComponentCapabilityState = async componentId => { fileResources.clearComponent(componentId); await transfers.clearComponent(componentId); const results=await Promise.allSettled([projectDomain?.clearComponent?.(componentId),runtimeExecution?.clearComponent?.(componentId),writeDomain?.clearComponent?.(componentId)]);const errors=results.filter(result=>result.status==='rejected').map(result=>result.reason);if(errors.length)throw new AggregateError(errors,`Unable to clear every capability state for ${componentId}`); };
+  const clearComponentCapabilityState = async componentId => { await videoPreviews.clearComponent(componentId); fileResources.clearComponent(componentId); await transfers.clearComponent(componentId); const results=await Promise.allSettled([projectDomain?.clearComponent?.(componentId),runtimeExecution?.clearComponent?.(componentId),writeDomain?.clearComponent?.(componentId)]);const errors=results.filter(result=>result.status==='rejected').map(result=>result.reason);if(errors.length)throw new AggregateError(errors,`Unable to clear every capability state for ${componentId}`); };
   const clearComponentViewState = async componentId => { fileResources.clearComponent(componentId); await transfers.clearComponent(componentId); return projectDomain.clearComponent(componentId, { preserveReservedInputs: true }); };
   return { setComponentPlaybackPaused:runtimeExecution.setPlaybackPaused,updateComponentPlaybackBounds:runtimeExecution.updatePlaybackBounds,refreshComponentPlaybackBounds:runtimeExecution.refreshPlaybackBounds,componentCapabilityBroker, componentInputGrants: projectDomain, componentNotificationService, clearComponentCapabilityState, clearComponentViewState, clearComponentSecretData: secretsService.removeComponentData, abortComponentNetworkRequests: networkService.clearComponent };
 };

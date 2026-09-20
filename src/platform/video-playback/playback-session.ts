@@ -6,7 +6,7 @@ import type { PlaybackAttempt, PlaybackErrorCode } from '../../contracts/playbac
 
 export type PlaybackBackendId = string;
 export type PlaybackControl = {
-  action: 'play' | 'pause' | 'seek' | 'frame-step' | 'frame-back-step' | 'volume' | 'mute' | 'speed' | 'stop' | 'subtitle-select' | 'subtitle-visible' | 'subtitle-delay' | 'subtitle-style' | 'audio-select' | 'transform' | 'hdr-mode' | 'tone-mapping' | 'statistics-level';
+  action: 'play' | 'pause' | 'seek' | 'frame-step' | 'frame-back-step' | 'volume' | 'mute' | 'speed' | 'stop' | 'subtitle-select' | 'subtitle-visible' | 'subtitle-delay' | 'subtitle-style' | 'audio-select' | 'transform' | 'hdr-mode' | 'tone-mapping' | 'statistics-level' | 'fullscreen';
   value?: number | boolean | string;
   fontSize?: VideoPlaybackSettings['subtitleSize'];
   style?: VideoPlaybackSettings['subtitleStyle'];

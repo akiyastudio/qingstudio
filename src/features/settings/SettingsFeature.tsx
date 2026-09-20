@@ -1026,7 +1026,7 @@ const SettingsPage = ({ activeSection, backupProjectFocus, onClearBackupProjectF
       {addingProjectCategory ? <form className="flex items-start gap-2 bg-slate-50 px-4 py-3" onSubmit={event => { event.preventDefault(); addProjectCategory(); }}><Plus size={17} className="mt-2.5 shrink-0 text-blue-600"/><div className="min-w-0 flex-1"><input autoFocus value={newProjectCategory} maxLength={24} onChange={event => { setNewProjectCategory(event.target.value); setProjectCategoryError(''); }} placeholder={t("ui.enter.a.new.category.name.ca51d2")} className="form-input"/>{projectCategoryError && <p className="mt-1.5 text-xs text-red-500"><LocalizedText value={projectCategoryError}/></p>}</div><button type="submit" className="dialog-primary shrink-0">{t("ui.add.7a8a11")}</button><button type="button" onClick={() => { setAddingProjectCategory(false); setNewProjectCategory(''); setProjectCategoryError(''); }} title={t("common.cancel")} aria-label={t("ui.cancel.new.category.72792e")} className="rounded-md p-2.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"><X size={16}/></button></form> : <button type="button" onClick={() => setAddingProjectCategory(true)} className="flex w-full items-center gap-3 bg-slate-50 px-4 py-3 text-left text-sm font-bold text-blue-600 hover:bg-blue-50"><span className="flex h-8 w-8 items-center justify-center rounded-lg border border-dashed border-blue-300 bg-white"><Plus size={17}/></span>{t("ui.add.category.351398")}</button>}
     </SettingsPageGroup>
     </>}
-    {activeSection === 'privacy' && <PrivacySettings telemetry={draft.telemetry} onChange={telemetry => update('telemetry', telemetry)} onNotice={onNotice}/>}
+    {activeSection === 'privacy' && <PrivacySettings/>}
     {(activeSection === 'backup' || activeSection === 'storage') && <>
       <SettingsPageGroup title={t("ui.usage.89abe8")}>
         <StorageVolumeOverview sourceSignature={[...normalizeWorkspacePaths(draft.workspacePath, draft.workspacePaths), inspirationLibrarySettings.rootPath, draft.archive.targetPath, draft.backup.targetPath, draft.mediaCache.directory].join('\u0000')}/>
@@ -1109,7 +1109,7 @@ const SettingsPage = ({ activeSection, backupProjectFocus, onClearBackupProjectF
     {videoToolsAvailable && importVideoPanel === 'transcode' && <SettingsPanel title={t("ui.video.transcoding.settings.3441e0")} onClose={() => setImportVideoPanel(null)}><VideoTranscodeView embedded settingsOnly initialSettings={draft.videoTools.transcode} onSettingsChange={transcode => patchSettings(current => ({ videoTools: { ...current.videoTools, transcode } }))}/></SettingsPanel>}
     </>}
     {activeSection === 'about' && <AboutSettings/>}
-    {activeSection === 'feedback' && <FeedbackSettings onNotice={onNotice}/>}
+    {activeSection === 'feedback' && <FeedbackSettings/>}
   </div></section>;
 };
 

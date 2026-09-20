@@ -33,9 +33,9 @@ export interface PreviewVideo { sessionId: string; relativePath: string; time: n
 export interface PreviewSnapshot { revision: number; video: PreviewVideo | null }
 export type ProjectPreviewRequest = { action: 'get' | 'subscribe' | 'unsubscribe' } | { action: 'seek'; sessionId: string; time: number };
 export type ProjectPreviewResponse = PreviewSnapshot | { accepted: true };
-export interface PreviewDecoderDeclaration { id: string; label: string; extensions: string[]; method: VersionedName; priority?: number }
+export interface PreviewDecoderDeclaration { id: string; label: string; extensions: string[]; method: VersionedName; thumbnailMethod?: VersionedName; priority?: number }
 export interface PreviewDecoderRequest { input: RestrictedInput; name: string; extension: string; pageIndex: number; maxEdge: number }
-export interface PreviewDecoderResult { inputToken: string; mimeType: 'image/png'; pageIndex: number; pageCount: number }
+export type PreviewDecoderResult = { inputToken: string; mimeType: 'image/png'; pageIndex: number; pageCount: number } | { inputToken: string; mimeType: 'video/mp4' | 'video/quicktime'; pageIndex: 0; pageCount: 1; posterInputToken?: string; presentation?: 'live-photo' };
 export interface ProjectFileInputRequest { relativePath: string; expectedDigest?: string }
 export interface ProjectFileInputResponse { input: RestrictedInput; relativePath: string; name: string; byteLength: number; sha256: string; fileId: string }
 export interface LinkedFile { relativePath: string; fileId: string; revision: string; versionId: string | null; missing?: boolean }

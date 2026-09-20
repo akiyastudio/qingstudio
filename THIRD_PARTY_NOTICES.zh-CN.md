@@ -13,6 +13,7 @@ Apache 2.0 仅适用于本仓库原创代码，不替代第三方许可。本仓
 | Node.js | 随 Electron 43.4.1 | MIT + 第三方许可 | [源码](https://github.com/nodejs/node) · [许可](https://github.com/nodejs/node/blob/main/LICENSE) |
 | React / React DOM | 18.3.1 | MIT | [源码](https://github.com/facebook/react) · [许可](https://github.com/facebook/react/blob/main/LICENSE) |
 | Lucide React | 0.344.0 | ISC | [源码](https://github.com/lucide-icons/lucide) · [许可](https://github.com/lucide-icons/lucide/blob/main/LICENSE) |
+| noUiSlider | 15.8.1 | MIT | [Source](https://github.com/leongersen/noUiSlider) · [License](https://github.com/leongersen/noUiSlider/blob/master/LICENSE.md) |
 | exiftool-vendored | 37.2.0 | MIT | [源码](https://github.com/photostructure/exiftool-vendored.js) · [许可](https://github.com/photostructure/exiftool-vendored.js/blob/main/LICENSE) |
 | ExifTool | 13.59 | Artistic License 1.0 或 GPL | [源码](https://exiftool.org/) · [许可](https://dev.perl.org/licenses/) |
 | Python | 3.12.10 | PSF License | [源码](https://github.com/python/cpython) · [许可](https://docs.python.org/3/license.html) |

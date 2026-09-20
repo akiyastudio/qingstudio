@@ -1024,6 +1024,7 @@
                   "method": {
                     "$ref": "#/$defs/versioned"
                   },
+                  "thumbnailMethod": { "$ref": "#/$defs/versioned" },
                   "priority": {
                     "type": "integer",
                     "minimum": -100,

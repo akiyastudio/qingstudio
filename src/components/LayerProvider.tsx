@@ -20,7 +20,7 @@ type LayerContextValue = {
 
 const LayerContext = createContext<LayerContextValue | null>(null);
 
-const LayerProvider = ({ children }: { children: ReactNode }) => {
+const LayerProvider = ({ children, electronApi = window.electronAPI }: { children: ReactNode; electronApi?: Pick<Window['electronAPI'], 'setHostSurfaceSuspended'> }) => {
   const layersRef = useRef<LayerRegistration[]>([]);
   const [hostSurfaceState, setHostSurfaceState] = useState<HostSurfaceState>({ revision: 0, suspended: false, referenceCount: 0 });
   const hostLayerRegistry = useMemo(() => createHostLayerRegistry(setHostSurfaceState), []);
@@ -48,12 +48,12 @@ const LayerProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    void window.electronAPI.setHostSurfaceSuspended({
+    void electronApi.setHostSurfaceSuspended({
       rendererToken: rendererTokenRef.current,
       revision: hostSurfaceState.revision,
       suspended: hostSurfaceState.suspended,
     });
-  }, [hostSurfaceState.revision, hostSurfaceState.suspended]);
+  }, [electronApi, hostSurfaceState.revision, hostSurfaceState.suspended]);
 
   const contextValue = useMemo<LayerContextValue>(() => ({
     register,

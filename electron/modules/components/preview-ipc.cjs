@@ -17,9 +17,23 @@ const registerComponentPreviewIpc = ({ ipcMain, manager, mainRenderer }) => {
   });
   ipcMain.handle('component-preview:seek-result', (event, result) => { mainRenderer(event); getPreviewRuntime().preview.acknowledge(event.sender, result); });
   ipcMain.handle('component-preview:decoders', event => { mainRenderer(event); return listPreviewDecoders(manager); });
+  ipcMain.handle('component-preview:thumbnail', async (event, request) => {
+    mainRenderer(event);
+    try { validateContext(request?.context); return { success: true, ...(await require('../../services/component-thumbnail-service.cjs').componentThumbnail(manager, request, event.sender)) }; }
+    catch (error) { return { success: false, error: error.message || String(error), errorCode: error.code || 'COMPONENT_HOST_INTERNAL' }; }
+  });
   ipcMain.handle('component-preview:decode', async (event, request) => {
     mainRenderer(event);
-    try { validateContext(request?.context); return { success: true, ...(await decodePreview(manager, request)) }; }
+    try { validateContext(request?.context); return { success: true, ...(await decodePreview(manager, request, undefined, event.sender)) }; }
+    catch (error) { return { success: false, error: error.message || String(error), errorCode: error.code || 'COMPONENT_HOST_INTERNAL' }; }
+  });
+  ipcMain.handle('component-preview:cancel', async (event, request) => {
+    mainRenderer(event); exact(request, ['requestId'], ['requestId']);
+    await getPreviewRuntime().videoPreviews.cancel(event.sender, request.requestId); return { success: true };
+  });
+  ipcMain.handle('component-preview:playback', async (event, request) => {
+    mainRenderer(event);
+    try { return await getPreviewRuntime().videoPreviews.invoke(event.sender, request); }
     catch (error) { return { success: false, error: error.message || String(error), errorCode: error.code || 'COMPONENT_HOST_INTERNAL' }; }
   });
 };

@@ -1,4 +1,5 @@
 const { validateComponentCleanupReceipt } = require('../component-package-archive.cjs');
+const { preserveTranscriptionModels } = require('./transcription-model-storage.cjs');
 
 const SCHEMA_VERSION = 3;
 const MAX_TRANSACTION_JOURNAL_BYTES = 64 * 1024 * 1024;
@@ -331,23 +332,32 @@ const createComponentTransactionService = ({ fs, path, crypto, installRoot, prep
   const finishInstall = async record => {
     try {
       record = await cleanPreparation(record);
+      if (record.receipt.backup && !record.state.cleanup['committed-backup']) {
+        await preserveModels(record.receipt.componentId, record.receipt.quarantinePath, record.receipt.container);
+      }
       if (record.receipt.backup) record = await clean(record, 'committed-backup', record.receipt.backup);
       await verifyDirectory(record.receipt.source, record.receipt.destination);
       await setComponentEnabled(record.receipt.componentId, record.receipt.desiredEnabled);
       return await complete(record, 'committed');
     } catch (error) { throw attach(error, error.record || record); }
   };
+  const preserveModels = (componentId, sourceRoot, container) => preserveTranscriptionModels({
+    fs, path, componentId, sourceRoot, container, captureTreeIdentity, verifyTreeIdentity,
+    assertPath: (target, allowMissing = false) => assertManagedPath({ fs, path, root, target, allowMissing }),
+  });
   const install = async ({ operationId = crypto.randomUUID(), componentId, container, destination, stagingPath, stagingIdentity, stagingTreeIdentity, preparationCleanup = [],
     previousEnabled = getComponentEnabled(componentId), desiredEnabled = true, validatePublished, commitHostState, onAdmitted = () => undefined }) => {
     const operation = beginActiveOperation(componentId, 'install');
     let record;
     try {
       await ensureRoots();
+      if (container !== path.join(root, componentId) || destination !== path.join(container, 'runtime')) throw new Error('组件事务目录结构无效');
       const source = directoryReceipt(stagingPath, stagingIdentity, stagingTreeIdentity);
       await verifyDirectory(source);
       await assertManagedPath({ fs, path, root, target: container });
       await assertManagedPath({ fs, path, root, target: destination, allowMissing: true });
       const old = await existing(fs, destination);
+      if (old) await preserveModels(componentId, destination, container);
       const quarantinePath = path.join(root, `.${componentId}-quarantine-${operationId}`);
       if (await existing(fs, quarantinePath)) throw new Error('组件备份路径已被占用');
       const backup = old ? directoryReceipt(quarantinePath, nodeIdentity(old), await captureTreeIdentity(destination)) : null;

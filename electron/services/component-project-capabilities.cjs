@@ -1108,11 +1108,17 @@ const registerComponentProjectCapabilities = ({
     if (payload.kind === 'openComponentDirectory') {
       const relativePath = assertRelativePath(path, payload.relativePath, 'relativePath');
       if (relativePath.includes('/')) throw hostError(CODES.INVALID_REQUEST, 'Component directory must be a direct child');
-      const componentRoot = path.resolve(String(descriptor.componentRoot || ''));
+      const declaredRoot = path.resolve(String(descriptor.componentRoot || ''));
+      const declaredStat = await fs.promises.lstat(declaredRoot).catch(() => null);
+      if (!declaredStat?.isDirectory() || declaredStat.isSymbolicLink()) throw hostError(CODES.NOT_FOUND, 'Component directory is unavailable');
+      const componentRoot = descriptor.componentId === 'video-transcription' && relativePath === 'models'
+        ? require('./transcription-model-storage.cjs').transcriptionModelOwner(path, declaredRoot) : declaredRoot;
       const rootStat = await fs.promises.lstat(componentRoot).catch(() => null);
       if (!rootStat?.isDirectory() || rootStat.isSymbolicLink()) throw hostError(CODES.NOT_FOUND, 'Component directory is unavailable');
       const target = path.resolve(componentRoot, relativePath);
       if (!inside(path, componentRoot, target)) throw hostError(CODES.INVALID_REQUEST, 'Component directory path escapes its component');
+      const targetStat = await fs.promises.lstat(target).catch(error => error.code === 'ENOENT' ? null : Promise.reject(error));
+      if (targetStat && (!targetStat.isDirectory() || targetStat.isSymbolicLink())) throw hostError(CODES.PERMISSION_DENIED, 'Component directory path is unsafe');
       await fs.promises.mkdir(target, { recursive: true });
       const [realRoot, realTarget] = await Promise.all([fs.promises.realpath(componentRoot), fs.promises.realpath(target)]);
       if (!inside(path, realRoot, realTarget)) throw hostError(CODES.PERMISSION_DENIED, 'Component directory path is unsafe');

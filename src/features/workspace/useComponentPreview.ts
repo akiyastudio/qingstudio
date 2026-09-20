@@ -21,5 +21,5 @@ export const useComponentPreview = (context: PreviewPageContext | undefined, rel
     });
     return () => { alive = false; stop(); window.clearInterval(interval); if (current.current === value) current.current = null; void window.electronAPI.publishComponentPreview({ context, update: { sequence: ++sequence, video: null, closed: true } }).catch(() => undefined); };
   }, [contextKey, relativePath, enabled]);
-  return { seek, onPlaybackState: (value: { time: number; duration: number; paused: boolean }) => { if (current.current) Object.assign(current.current.video, value, { canSeek: value.duration > 0 }); } };
+  return { seek, onPlaybackState: (value: { time: number; duration: number; paused: boolean }) => { if (current.current) Object.assign(current.current.video, { time: value.time, duration: value.duration, paused: value.paused, canSeek: value.duration > 0 }); } };
 };

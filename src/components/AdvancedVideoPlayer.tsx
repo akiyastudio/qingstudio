@@ -5,14 +5,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { readPageTransferValue, rememberPageTransferValue, usePageTransferParticipant } from '../platform/page-transfer-state';
 import { PANEL_LAYOUT_CHANGED_EVENT } from '../contracts/workspace-panels';
 import type { ReactNode } from 'react';
-import { Camera, Captions, Gauge, Info, Loader2, Pause, Play, Plus, Settings2, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
+import { Camera, Captions, FastForward, Gauge, Info, Loader2, Maximize, Pause, Play, Plus, Rewind, Settings2, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import type { VideoPlaybackBackendDescriptor, VideoPlayerState, VideoPlaybackSettings, VideoSubtitleTrack } from '../types';
 import { useHostSurfaceState } from './LayerProvider';
 import { readSubtitleMemory, resolveRememberedSubtitle, writeSubtitleMemory } from './video-subtitle-memory';
 import { DEFAULT_SUBTITLE_FONT_SIZE, normalizeSubtitleFontSize } from '../features/app/video-player-settings';
 import { discoverPlaybackBackends, startPlaybackSession } from '../platform/video-playback/playback-session';
 import type { PlaybackSession, PlaybackControl } from '../platform/video-playback/playback-session';
-import { DEFAULT_VIDEO_TRANSFORM, hdrModeAvailability, playbackCapabilityPresentation } from '../contracts/video-playback';
+import { DEFAULT_VIDEO_TRANSFORM, chromiumFrameGeometry, hdrModeAvailability, playbackCapabilityPresentation } from '../contracts/video-playback';
 import type { VideoTransform } from '../contracts/video-playback';
 import { bindingsForArrowMode, normalizeVideoShortcutBindings, resolveVideoShortcut, shortcutInputFromKeyboardEvent, shouldDeferVideoShortcutToFocusedControl, videoShortcutAllowsRepeat } from '../contracts/video-shortcuts';
 import type { VideoActionId } from '../contracts/video-shortcuts';
@@ -60,6 +60,14 @@ const shouldRestoreVideoSurfaceFocus = (focusWasInRemovedControl: boolean, activ
 
 type VideoPlayerProps = {
   filePath: string;
+  electronApi?: Window['electronAPI'];
+  playbackEnabled?: boolean;
+  surfaceVisible?: boolean;
+  appearance?: 'video' | 'photo';
+  pictureSize?: { width: number; height: number };
+  editorState?: { time: number; duration: number; paused: boolean; ready: boolean };
+  onControlRequest?: (control: PlaybackControl) => boolean;
+  onSessionReady?: (session: PlaybackSession) => void;
   poster?: string;
   onError: (message: string) => void;
   onMetadata: (metadata: { width?: number; height?: number; duration?: number }) => void;
@@ -67,6 +75,7 @@ type VideoPlayerProps = {
   onContextMenuAt?: (x: number, y: number) => void;
   onPointerActivity?: () => void;
   topRightOverlayHole?: number;
+  topLeftOverlayHole?: number;
   controlsVisible?: boolean;
   controlsOverlay?: boolean;
   onEscape?: () => void;
@@ -76,9 +85,11 @@ type VideoPlayerProps = {
   progressRail?: ReactNode;
   toolbarExtras?: ReactNode;
   externalTimeline?: boolean;
+  editingTransport?: boolean;
+  frameControlsVisible?: boolean;
   editorControlRequest?: { id: number; control: PlaybackControl };
-  editorSeekRequest?: { id: number; time: number; pause?: boolean };
-  onPlaybackState?: (state: { time: number; duration: number; paused: boolean }) => void;
+  editorSeekRequest?: { id: number; time: number; pause?: boolean; play?: boolean };
+  onPlaybackState?: (state: { time: number; duration: number; paused: boolean; frameRate?: number }) => void;
   keyboardSettings?: VideoPlaybackSettings;
 };
 
@@ -96,8 +107,29 @@ const initialState = (): VideoPlayerState => ({
   duration: 0,
 });
 
-const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onContextMenuAt, onPointerActivity, topRightOverlayHole = 0, controlsVisible = true, controlsOverlay = false, onEscape, onToggleFullscreen, bottomControls, controlsFooter, progressRail, toolbarExtras, externalTimeline = false, editorControlRequest, editorSeekRequest, onPlaybackState, keyboardSettings = DEFAULT_VIDEO_SETTINGS }: VideoPlayerProps) => {
+const VideoPlayer = ({ electronApi = window.electronAPI, playbackEnabled = true, surfaceVisible = true, appearance = 'video', pictureSize, editorState, onControlRequest, onSessionReady, filePath, poster, onError, onMetadata, onNavigate, onContextMenuAt, onPointerActivity, topRightOverlayHole = 0, topLeftOverlayHole = 0, controlsVisible = true, controlsOverlay = false, onEscape, onToggleFullscreen, bottomControls, controlsFooter, progressRail, toolbarExtras, externalTimeline = false, editingTransport = false, frameControlsVisible = true, editorControlRequest, editorSeekRequest, onPlaybackState, keyboardSettings = DEFAULT_VIDEO_SETTINGS }: VideoPlayerProps) => {
   useLocale();
+  const pendingPauseRef = useRef<boolean | null>(null);
+  const backendPauseRef = useRef(true);
+  const pauseTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const clearPendingPause = () => { clearTimeout(pauseTimerRef.current); pendingPauseRef.current = null; };
+  const controlRequestRef = useRef(onControlRequest);
+  controlRequestRef.current = onControlRequest;
+  const onSessionReadyRef = useRef(onSessionReady);
+  onSessionReadyRef.current = onSessionReady;
+  const sendControl = useCallback((request: PlaybackControl) => {
+    if (controlRequestRef.current?.(request)) return;
+    if (!sessionRef.current) return;
+    if (request.action === 'play' || request.action === 'pause') {
+      clearPendingPause();
+      const paused = request.action === 'pause';
+      pendingPauseRef.current = paused;
+      playbackPositionRef.current.paused = paused;
+      setState(current => ({ ...current, paused }));
+      pauseTimerRef.current = setTimeout(() => { clearPendingPause(); setState(current => ({ ...current, paused: backendPauseRef.current })); }, 1200);
+    }
+    sessionRef.current.control(request);
+  }, []);
   const { suspended: hostSurfaceSuspended } = useHostSurfaceState();
   const navigate = onNavigate || (() => undefined);
   const showNavigation = Boolean(onNavigate);
@@ -132,6 +164,7 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
   const shortcutActionRef = useRef<(action: VideoActionId) => void>(() => undefined);
   const dispatchShortcutRef = useRef<(action: VideoActionId, repeat?: boolean) => void>(() => undefined);
   const onPlaybackStateRef = useRef(onPlaybackState);
+  const reportedPlaybackKeyRef = useRef('');
   const playbackPositionRef = useRef({ time: 0, duration: 0, paused: true });
   const nativeContextMenuOpenRef = useRef(false);
   const displayCapabilityGenerationRef = useRef(0);
@@ -177,12 +210,13 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
   latestTransformRef.current = videoTransform;
   const playingBeforeTransfer = useRef(false);
   const transferPrepared = useRef(false);
+  const checkpointSourceRef = useRef<string | null>(null);
   const playbackSnapshot = () => {
     const value = latestStateRef.current;
     return { time: Number(value.time) || 0, paused: value.paused !== false, volume: value.volume ?? 100, muted: Boolean(value.muted), speed: value.speed || 1, transform: latestTransformRef.current };
   };
   const transferPageId = usePageTransferParticipant(`video:${filePath}`, {
-    read: playbackSnapshot,
+    read: () => checkpointSourceRef.current === filePath ? playbackSnapshot() : null,
     prepare: () => { transferPrepared.current = true; playingBeforeTransfer.current = latestStateRef.current.paused === false; sessionRef.current?.control({ action: 'pause' }); },
     rollback: () => { if (transferPrepared.current && playingBeforeTransfer.current) sessionRef.current?.control({ action: 'play' }); transferPrepared.current = false; },
   });
@@ -196,7 +230,11 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
     if (saved.transform) { setVideoTransform(saved.transform); sessionRef.current.control({ action: 'transform', transform: saved.transform }); }
     sessionRef.current.control({ action: saved.paused ? 'pause' : 'play' });
   }, [filePath, sessionId, starting, transferPageId]);
-  useEffect(() => () => rememberPageTransferValue(transferPageId, `video:${filePath}`, playbackSnapshot()), [filePath, transferPageId]);
+  useEffect(() => () => {
+    // StrictMode's first cleanup runs before any media has loaded. Persisting
+    // initialState here would restore paused:true immediately after autoplay.
+    if (checkpointSourceRef.current === filePath) rememberPageTransferValue(transferPageId, `video:${filePath}`, playbackSnapshot());
+  }, [filePath, transferPageId]);
   const consumeAddedSubtitle = (nextState = latestStateRef.current) => {
     const pending = rememberAddedSubtitleRef.current;
     if (!pending || pending.phase !== 'awaiting-track' || pending.requestId !== requestIdRef.current || pending.sessionId !== sessionId || !nextState.subtitleTracks?.length) return;
@@ -238,15 +276,17 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
     });
   }, []);
 
-  useEffect(() => () => window.cancelAnimationFrame(surfaceFocusFrameRef.current), []);
+  useEffect(() => () => { window.cancelAnimationFrame(surfaceFocusFrameRef.current); clearPendingPause(); }, []);
 
   useEffect(() => setSubtitleFontSize(normalizeSubtitleFontSize(keyboardSettings.subtitleSize)), [keyboardSettings.subtitleSize]);
   useEffect(()=>{if(!sessionRef.current||chromiumMode)return;sessionRef.current.control({action:'hdr-mode',hdrMode:keyboardSettings.hdrMode});sessionRef.current.control({action:'tone-mapping',toneMapping:keyboardSettings.toneMapping,targetPeakNits:keyboardSettings.targetPeakNits});},[chromiumMode,keyboardSettings.hdrMode,keyboardSettings.toneMapping,keyboardSettings.targetPeakNits,sessionId]);
 
   useEffect(() => {
     let active = true;
+    clearPendingPause(); backendPauseRef.current = true;
     const controller = new AbortController();
     const requestId = createPlaybackToken();
+    checkpointSourceRef.current = null;
     requestIdRef.current = requestId;
     sessionRef.current = null;
     nativeContextMenuOpenRef.current = false;
@@ -267,6 +307,13 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
     setState(initialState());
     const handleState = (update: VideoPlayerState) => {
       if (update.playerId !== playerIdRef.current || update.requestId !== requestIdRef.current) return;
+      if (typeof update.paused === 'boolean') {
+        backendPauseRef.current = update.paused;
+        if (pendingPauseRef.current !== null) {
+          if (update.paused === pendingPauseRef.current || ['ended', 'fatal', 'stopped'].includes(update.type)) clearPendingPause();
+          else update = { ...update, paused: pendingPauseRef.current };
+        }
+      }
       if (sessionRef.current) setActiveBackendId(sessionRef.current.backendId);
       if (update.type === 'input' && update.input) {
         const input = update.input;
@@ -339,8 +386,8 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
       }
     };
     const video = videoRef.current;
-    if (!video) return undefined;
-    void discoverPlaybackBackends({ filePath, video, electronApi: window.electronAPI, signal: controller.signal }).then(backends => startPlaybackSession({
+    if (!video || !playbackEnabled) { setStarting(false); return undefined; }
+    void discoverPlaybackBackends({ filePath, video, electronApi, signal: controller.signal }).then(backends => startPlaybackSession({
       backends,
       context: {
         filePath,
@@ -348,7 +395,7 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
         playerId: playerIdRef.current,
         requestId,
         video,
-        electronApi: window.electronAPI,
+        electronApi,
         onState: handleState,
         signal: controller.signal,
       },
@@ -358,9 +405,11 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
         return;
       }
       sessionRef.current = session;
+      checkpointSourceRef.current = filePath;
       setActiveBackendId(session.backendId);
       setAvailableBackends(session.availableBackends || []);
       setSessionId(requestId);
+      onSessionReadyRef.current?.(session);
     }).catch(error => {
       if (active && (error as { code?: string })?.code !== 'CANCELLED' && !errorReportedRef.current) {
         errorReportedRef.current = true;
@@ -369,6 +418,7 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
     });
     return () => {
       active = false;
+      clearPendingPause();
       controller.abort();
       captureGenerationRef.current += 1;
       if (requestIdRef.current === requestId) requestIdRef.current = '';
@@ -376,7 +426,7 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
       sessionRef.current = null;
       void currentSession?.close().catch(() => undefined);
     };
-  }, [filePath, keyboardSettings.arrowKeyAction, keyboardSettings.subtitlesEnabled, keyboardSettings.subtitlePreferredLanguages.join(','), keyboardSettings.subtitleSize, keyboardSettings.subtitleStyle, JSON.stringify(keyboardSettings.shortcuts)]);
+  }, [filePath, playbackEnabled, electronApi, keyboardSettings.arrowKeyAction, keyboardSettings.subtitlesEnabled, keyboardSettings.subtitlePreferredLanguages.join(','), keyboardSettings.subtitleSize, keyboardSettings.subtitleStyle, JSON.stringify(keyboardSettings.shortcuts)]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -425,13 +475,13 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
     if (!sessionRef.current) return;
     const descriptor = sessionRef.current.availableBackends?.find(item => item.backendId === sessionRef.current?.backendId);
     const stats = descriptor?.features.statistics; const level = stats && (stats.decode || stats.hdr || stats.cache || stats.gpu) ? 'detailed' : 'basic';
-    sessionRef.current.control({ action: 'statistics-level', statisticsLevel: effectiveControlPanel === 'info' || effectiveControlPanel === 'basic-info' ? level : 'off' });
-  }, [activeBackendId, effectiveControlPanel, sessionId]);
+    sessionRef.current.control({ action: 'statistics-level', statisticsLevel: effectiveControlPanel === 'info' || effectiveControlPanel === 'basic-info' ? level : editingTransport ? 'basic' : 'off' });
+  }, [activeBackendId, effectiveControlPanel, sessionId, editingTransport]);
 
   useEffect(() => {
     if (controlPanel !== 'display') return;
     const generation = displayCapabilityGenerationRef.current;
-    void window.electronAPI.getVideoDisplayCapabilities().then(result => {
+    void electronApi.getVideoDisplayCapabilities().then(result => {
       if (result.success && generation === displayCapabilityGenerationRef.current) setDisplayCapability({ hdrAvailable: result.display.hdrAvailable, reason: result.display.reason });
     });
   }, [controlPanel]);
@@ -439,9 +489,25 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
   const syncBounds = useCallback(() => {
     const surface = surfaceRef.current;
     if (!surface || !sessionRef.current) return;
-    const rect = surface.getBoundingClientRect();
+    const surfaceRect = surface.getBoundingClientRect();
+    // The still already has its orientation applied. Native codec dimensions
+    // may still be landscape for a portrait MOV carrying a rotation matrix.
+    // Anchor photo playback to the same image rectangle as its cover.
+    const sourceSize = appearance === 'photo' && pictureSize?.width && pictureSize?.height ? pictureSize : { width: state.width, height: state.height };
+    const content = (editingTransport || appearance === 'photo') && !chromiumMode && sourceSize.width && sourceSize.height
+      ? chromiumFrameGeometry(videoTransform, sourceSize.width, sourceSize.height, surfaceRect.width, surfaceRect.height).visibleSize : surfaceRect;
+    const rect = new DOMRect(surfaceRect.left + (surfaceRect.width - content.width) / 2, surfaceRect.top + (surfaceRect.height - content.height) / 2, content.width, content.height);
     const scale = window.devicePixelRatio || 1;
     const panelElement = controlPanelRef.current?.firstElementChild as HTMLElement | null;
+    const playerRect = playerRootRef.current?.getBoundingClientRect();
+    if (panelElement && controlPanelRef.current && playerRect) {
+      const wrapper = controlPanelRef.current;
+      wrapper.style.translate = '0px 0px';
+      panelElement.style.maxWidth = `${Math.max(0, playerRect.width - 16)}px`;
+      const initial = panelElement.getBoundingClientRect();
+      const shiftX = Math.max(playerRect.left + 8 - initial.left, Math.min(0, playerRect.right - 8 - initial.right));
+      wrapper.style.translate = `${shiftX}px 0px`;
+    }
     const panelRect = panelElement?.getBoundingClientRect();
     const panelRadius = panelElement ? Number.parseFloat(window.getComputedStyle(panelElement).borderTopLeftRadius) || 0 : 0;
     const panelLeft = panelRect ? Math.max(rect.left, panelRect.left) : 0;
@@ -474,7 +540,7 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
       width: Math.round(cornerSize * scale),
       height: Math.round(cornerSize * scale),
     } : undefined;
-    const visible = !hostSurfaceSuspended && !nativeContextMenuOpenRef.current && document.visibilityState === 'visible' && rect.width > 1 && rect.height > 1
+    const visible = surfaceVisible && !hostSurfaceSuspended && !nativeContextMenuOpenRef.current && document.visibilityState === 'visible' && rect.width > 1 && rect.height > 1
       && rect.right > 0 && rect.bottom > 0 && rect.left < window.innerWidth && rect.top < window.innerHeight;
     sessionRef.current.setBounds({
       x: Math.round(rect.left * scale),
@@ -483,11 +549,11 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
       height: Math.round(rect.height * scale),
       visible,
       viewportDip: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
-      overlayHole,
+      overlayHole: overlayHole || (topLeftOverlayHole > 0 && rect.width > 8 && rect.height > 8 ? { x: 8 * scale, y: 8 * scale, width: Math.min(rect.width - 8, topLeftOverlayHole) * scale, height: Math.min(rect.height - 8, 44) * scale, radius: 22 * scale } : undefined),
       controlsOverlayHole,
       cornerOverlayHole,
     });
-  }, [controlsOverlay, controlsVisible, hostSurfaceSuspended, topRightOverlayHole]);
+  }, [controlsOverlay, controlsVisible, surfaceVisible, appearance, pictureSize?.width, pictureSize?.height, hostSurfaceSuspended, topRightOverlayHole, topLeftOverlayHole, editingTransport, chromiumMode, state.width, state.height, videoTransform]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -540,13 +606,12 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
     onMetadataRef.current({ width: width || undefined, height: height || undefined, duration: duration || undefined });
   }, [state.width, state.height, state.duration]);
 
-  const control = (action: 'play' | 'pause' | 'seek' | 'volume' | 'mute' | 'speed' | 'stop' | 'subtitle-select' | 'subtitle-visible' | 'subtitle-delay', value?: number | boolean | string) => {
-    if (!sessionRef.current) return;
-    sessionRef.current.control({ action, value });
-  };
-  const paused = state.paused !== false;
-  const duration = Math.max(0, Number(state.duration) || 0);
-  const time = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, Number(state.time) || 0));
+  const control = (action: PlaybackControl['action'], value?: number | boolean | string) => sendControl({ action, value });
+  const transportState = editorState || state;
+  const transportReady = editorState ? editorState.ready : Boolean(sessionId);
+  const paused = pendingPauseRef.current ?? (transportState.paused !== false);
+  const duration = Math.max(0, Number(transportState.duration) || 0);
+  const time = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, Number(transportState.time) || 0));
   playbackPositionRef.current = { time, duration, paused };
   const speed = Math.max(0.25, Math.min(4, Number(state.speed) || 1));
   const muted = Boolean(state.muted);
@@ -581,21 +646,25 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
   };
 
   useEffect(() => {
-    onPlaybackStateRef.current?.({ time, duration, paused });
-  }, [time, duration, paused]);
+    const snapshot = { time: Number(state.time) || 0, duration: Number(state.duration) || 0, paused: backendPauseRef.current, frameRate: chromiumMode ? undefined : state.statistics?.sourceFps };
+    const key = JSON.stringify(snapshot);
+    if (key === reportedPlaybackKeyRef.current) return;
+    reportedPlaybackKeyRef.current = key;
+    onPlaybackStateRef.current?.(snapshot);
+  }, [state, chromiumMode]);
 
   useEffect(() => {
     if (!sessionId || !editorSeekRequest) return;
     if (editorSeekRequest.pause) control('pause');
     control('seek', editorSeekRequest.time);
+    if (editorSeekRequest.play) control('play');
   }, [sessionId, editorSeekRequest?.id]);
-  useEffect(() => { if (sessionId && editorControlRequest) sessionRef.current?.control(editorControlRequest.control); }, [sessionId, editorControlRequest]);
+  useEffect(() => { if (sessionId && editorControlRequest) { clearPendingPause(); sessionRef.current?.control(editorControlRequest.control); } }, [sessionId, editorControlRequest]);
   const seekRelative = useCallback((seconds: number) => {
-    if (!sessionRef.current) return;
     const current = playbackPositionRef.current;
     const nextTime = Math.max(0, Math.min(current.duration || Number.MAX_SAFE_INTEGER, current.time + seconds));
     current.time = nextTime;
-    sessionRef.current.control({ action: 'seek', value: nextTime });
+    sendControl({ action: 'seek', value: nextTime });
   }, []);
 
   useEffect(() => {
@@ -618,6 +687,7 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
   }, [syncBounds]);
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
+      if (!playerRootRef.current?.getClientRects().length) return;
       const visiblePlayers = [...document.querySelectorAll<HTMLElement>('[data-video-player="true"]')]
         .filter(player => player.getClientRects().length > 0);
       if (visiblePlayers.length > 1 && !playerRootRef.current?.contains(document.activeElement)) return;
@@ -663,9 +733,9 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
     setCaptureNotice(null);
     try {
       const descriptor = currentSession.availableBackends?.find(item => item.backendId === currentSession.backendId);
-      const result = descriptor?.features.capture.displayedFrame
-        ? await currentSession.capture()
-        : await currentSession.capture('sourceFrame');
+      const result = descriptor?.features.capture.sourceFrame
+        ? await currentSession.capture('sourceFrame')
+        : await currentSession.capture();
       if (generation !== captureGenerationRef.current || requestId !== requestIdRef.current || currentSession !== sessionRef.current) return;
       setCaptureNotice(result.success
         ? { text: '当前帧已保存' }
@@ -748,8 +818,8 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
     else if (action === 'video.stop') control('stop');
     else if (action === 'video.seekBackward') seekRelative(-SKIP_SECONDS);
     else if (action === 'video.seekForward') seekRelative(SKIP_SECONDS);
-    else if (action === 'video.frameBackward') sessionRef.current?.control({action:'frame-back-step'});
-    else if (action === 'video.frameForward') sessionRef.current?.control({action:'frame-step'});
+    else if (action === 'video.frameBackward') sendControl({action:'frame-back-step'});
+    else if (action === 'video.frameForward') sendControl({action:'frame-step'});
     else if (action === 'video.volumeUp') changeVolume(Math.min(100, volume + 5));
     else if (action === 'video.volumeDown') changeVolume(Math.max(0, volume - 5));
     else if (action === 'video.mute') control('mute', !muted);
@@ -774,16 +844,19 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
     shortcutActionRef.current(action);
   };
 
-  const forwardBackAction = videoDirectionalAction(keyboardSettings.arrowKeyAction, 'forward-back');
+  const forwardBackAction = editingTransport ? 'navigate' : videoDirectionalAction(keyboardSettings.arrowKeyAction, 'forward-back');
   const runForwardBackControl = (direction: -1 | 1) => {
     if (forwardBackAction === 'navigate') onNavigateRef.current(direction);
     else seekRelative(direction * SKIP_SECONDS);
   };
   const backwardControlLabel = forwardBackAction === 'navigate' ? '上一个视频' : '快退 5 秒';
   const forwardControlLabel = forwardBackAction === 'navigate' ? '下一个视频' : '快进 5 秒';
-  const playbackControls = bottomControls || <div onFocusCapture={() => { builtInControlsFocusedRef.current = true; }} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) builtInControlsFocusedRef.current = false; }} className={`relative z-20 flex h-12 shrink-0 items-center gap-1 px-2 text-white ${controlsOverlay ? 'bg-[#070b15]/95 shadow-[0_-10px_24px_rgba(0,0,0,.35)]' : 'border-t border-white/10 bg-[#070b15]'}`}>
+  const playbackControls = bottomControls || <div data-editing-transport={editingTransport || undefined} onFocusCapture={() => { builtInControlsFocusedRef.current = true; }} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) builtInControlsFocusedRef.current = false; }} className={`relative z-20 flex h-12 shrink-0 items-center gap-1 px-2 text-white ${controlsOverlay ? 'bg-[#070b15]/95 shadow-[0_-10px_24px_rgba(0,0,0,.35)]' : 'border-t border-white/10 bg-[#070b15]'}`}>
         {showNavigation && <button type="button" onClick={() => runForwardBackControl(-1)} title={backwardControlLabel} aria-label={backwardControlLabel} className="rounded p-1.5 text-slate-100 hover:bg-white/10"><SkipBack size={16}/></button>}
-        <button type="button" disabled={!sessionId} onClick={togglePlayback} title={paused ? t("ui.play.c33961") : t("ui.pause.8d12fc")} aria-label={paused ? t("ui.play.c33961") : t("ui.pause.8d12fc")} className="rounded p-1.5 text-slate-100 hover:bg-white/10 disabled:opacity-40">{paused ? <Play size={17} fill="currentColor"/> : <Pause size={17} fill="currentColor"/>}</button>
+        {editingTransport && <button type="button" disabled={!transportReady} onClick={() => seekRelative(-SKIP_SECONDS)} title="快退 5 秒" aria-label="快退 5 秒" className="rounded p-1.5 text-slate-100 hover:bg-white/10 disabled:opacity-40"><Rewind size={16}/></button>}
+        <button data-player-play type="button" disabled={!transportReady} onClick={togglePlayback} title={paused ? t("ui.play.c33961") : t("ui.pause.8d12fc")} aria-label={paused ? t("ui.play.c33961") : t("ui.pause.8d12fc")} className="rounded p-1.5 text-slate-100 hover:bg-white/10 disabled:opacity-40">{paused ? <Play size={17} fill="currentColor"/> : <Pause size={17} fill="currentColor"/>}</button>
+        {editingTransport && <button type="button" disabled={!transportReady} onClick={() => seekRelative(SKIP_SECONDS)} title="快进 5 秒" aria-label="快进 5 秒" className="rounded p-1.5 text-slate-100 hover:bg-white/10 disabled:opacity-40"><FastForward size={16}/></button>}
+        {editingTransport && frameControlsVisible && <><button data-player-step="-1" type="button" disabled={!transportReady} onClick={() => control('frame-back-step')} title="上一帧" aria-label="上一帧" className="rounded p-1.5 text-slate-100 hover:bg-white/10 disabled:opacity-40"><SkipBack size={16}/></button><button data-player-step="1" type="button" disabled={!transportReady} onClick={() => control('frame-step')} title="下一帧" aria-label="下一帧" className="rounded p-1.5 text-slate-100 hover:bg-white/10 disabled:opacity-40"><SkipForward size={16}/></button></>}
         {showNavigation && <button type="button" onClick={() => runForwardBackControl(1)} title={forwardControlLabel} aria-label={forwardControlLabel} className="rounded p-1.5 text-slate-100 hover:bg-white/10"><SkipForward size={16}/></button>}
         {externalTimeline ? <span className="flex-1"/> : <>
         <span className="w-10 text-right text-[11px] tabular-nums text-slate-300">{formatTime(time)}</span>
@@ -848,11 +921,12 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
             </div>
           </div>}
         </div>
-        {(starting || state.buffering) && <span role="status" className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-blue-200"><Loader2 size={13} className="animate-spin"/>{t("ui.loading.d04fcb")}</span>}
+        {playbackEnabled && (starting || state.buffering) && <span role="status" className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-blue-200"><Loader2 size={13} className="animate-spin"/>{t("ui.loading.d04fcb")}</span>}
         {captureNotice && <span role="status" aria-live="polite" title={captureNotice.text} className={`max-w-24 truncate whitespace-nowrap text-[11px] ${captureNotice.error ? 'text-red-300' : 'text-emerald-300'}`}>{captureNotice.text}</span>}
+        {editingTransport && <button type="button" disabled={!sessionId} onClick={() => onToggleFullscreenRef.current?.()} title="全屏播放（F，Esc 退出）" aria-label="全屏播放" className="rounded p-1.5 text-slate-200 hover:bg-white/10 disabled:opacity-40"><Maximize size={16}/></button>}
     </div>;
 
-  return <div ref={playerRootRef} data-video-player="true" className="absolute inset-0 flex min-h-0 flex-col bg-black">
+  return <div ref={playerRootRef} data-video-player="true" style={surfaceVisible ? undefined : { visibility: 'hidden' }} className={`absolute inset-0 flex min-h-0 flex-col ${appearance === 'photo' ? 'bg-slate-50' : 'bg-black'}`}>
     <div
       ref={surfaceRef}
       role="button"
@@ -872,10 +946,10 @@ const VideoPlayer = ({ filePath, poster, onError, onMetadata, onNavigate, onCont
           dispatchShortcutRef.current('video.playPause', event.repeat);
         }
       }}
-      className="relative min-h-0 flex-1 cursor-pointer overflow-hidden bg-black bg-contain bg-center bg-no-repeat outline-none"
+      className={`relative min-h-0 flex-1 cursor-pointer overflow-hidden ${appearance === 'photo' ? 'bg-slate-50' : 'bg-black'} bg-contain bg-center bg-no-repeat outline-none`}
       style={poster && !sessionId ? { backgroundImage: `url(${JSON.stringify(poster).slice(1, -1)})` } : undefined}
     >
-      <video ref={videoRef} className="pointer-events-none absolute inset-0 h-full w-full bg-black object-contain" aria-hidden="true"/>
+      <video ref={videoRef} className="pointer-events-none absolute inset-0 h-full w-full bg-transparent object-contain" aria-hidden="true"/>
     </div>
     {controlsVisible && progressRail}
     {controlsVisible && (controlsOverlay ? <div ref={controlsOverlayRef} className="absolute inset-x-0 bottom-0 z-20">{playbackControls}</div> : playbackControls)}

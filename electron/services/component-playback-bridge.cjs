@@ -98,7 +98,7 @@ const createComponentPlaybackBridge = ({getVideoPlaybackService,mediaService,ext
       return {success:result.success,cancelled:result.cancelled,error:result.error};
     }
     if(request.action==='control'){
-      if(!['play','pause','seek','frame-step','frame-back-step','volume','mute','speed','transform','hdr-mode','tone-mapping','statistics-level','subtitle-select','subtitle-visible','subtitle-delay','subtitle-style','audio-select'].includes(request.control?.action))throw new Error('Unsupported playback control');
+      if(!['play','pause','seek','frame-step','frame-back-step','volume','mute','speed','transform','hdr-mode','tone-mapping','statistics-level','subtitle-select','subtitle-visible','subtitle-delay','subtitle-style','audio-select','fullscreen'].includes(request.control?.action))throw new Error('Unsupported playback control');
       service.control(event,request.sessionId,request.control);return {success:true};
     }
     return updateBounds(request.sessionId,request.bounds,context);

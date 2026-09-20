@@ -1,3 +1,5 @@
+const { isHostPlayerAsset, serveHostPlayerAsset } = require('./host-player-assets.cjs');
+const hostPlayerSessions = new WeakSet();
 const applicationLocalization = require('./localization.cjs');
 const path = require('path');
 const { fileURLToPath } = require('url');
@@ -516,6 +518,10 @@ class ComponentViewManager {
     this.senderBindings.set(senderId, instance);
     this.partitionSessions.set(descriptor.componentId, view.webContents.session);
     const partitionSession = view.webContents.session;
+    if (partitionSession.protocol?.handle && !hostPlayerSessions.has(partitionSession)) {
+      partitionSession.protocol.handle('photoflow-player', serveHostPlayerAsset);
+      hostPlayerSessions.add(partitionSession);
+    }
     if (this.mediaProtocolHandler && partitionSession.protocol?.handle && !this.mediaProtocolSessions.has(partitionSession)) {
       partitionSession.protocol.handle('photoflow-media', request => {
         const token = mediaToken(request.url);
@@ -561,6 +567,10 @@ class ComponentViewManager {
       try {
         const requestUrl = new URL(details.url);
         if (['data:', 'blob:'].includes(requestUrl.protocol)) allowed = true;
+        else if (requestUrl.protocol === 'photoflow-player:') {
+          const requester = this.senderBindings.get(details.webContentsId);
+          allowed = Boolean(requester?.descriptor.componentId === descriptor.componentId && isHostPlayerAsset(details.url));
+        }
         else if (requestUrl.protocol === 'photoflow-media:') {
           const requester = this.senderBindings.get(details.webContentsId);
           allowed = Boolean(this.mediaProtocolHandler && requester?.descriptor.componentId === descriptor.componentId && hasMediaGrant(requester, mediaToken(requestUrl.href)));

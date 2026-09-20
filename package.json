@@ -3,7 +3,7 @@
   "productName": "照片流开源版",
   "private": true,
   "license": "Apache-2.0",
-  "version": "26.9.20.1",
+  "version": "26.9.21.3",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -16,22 +16,24 @@
     "build:video-surface-host": "node scripts/build-video-surface-host.cjs",
     "build:job-object-launcher": "node scripts/build-job-object-launcher.cjs",
     "dev": "vite",
-    "build": "node scripts/generate-i18n-catalogs.cjs --check && tsc -b && vite build",
+    "build": "node scripts/build-host-player.cjs && node scripts/generate-i18n-catalogs.cjs --check && tsc -b && vite build",
     "build:python": "node scripts/build-python.cjs",
     "setup:python": "node scripts/setup-python.cjs",
     "check:python": "node scripts/check-python-environment.cjs",
     "typecheck": "tsc -b --pretty false",
     "preview": "vite preview",
-    "electron": "npm run build:shell-thumbnail && npm run build:recycle-bin-service && npm run build:file-clipboard-service && npm run build:file-publication-service && npm run build:video-surface-host && npm run build:job-object-launcher && node scripts/launch-electron-dev.cjs",
+    "electron": "node scripts/build-host-player.cjs && npm run build:shell-thumbnail && npm run build:recycle-bin-service && npm run build:file-clipboard-service && npm run build:file-publication-service && npm run build:video-surface-host && npm run build:job-object-launcher && node scripts/launch-electron-dev.cjs",
     "electron:dev": "cross-env PHOTOFLOW_DEV_SERVER_URL=http://localhost:5173 concurrently -k \"cross-env BROWSER=none npm run dev\" \"npm run electron\"",
-    "preelectron:dev": "node scripts/prepare-development-python.cjs && npm run prepare:components:dev",
+    "preelectron:dev": "node scripts/build-host-player.cjs && node scripts/prepare-development-python.cjs && npm run prepare:components:dev",
     "build:native": "npm run build:shell-thumbnail && npm run build:recycle-bin-service && npm run build:file-clipboard-service && npm run build:file-publication-service && npm run build:video-surface-host && npm run build:job-object-launcher",
     "electron:build": "npm run generate:icon && npm run build && npm run build:python && npm run build:native && node scripts/build-electron.cjs",
     "test": "node scripts/test-public-source.cjs && node scripts/test-file-publication-platform.cjs && node scripts/test-component-status-refresh-policy.cjs && npm run test:examples",
     "test:smoke": "node scripts/test-public-smoke.cjs",
     "test:examples": "node scripts/test-component-examples.cjs && node scripts/mock-component-service.cjs examples/hello-component/service.cjs",
     "prepare:components:dev": "node scripts/prepare-development-components.cjs",
-    "i18n:generate": "node scripts/generate-i18n-catalogs.cjs"
+    "i18n:generate": "node scripts/generate-i18n-catalogs.cjs",
+    "test:preview": "node scripts/test-component-preview-api.cjs && node scripts/test-component-dynamic-preview.cjs && node scripts/test-live-photo-playback.mjs",
+    "test:host-player": "node scripts/build-host-player.cjs && node scripts/test-component-media-protocol.cjs && node node_modules/electron/cli.js scripts/test-host-player-ui.cjs"
   },
   "build": {
     "appId": "cn.qingstudio.opensource",
@@ -46,6 +48,7 @@
     },
     "files": [
       "artifacts/web/**/*",
+      "artifacts/player-runtime/**/*",
       "electron/**/*",
       "electron/generated/job-object-launcher-identity.json"
     ],
@@ -176,7 +179,8 @@
     "typescript": "^5.2.2",
     "typescript-eslint": "^8.46.4",
     "vite": "^5.2.0",
-    "wait-on": "^7.2.0"
+    "wait-on": "^7.2.0",
+    "nouislider": "15.8.1"
   },
   "description": "照片流主程序：以本地项目为核心的摄影工作流工具。",
   "repository": {

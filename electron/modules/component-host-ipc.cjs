@@ -50,7 +50,7 @@ const registerComponentHostIpc = ({ ipcMain, manager, mainWindow }) => {
   });
   ipcMain.handle('component-host-set-bounds', (event, value, bounds) => { mainRenderer(event); exact(bounds, ['x', 'y', 'width', 'height'], ['x', 'y', 'width', 'height']); manager.assertOwned?.(instanceId(value)); return { success: manager.setBounds(instanceId(value), bounds) }; });
   ipcMain.handle('component-host-close', (event, value) => { mainRenderer(event); manager.assertOwned?.(instanceId(value)); return { success: manager.close(instanceId(value)) }; });
-  ipcMain.handle('component-host-close-project', (event, workspacePath, projectId) => { mainRenderer(event); text(workspacePath, 4096); text(projectId, 160); return { success: true, closedCount: manager.closeProject(workspacePath, projectId) }; });
+  ipcMain.handle('component-host-close-project', async (event, workspacePath, projectId) => { mainRenderer(event); text(workspacePath, 4096); text(projectId, 160); await require('../services/component-preview-service.cjs').getPreviewRuntime().videoPreviews.clearProject(event.sender, workspacePath, projectId); return { success: true, closedCount: manager.closeProject(workspacePath, projectId) }; });
 };
 
 module.exports = { registerComponentHostIpc };

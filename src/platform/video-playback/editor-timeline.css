@@ -1,0 +1,62 @@
+.shared-player-progress{position:relative;flex:none;height:22px;background:#070b15;z-index:20}#frame-timeline{height:22px;width:100%;user-select:none}#frame-track{position:relative;height:22px;margin:0 10px;cursor:pointer;touch-action:none;outline-offset:-1px}
+#progress-slider.noUi-target{position:absolute;inset:0;height:22px;border:0;border-radius:0;background:transparent;box-shadow:none;z-index:1}#progress-slider .noUi-connects{top:10px;height:3px;border-radius:2px;background:#475569}#progress-slider .noUi-connect{background:#3b82f6}#progress-slider .noUi-handle{width:8px;height:8px;right:-4px;top:7px;background:#e2e8f0;border:0;border-radius:50%;box-shadow:none;cursor:ew-resize}
+#progress-marks{position:absolute;inset:0;pointer-events:none;z-index:2}.progress-mark.noUi-target{position:absolute;inset:0;width:100%;height:22px;border:0;border-radius:0;background:transparent;box-shadow:none;pointer-events:none;z-index:3}.progress-mark.active,.progress-mark:focus-within{z-index:8}.progress-mark .noUi-base,.progress-mark .noUi-connects{pointer-events:none;overflow:visible}.progress-mark .noUi-origin{pointer-events:none}.progress-mark .noUi-connect{top:4px;height:14px;background:#7c5aae88;border-radius:2px;box-shadow:inset 0 0 0 1px #b6a2e1;pointer-events:auto;cursor:grab}.progress-mark.active .noUi-connect,.progress-mark .noUi-connect:hover,.progress-mark .noUi-connect:focus-visible{background:#8b5cf6bb;box-shadow:inset 0 0 0 1px #e9d5ff}
+.progress-mark .noUi-handle{width:6px;height:16px;right:-3px;top:3px;border:0;border-radius:2px;background:#d8b4fe;box-shadow:none;pointer-events:auto;opacity:0;cursor:ew-resize}.progress-mark .noUi-handle-upper{background:#fde68a}.progress-mark .noUi-touch-area{cursor:ew-resize}.progress-mark.active .noUi-handle,.progress-mark:focus-within .noUi-handle,.progress-mark:hover .noUi-handle{opacity:1}#frame-timeline .noUi-handle::before,#frame-timeline .noUi-handle::after{display:none}#frame-timeline .noUi-target[disabled]{opacity:.5}#frame-track[aria-disabled=true]{cursor:wait}#frame-timeline[data-state=saving] .progress-mark{opacity:.6}#progress-parking[hidden],.photoflow-player [hidden]{display:none!important}
+
+/* The timecode row and rail have a fixed footprint; only the picture flexes. */
+.photoflow-player{--player-controls-bg:#070b15;--player-accent:#3b82f6;--player-accent-soft:rgba(255,255,255,.1);--player-text:#cbd5e1;--player-muted:#94a3b8;--player-border:rgba(255,255,255,.1);--player-control-bg:#101827;--player-focus:#60a5fa;--player-danger:#fca5a5;color-scheme:dark}
+.shared-player-progress{height:auto;background:var(--player-controls-bg);z-index:10}
+.photoflow-player [data-video-player],.photoflow-player [data-video-player]>[role=button]{background-color:#000000!important}
+.photoflow-player [data-video-player] video{background-color:transparent!important}
+.photoflow-player [data-editing-transport]{z-index:30!important}
+#frame-timeline{height:auto;container-type:inline-size;color:var(--player-text);font-size:12px}
+.timeline-timebar{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:34px;padding:4px 10px;font-variant-numeric:tabular-nums}
+.timeline-timebar time{white-space:nowrap;font-family:Consolas,monospace}
+.timecode-transport{display:flex;align-items:center;gap:4px;flex:none}
+.photoflow-player #timeline-current{display:flex;align-items:center;flex:none;height:26px;padding:2px 4px;border:1px solid transparent;border-radius:3px;background:transparent;color:var(--player-text);font:600 12px/1.4 Consolas,monospace;font-variant-numeric:tabular-nums}
+.photoflow-player #timeline-current input{box-sizing:content-box;min-width:0;max-width:none;min-height:0;height:20px;margin:0;padding:0 2px;border:0;border-radius:2px;background:transparent;color:inherit;font:inherit;line-height:20px;text-align:center;outline:none}
+.photoflow-player #timeline-current input:focus{background:var(--player-accent-soft);box-shadow:inset 0 -1px var(--player-focus)}
+.photoflow-player #timeline-current input:disabled{opacity:.4}
+.timecode-colon{flex:none;height:20px;line-height:20px;pointer-events:none;user-select:none}
+.photoflow-player button.timecode-step{display:grid;place-items:center;align-self:center;flex:none;width:26px;height:26px;min-height:0;padding:0;border:1px solid var(--player-border);border-radius:4px;background:var(--player-control-bg);color:var(--player-text)}
+.photoflow-player button.timecode-step:hover:not(:disabled){background:var(--player-accent-soft);border-color:var(--player-focus)}
+.photoflow-player button.timecode-step:focus-visible{outline:1px solid var(--player-focus);outline-offset:1px}
+.photoflow-player button.timecode-step:disabled{opacity:.35;cursor:default}
+.photoflow-player #timeline-current:hover{background:var(--player-control-bg)}
+.photoflow-player #timeline-current:focus-within{outline:0;border-color:var(--player-focus);background:var(--player-control-bg)}
+.photoflow-player #timeline-current[aria-invalid=true]{border-color:var(--player-danger);color:var(--player-danger)}
+.timeline-points{display:flex;align-items:center;justify-content:center;gap:4px;min-width:0}
+.photoflow-player .timeline-points button{display:flex;align-items:center;gap:5px;min-height:26px;padding:3px 6px;border-radius:3px;color:inherit;white-space:nowrap}
+.photoflow-player .timeline-points button:hover{background:var(--player-accent-soft)}
+.photoflow-player .timeline-points button[aria-pressed=true]{color:var(--player-accent);background:var(--player-accent-soft)}
+.photoflow-player .timeline-points button:focus-visible{outline:1px solid var(--player-focus)}
+.photoflow-player #player-add-mark{margin-left:4px;border-left:1px solid var(--player-border);border-radius:0;padding-left:10px}
+#frame-track{height:24px;margin:0 18px}
+#progress-slider.noUi-target{height:24px}
+#progress-slider .noUi-connects{top:14px;height:6px;border-radius:0;background:#475569}
+#progress-slider .noUi-connect{background:var(--player-accent)}
+#progress-slider .noUi-handle{top:-1px;right:-5px;width:10px;height:15px;border-radius:2px 2px 0 0;background:var(--player-accent);clip-path:polygon(0 0,100% 0,100% 58%,50% 100%,0 58%)}
+.progress-mark.noUi-target{height:24px}
+.progress-mark .noUi-connect{top:14px;height:6px;border-radius:0}
+.progress-mark .noUi-handle{top:12px;height:10px;border-radius:0}
+.trim-axis{height:24px;padding:4px 18px 14px}
+.photoflow-player [data-video-player]>[data-editing-transport]{height:auto;min-height:44px;flex-wrap:wrap;padding-top:4px;padding-bottom:4px}
+#trim-slider.noUi-target{height:6px;margin:0;border:0;border-radius:0;background:var(--player-border);box-shadow:none;cursor:ew-resize}
+#trim-slider .noUi-connects{overflow:visible;border-radius:0}
+#trim-slider .noUi-connect{background:var(--player-muted);opacity:.55;cursor:grab}
+#trim-slider .noUi-handle{top:-2px;right:-10px;width:20px;height:20px;border:0;border-radius:0;background:transparent;box-shadow:none;cursor:ew-resize}
+#trim-slider .noUi-handle::after{display:block;content:"";position:absolute;top:2px;width:10px;height:10px;background:var(--player-text)}
+#trim-slider .noUi-handle-lower::after{left:0;clip-path:polygon(100% 0,100% 100%,0 100%)}
+#trim-slider .noUi-handle-upper::after{left:10px;clip-path:polygon(0 0,100% 100%,0 100%)}
+.trim-icon{display:inline-block;flex:none;width:10px;height:10px;background:currentColor}
+.trim-icon.start{clip-path:polygon(100% 0,100% 100%,0 100%)}
+.trim-icon.end{clip-path:polygon(0 0,100% 100%,0 100%)}
+.marker-drop{display:inline-block;flex:none;width:12px;height:16px;background:currentColor;clip-path:path('M6 16 C5 13 0 10 0 6 A6 6 0 1 1 12 6 C12 10 7 13 6 16 Z')}
+.photoflow-player .progress-mark-pin{position:absolute;top:-4px;width:16px;height:18px;padding:0;transform:translateX(-50%);color:#a78bfa;pointer-events:auto;z-index:9;display:grid;place-items:center}
+.photoflow-player .progress-mark-pin:hover,.photoflow-player .progress-mark-pin:focus-visible{color:var(--player-accent);outline:1px solid var(--player-focus)}
+#trim-slider .noUi-handle:hover::after,#trim-slider .noUi-handle:focus-visible::after{background:var(--player-accent)}
+#trim-slider .noUi-handle:focus-visible{outline:1px solid var(--player-focus);outline-offset:2px}
+#trim-slider .noUi-touch-area{position:relative;z-index:1;cursor:ew-resize}
+.photoflow-player video:fullscreen{pointer-events:auto!important;transform:none!important;object-fit:contain!important;clip-path:none!important}
+@container(max-width:700px){.timeline-points time{display:none}}
+@container(max-width:430px){.timeline-timebar{flex-wrap:wrap;gap:2px}.timeline-points{order:3;width:100%}}

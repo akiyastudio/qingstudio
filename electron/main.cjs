@@ -146,6 +146,7 @@ const suspendToastViewForNativeDrag = () => (currentApplicationHost()?.toast || 
 const resumeToastViewAfterNativeDrag = () => (currentApplicationHost()?.toast || toastViewManager)?.resumeAfterNativeDrag();
 
 protocol.registerSchemesAsPrivileged([
+  { scheme: 'photoflow-player', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
   { scheme: 'photoflow-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
   { scheme: 'photoflow-component', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);

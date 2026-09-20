@@ -451,6 +451,14 @@ const createVideoPlaybackProcessService = ({
   const control = (event, sessionId, request = {}) => {
     const session = sessions.get(String(sessionId || ''));
     if (!session || session.sender.id !== event.sender.id) return;
+    // Fullscreen belongs to the host's surface controller, not the decoder's
+    // embedded libmpv window options or a second renderer/player session.
+    if (request.action === 'fullscreen') {
+      if (request.value !== undefined && typeof request.value !== 'boolean') return;
+      if (request.value !== false && (session.hostVisible === false || !session.lastRequestedBounds?.visible)) return;
+      session.surfaceController?.setFullscreen(request.value);
+      return;
+    }
     const allowed = new Set(['play', 'pause', 'seek', 'frame-step', 'frame-back-step', 'volume', 'mute', 'speed', 'stop', 'subtitle-select', 'subtitle-visible', 'subtitle-delay', 'subtitle-style', 'audio-select', 'transform', 'hdr-mode', 'tone-mapping', 'statistics-level']);
     const command = String(request.action || '');
     if (!allowed.has(command)) return;

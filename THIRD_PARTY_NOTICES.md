@@ -13,6 +13,7 @@ The following is the main application dependency index. Actual npm versions are 
 | Node.js | Bundled with Electron 43.4.1 | MIT + third-party licenses | [Source](https://github.com/nodejs/node) · [License](https://github.com/nodejs/node/blob/main/LICENSE) |
 | React / React DOM | 18.3.1 | MIT | [Source](https://github.com/facebook/react) · [License](https://github.com/facebook/react/blob/main/LICENSE) |
 | Lucide React | 0.344.0 | ISC | [Source](https://github.com/lucide-icons/lucide) · [License](https://github.com/lucide-icons/lucide/blob/main/LICENSE) |
+| noUiSlider | 15.8.1 | MIT | [Source](https://github.com/leongersen/noUiSlider) · [License](https://github.com/leongersen/noUiSlider/blob/master/LICENSE.md) |
 | exiftool-vendored | 37.2.0 | MIT | [Source](https://github.com/photostructure/exiftool-vendored.js) · [License](https://github.com/photostructure/exiftool-vendored.js/blob/main/LICENSE) |
 | ExifTool | 13.59 | Artistic License 1.0 or GPL | [Source](https://exiftool.org/) · [License](https://dev.perl.org/licenses/) |
 | Python | 3.12.10 | PSF License | [Source](https://github.com/python/cpython) · [License](https://docs.python.org/3/license.html) |

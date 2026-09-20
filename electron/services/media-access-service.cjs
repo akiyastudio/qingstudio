@@ -195,7 +195,8 @@ const createMediaAccessService = ({ getWorkspaceRoots, getAdditionalRoots = () =
     return grant.path;
   };
 
-  return { authorizeInput, authorizeWorkspaceInput, grantRoot, grantPath, resolveToken };
+  const revokeToken = async token => { grants.delete(token); await discardVerifiedMediaHandle(token); };
+  return { authorizeInput, authorizeWorkspaceInput, grantRoot, grantPath, resolveToken, revokeToken };
 };
 
 module.exports = { createMediaAccessService, discardVerifiedMediaHandle, takeVerifiedMediaHandle };

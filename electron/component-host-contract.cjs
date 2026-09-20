@@ -407,7 +407,7 @@ const parseComponentHostManifest = (manifest, componentRoot, developmentFiles = 
     }
     const previewDecoders = parsePreviewDecoders(raw.previewDecoders, rpcMethods);
     if (previewDecoders.length && (!permissions.includes('project.input.read') || !capabilities.includes('project.input.tokens') || !capabilities.includes('component.transfer'))) throw new Error('Preview decoders require project.input.tokens, component.transfer and project.input.read');
-    const hostOnlyRpcMethods = Object.freeze([backupRestore?.workspace?.method, backupRestore?.project?.method, ...previewDecoders.map(item => item.method)].filter(Boolean));
+    const hostOnlyRpcMethods = Object.freeze([backupRestore?.workspace?.method, backupRestore?.project?.method, ...previewDecoders.flatMap(item => [item.method, item.thumbnailMethod])].filter(Boolean));
     service = Object.freeze({
       protocolVersion: COMPONENT_SERVICE_PROTOCOL_VERSION,
       runtime: raw.runtime,

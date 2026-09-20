@@ -108,7 +108,11 @@ const runWorkspaceWindowSmokeProbe = async ({ mainWindow, manager }) => {
   if (process.env.PHOTOFLOW_SMOKE_WORKSPACE_SCREENSHOT) {
     const path = require('node:path');
     const fs = require('node:fs');
-    const privateRoot = require('../../scripts/project-output-paths.cjs').privateRootFor(path.resolve(__dirname, '../..'));
+    const configuredRoot = process.env.PHOTOFLOW_PRIVATE_ROOT;
+    if (!configuredRoot || !path.isAbsolute(configuredRoot)) throw new Error('Set PHOTOFLOW_PRIVATE_ROOT to an absolute directory outside the source checkout');
+    const privateRoot = path.resolve(configuredRoot);
+    const sourceRelative = path.relative(path.resolve(__dirname, '../..'), privateRoot);
+    if (!sourceRelative.startsWith('..') && !path.isAbsolute(sourceRelative)) throw new Error('Private output root must be outside the source checkout');
     const output = path.resolve(process.env.PHOTOFLOW_SMOKE_WORKSPACE_SCREENSHOT);
     const relative = path.relative(privateRoot, output);
     if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Window screenshot must be inside the private output root');

@@ -251,9 +251,14 @@ export const reconcileConfiguredSdDevices = (
   const staleMirrorPaths = new Set<string>();
   const nextRecords = records.map(record => {
     const match = devices.find(device => storageDeviceMatchesId(device, record.deviceId) && isTrustedSdImportDevice(device));
-    if (match && (identityKey(match.id) !== identityKey(record.deviceId) || pathKey(match.mountPath) !== pathKey(record.lastMountPath))) {
-      staleMirrorPaths.add(pathKey(record.lastMountPath));
-      return { ...record, deviceId: match.id, lastMountPath: match.mountPath };
+    if (match) {
+      if (identityKey(match.id) !== identityKey(record.deviceId) || pathKey(match.mountPath) !== pathKey(record.lastMountPath)) {
+        staleMirrorPaths.add(pathKey(record.lastMountPath));
+        return { ...record, deviceId: match.id, lastMountPath: match.mountPath };
+      }
+      // A GUID can still be the live identity when no volume serial is available.
+      // Only unmatched legacy GUIDs need confirmation again; keep a live match.
+      return record;
     }
     const samePathCanonical = isLegacyWindowsGuid(record.deviceId)
       ? devices.find(device => isTrustedSdImportDevice(device) && pathKey(device.mountPath) === pathKey(record.lastMountPath))

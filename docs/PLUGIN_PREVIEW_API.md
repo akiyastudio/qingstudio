@@ -107,9 +107,44 @@ Declare at least `project.input.tokens` and `component.transfer`, with permissio
 3. Use `component.transfer` create/write/finish to obtain an output input-token, then close the session.
 4. Return `{inputToken,mimeType:'image/png',pageIndex,pageCount}`. Return one page per call, with 1–10,000 total pages.
 
-The host checks source scope, token ownership, PNG header/dimensions, then decodes and re-encodes the image for display. Output PNGs are limited to 32 MiB. HTML, scripts, arbitrary URLs, and physical paths are rejected. **Input formats are extensible; the current display contract is a bitmap preview.** Text selection, source-document editing, 3D interaction, and audio playback are outside this static protocol. Videos use the existing player/backends first; a matching static decoder can provide a preview if playback fails.
+The host checks source scope, token ownership, PNG header/dimensions, then decodes and re-encodes the image for display. Output PNGs are limited to 32 MiB. HTML, scripts, arbitrary URLs, and physical paths are rejected. Input formats are extensible; results support PNG bitmaps and the MOV/MP4 previews below. Text selection, source-document editing and 3D interaction are outside this protocol. Videos use the existing player/backends first; a matching decoder can provide a preview if playback fails.
+
+### Dynamic preview results
+
+The same `previewDecoders` registration can return a video without a plugin UI or format-specific host code. Read the authorized input, extract or generate the video, upload it through `component.transfer`, and return:
+
+```ts
+{ inputToken: videoToken, mimeType: 'video/quicktime', pageIndex: 0, pageCount: 1 }
+// For MP4, use mimeType: 'video/mp4'.
+```
+
+Video results must use page 0 of 1. `maxEdge` limits bitmaps, not video dimensions. The host validates the MOV/MP4 container and retains an authorized private snapshot, up to 256 MiB. Actual codec support depends on the shared player and installed backends; not every HEVC variant is guaranteed. Chunked transfer still has the ordinary limit of 128 capability calls per RPC, so plugins must budget create/write/finish/close calls and restrict upload size accordingly.
+
+The host returns an opaque `previewId` to its main preview and mounts the shared player with play, pause, seek, native backends and position notifications. Plugins return tokens only; they receive no native window, project write permission or main-page control. Source files remain unchanged, derived video is not published into the project, and saving screenshots of these previews is currently unavailable.
+
+Internal source/backends/start/keepalive/release IPC checks window ownership and is not exposed to plugin pages. The main preview renews its lease every 30 seconds; two minutes without renewal releases it. File switches, closing previews, window reloads, project closure and disabling components revoke tokens, stop native sessions and clean snapshots. A native start that finishes after cancellation is also stopped. Cancelling preparation discards late results but does not forcibly terminate plugin algorithms; plugins must enforce their own resource and time limits.
+
+See `component-sdk/index.d.ts` and `component-preview-decoder-v1.schema.json`. Existing PNG results remain compatible. For embedded playback in plugin pages, see [Host player](HOST_PLAYER_API.md).
 
 ## Click and failure behavior
+
+### File icon thumbnails
+
+Decoders can declare `thumbnailMethod`, listed in `service.rpcMethods` and automatically restricted to host-only calls. A PNG decoder can reuse its preview method:
+
+```json
+{ "id": "photos", "label": "Photos", "extensions": [".custom"], "method": "photo.preview.v1", "thumbnailMethod": "photo.thumbnail.v1" }
+```
+
+Requests use the same restricted input, pageIndex and maxEdge fields. Page index is always 0; maxEdge is 64–640. Only PNG results are accepted. Lists, grids and version-tree file icons request visible thumbnails and retain the system icon on failure. Thumbnail throttling is independent from main previews: at most two concurrent requests, and one per component; conflicts may retry with backoff.
+
+The process-local LRU cache holds at most 256 entries and 64 MiB, without writing thumbnails into projects. Keys include window, project, scope, source path and file identity/size/mtime/ctime, component version and dimensions. Every read still checks authorization and source identity; changed sources discard in-flight results. Restart rebuilds the cache on demand; plugins do not manage this cache.
+
+### Photo-style dynamic previews
+
+Video results may also return `posterInputToken` for a PNG cover and `presentation: 'live-photo'`. The host validates and re-encodes the cover independently, plays once muted on opening, then restores the cover. A LIVE button replays it without a regular video toolbar. Playback uses the shared player and installed backends; ordinary video presentation is unchanged.
+
+Cover and video must use different single-use tokens. The cover still obeys maxEdge. Plugins own parsing and pairing. Without a decodable cover, omit both fields to return an ordinary video preview.
 
 Clicking a non-media file with an enabled matching decoder previews it instead of immediately opening a system application. With no decoder, existing open behavior remains. Single-click preview also works in double-click-to-open mode; Ctrl/Shift selection follows file-page rules.
 

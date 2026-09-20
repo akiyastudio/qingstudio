@@ -1788,6 +1788,10 @@ const registerSystemIpc = context => {
       return { success: true, savedConfig };
     } catch (error) {
       console.error('❌ Failed to save config:', error);
+      if (error?.code === 'CONFIG_CONCURRENT_EDIT') {
+        console.error('Config conflict field:', error.field);
+        return { success: false, error: error.message };
+      }
       return { success: false, error: String(error) };
     }
   });

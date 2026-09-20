@@ -49,6 +49,8 @@ Python 虚拟环境生成在 `.venv/`。npm 使用锁文件；Python 直接依�
 
 ```powershell
 npm test
+npm run test:preview
+npm run test:host-player
 npm run build
 npm run build:native
 npm run check:python

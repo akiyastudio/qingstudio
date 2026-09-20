@@ -118,7 +118,12 @@ const createNativeVideoSurfaceService = ({ app, path, processSupervisor = null, 
         stopHost('video-surface-close');
       }, 1000); timer.unref?.();
     };
-    return { setBounds, reparent, close, child, sessionId, expectedPid, surfaceHandle: childHandle };
+    const setFullscreen = value => {
+      if (closed || !child.stdin.writable || value !== undefined && typeof value !== 'boolean') return false;
+      try { child.stdin.write(`${JSON.stringify({ command: 'fullscreen', ...(value === undefined ? {} : { value }) })}\n`, error => { if (error) handleLifecycleError(error); }); return true; }
+      catch (error) { handleLifecycleError(error); return false; }
+    };
+    return { setBounds, setFullscreen, reparent, close, child, sessionId, expectedPid, surfaceHandle: childHandle };
   };
   return { attach };
 };

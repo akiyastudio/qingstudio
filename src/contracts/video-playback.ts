@@ -98,7 +98,7 @@ export const chromiumVideoStyle = (value: VideoTransform, viewportWidth = 0, vie
     objectFit: 'fill',
     aspectRatio: 'auto',
     width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%',
-    margin: '0', backgroundColor: '#000', willChange: 'transform',
+    margin: '0', backgroundColor: 'transparent', willChange: 'transform',
     transformOrigin: 'center center',
     transform: `matrix(${matrix.a}, ${matrix.b}, ${matrix.c}, ${matrix.d}, ${matrix.e}, ${matrix.f})`,
     clipPath:value.crop?`inset(${value.crop.y*100}% ${Math.max(0,1-value.crop.x-value.crop.width)*100}% ${Math.max(0,1-value.crop.y-value.crop.height)*100}% ${value.crop.x*100}%)`:undefined,

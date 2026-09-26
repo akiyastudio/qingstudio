@@ -18,7 +18,12 @@ internal static class FilePublicationService
     private sealed class PostCommitException : IOException {
         internal readonly string PublishedPath;
         internal readonly string IdentityValue;
-        public PostCommitException(string message, string publishedPath, string identity, Exception inner) : base(message, inner) { PublishedPath = publishedPath; IdentityValue = identity; }
+        // Which phase failed after the target was published. A caller may only
+        // advise removing the original when it was the source cleanup that
+        // failed: after a failed target validation the target's identity is in
+        // doubt, so nothing should be deleted or promised.
+        internal readonly string Stage;
+        public PostCommitException(string message, string publishedPath, string identity, string stage, Exception inner) : base(message, inner) { PublishedPath = publishedPath; IdentityValue = identity; Stage = stage; }
     }
     private const uint MOVEFILE_WRITE_THROUGH = 0x8;
     private const uint GENERIC_READ = 0x80000000;
@@ -164,7 +169,7 @@ internal static class FilePublicationService
                 var identity = Identity(directoryHandle);
                 MoveNoReplaceCore(source, target);
                 try { using (var targetHandle = OpenLocked(target, GENERIC_READ, true)) VerifyIdentity(targetHandle, identity, "已发布目录"); }
-                catch (Exception error) { throw new PostCommitException("目录已发布，但无法完成目标身份复核", target, identity, error); }
+                catch (Exception error) { throw new PostCommitException("目录已发布，但无法完成目标身份复核", target, identity, "target-validation", error); }
                 return new Dictionary<string, object> { { "success", true }, { "strategy", "win32-move-no-replace" }, { "identity", identity } };
             }
         }
@@ -197,7 +202,7 @@ internal static class FilePublicationService
                     if (GetFileAttributes(target) != INVALID_FILE_ATTRIBUTES) throw new Win32Exception(183, "目标文件已存在");
                     MoveNoReplaceCore(source, target);
                     try { using (var targetHandle = OpenLocked(target, GENERIC_READ, Directory.Exists(target))) VerifyIdentity(targetHandle, expectedIdentity, "批量发布目标"); }
-                    catch (Exception error) { throw new PostCommitException("项目已发布，但无法完成目标身份复核", target, identity, error); }
+                    catch (Exception error) { throw new PostCommitException("项目已发布，但无法完成目标身份复核", target, identity, "target-validation", error); }
                     results.Add(new Dictionary<string, object> { { "index", index }, { "success", true }, { "strategy", "win32-batch-move-no-replace" }, { "identity", identity } });
                 }
             } catch (Exception error) {
@@ -294,6 +299,11 @@ internal static class FilePublicationService
         var results = new Dictionary<string, object>[items.Count]; var failed = 0;
         var control = new CopyControl(controlPath, items.Count, items.Sum(item => item.Size));
         if (resumePath != null && (deleteSource || items.Count != 1 || String.IsNullOrEmpty(resumeIdentity))) throw new ArgumentException("续传仅支持单文件复制");
+        // Small files run several workers at once. The halt below only stops
+        // workers that have not started yet, so every worker already in flight
+        // still records its own result: `results` can therefore hold more than one
+        // failure, each with its own stage and published flag. Callers must sum
+        // the whole set instead of assuming a single failure.
         var degree = items.Count > 1 && items.All(item => item.Size <= 2L * 1024 * 1024) ? Math.Min(Math.Max(1, Math.Min(8, parallelism)), items.Count) : 1;
         Parallel.ForEach(items, new ParallelOptions { MaxDegreeOfParallelism = degree }, item => {
             if (Volatile.Read(ref failed) != 0) return;
@@ -302,7 +312,7 @@ internal static class FilePublicationService
             } catch (Exception error) {
                 var native = error as Win32Exception; var committed = error as PostCommitException;
                 var code = error is OperationCanceledException ? "EOPCANCELLED" : error is OwnershipConflictException || error is InvalidDataException ? "PUBLISH_OWNERSHIP_CONFLICT" : error is PathTooLongException ? "ENAMETOOLONG" : error is ArgumentException ? "EINVAL" : native == null ? "FILE_PUBLICATION_FAILED" : NativeCode(native.NativeErrorCode);
-                var failure = new Dictionary<string, object> { { "index", item.Index }, { "success", false }, { "error", committed != null && committed.InnerException != null ? error.Message + "：" + committed.InnerException.Message : error.Message }, { "code", code }, { "nativeError", native == null ? 0 : native.NativeErrorCode }, { "sourceDeleted", false } };
+                var failure = new Dictionary<string, object> { { "index", item.Index }, { "success", false }, { "error", committed != null && committed.InnerException != null ? error.Message + "：" + committed.InnerException.Message : error.Message }, { "code", code }, { "nativeError", native == null ? 0 : native.NativeErrorCode }, { "sourceDeleted", false }, { "stage", committed == null ? "pre-publication" : committed.Stage } };
                 if (committed != null) { failure["published"] = true; failure["publishedPath"] = committed.PublishedPath; failure["identity"] = committed.IdentityValue; }
                 results[item.Index] = failure; Interlocked.Exchange(ref failed, 1);
             }
@@ -404,13 +414,13 @@ internal static class FilePublicationService
                     if (!SetBasicInformationByHandle(targetStream.SafeFileHandle, FileBasicInfo, ref sourceBasic, (uint)Marshal.SizeOf(typeof(FILE_BASIC_INFO)))) throw new Win32Exception(Marshal.GetLastWin32Error());
                     targetIdentity = Identity(targetStream.SafeFileHandle); MoveNoReplaceBuffered(temporary, target); published = true;
                     if (deleteSource) {
-                        try { using (var verifyTargetHandle = OpenLocked(target, GENERIC_READ, false, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)) { VerifyIdentity(verifyTargetHandle, targetIdentity, "原生剪切目标文件"); BY_HANDLE_FILE_INFORMATION targetInfo; if (!GetFileInformationByHandle(verifyTargetHandle, out targetInfo)) throw new Win32Exception(Marshal.GetLastWin32Error()); var targetSize = ((long)targetInfo.FileSizeHigh << 32) | targetInfo.FileSizeLow; if (targetSize != expectedSize) throw new InvalidDataException("原生剪切目标文件大小不一致"); } }
-                        catch (Exception error) { throw new PostCommitException("目标已发布，但目标身份或大小复核失败", target, targetIdentity, error); }
+                        try { VerifyPublishedCutTarget(source, target, targetIdentity, expectedSize); }
+                        catch (Exception error) { throw new PostCommitException("目标已发布，但目标身份或大小复核失败", target, targetIdentity, "target-validation", error); }
                     }
                     if (deleteSource) {
                         var sourceChanged = false; var originalSource = sourceBasic;
-                        try { if ((sourceBasic.FileAttributes & FILE_ATTRIBUTE_READONLY) != 0) { var writable = sourceBasic; writable.FileAttributes &= ~FILE_ATTRIBUTE_READONLY; if (!SetBasicInformationByHandle(sourceHandle, FileBasicInfo, ref writable, (uint)Marshal.SizeOf(typeof(FILE_BASIC_INFO)))) throw new Win32Exception(Marshal.GetLastWin32Error()); sourceChanged = true; } MarkDelete(sourceHandle); }
-                        catch (Exception error) { RestoreAttributes(sourceHandle, originalSource, sourceChanged); throw new PostCommitException("目标已发布，但源文件无法删除", target, targetIdentity, error); }
+                        try { if ((sourceBasic.FileAttributes & FILE_ATTRIBUTE_READONLY) != 0) { var writable = sourceBasic; writable.FileAttributes &= ~FILE_ATTRIBUTE_READONLY; if (!SetBasicInformationByHandle(sourceHandle, FileBasicInfo, ref writable, (uint)Marshal.SizeOf(typeof(FILE_BASIC_INFO)))) throw new Win32Exception(Marshal.GetLastWin32Error()); sourceChanged = true; } TestInjectSourceCleanupFailure(source, sourceHandle); }
+                        catch (Exception error) { RestoreAttributes(sourceHandle, originalSource, sourceChanged); throw new PostCommitException("目标已发布，但源文件无法删除", target, targetIdentity, "source-cleanup", error); }
                     }
                 }
                 return new Dictionary<string, object> { { "success", true }, { "published", true }, { "sourceDeleted", deleteSource }, { "identity", targetIdentity }, { "sha256", digest }, { "size", expectedSize }, { "resumedBytes", resumedBytes } };
@@ -533,10 +543,14 @@ internal static class FilePublicationService
                 var stagedIdentity = Identity(stagedHandle);
                 Verify(stagedHandle, expectedHash, expectedSize, "暂存文件");
                 MoveNoReplaceCore(staged, target);
+                // The two phases are reported apart: a target whose identity or
+                // content check failed must never be described as safely
+                // published, and only a failed source cleanup may be answered
+                // with "delete the original yourself".
                 try {
                     using (var targetHandle = OpenLocked(target, GENERIC_READ)) { VerifyIdentity(targetHandle, stagedIdentity, "目标文件"); Verify(targetHandle, expectedHash, expectedSize, "目标"); }
-                    try { MarkDelete(sourceHandle); } catch { RestoreAttributes(sourceHandle, sourceAttributes, sourceAttributesChanged); throw; }
-                } catch (Exception error) { throw new PostCommitException("目标已发布，但提交后的验证或源清理失败", target, stagedIdentity, error); }
+                } catch (Exception error) { throw new PostCommitException("目标已发布，但提交后的目标验证失败", target, stagedIdentity, "target-validation", error); }
+                try { MarkDelete(sourceHandle); } catch (Exception error) { RestoreAttributes(sourceHandle, sourceAttributes, sourceAttributesChanged); throw new PostCommitException("目标已发布，但源文件无法删除", target, stagedIdentity, "source-cleanup", error); }
             }
         }
         return new Dictionary<string, object> { { "success", true }, { "strategy", "win32-cross-volume-locked-commit" } };
@@ -641,10 +655,40 @@ internal static class FilePublicationService
         }
         GC.SuppressFinalize(stream);
     }
-    private static void MarkDelete(SafeFileHandle handle)
+    // Test seam for the post-publication target check. An injected failure here
+    // travels the same path as a real identity or size mismatch, so the caller
+    // labels it `target-validation` and no caller may treat the target as safe.
+    // Outside a PHOTOFLOW_TEST_FAULTS build this only performs the real check.
+    private static void VerifyPublishedCutTarget(string source, string target, string targetIdentity, long expectedSize)
     {
+#if PHOTOFLOW_TEST_FAULTS
+        var injected = Environment.GetEnvironmentVariable("PHOTOFLOW_TEST_TARGET_VALIDATION_FAILURE");
+        if (!String.IsNullOrEmpty(injected) && String.Equals(Full(injected), Full(source), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("测试注入：目标复核失败");
+#endif
+        using (var verifyTargetHandle = OpenLocked(target, GENERIC_READ, false, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)) {
+            VerifyIdentity(verifyTargetHandle, targetIdentity, "原生剪切目标文件");
+            BY_HANDLE_FILE_INFORMATION targetInfo;
+            if (!GetFileInformationByHandle(verifyTargetHandle, out targetInfo)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            var targetSize = ((long)targetInfo.FileSizeHigh << 32) | targetInfo.FileSizeLow;
+            if (targetSize != expectedSize) throw new InvalidDataException("原生剪切目标文件大小不一致");
+        }
+    }
+    private static void MarkDelete(SafeFileHandle handle)    {
         var info = new FILE_DISPOSITION_INFO { DeleteFile = true };
         if (!SetFileInformationByHandle(handle, FileDispositionInfo, ref info, (uint)Marshal.SizeOf(typeof(FILE_DISPOSITION_INFO)))) throw new Win32Exception(Marshal.GetLastWin32Error());
+    }
+    // Test seam for the source cleanup step. It lives where MarkDelete is called,
+    // inside the caller's try, so an injected failure travels the same path as a
+    // real refusal: the caller restores the source attributes and reports the
+    // `source-cleanup` stage with the target already published. Outside a
+    // PHOTOFLOW_TEST_FAULTS build this is a plain MarkDelete.
+    private static void TestInjectSourceCleanupFailure(string source, SafeFileHandle handle)
+    {
+#if PHOTOFLOW_TEST_FAULTS
+        var injected = Environment.GetEnvironmentVariable("PHOTOFLOW_TEST_SOURCE_CLEANUP_FAILURE");
+        if (!String.IsNullOrEmpty(injected) && String.Equals(Full(injected), source, StringComparison.OrdinalIgnoreCase)) throw new UnauthorizedAccessException("测试注入：源文件删除被拒绝");
+#endif
+        MarkDelete(handle);
     }
     private static void ReadBasicInformation(SafeFileHandle handle, out FILE_BASIC_INFO information) { if (!GetFileInformationByHandleEx(handle, FileBasicInfo, out information, (uint)Marshal.SizeOf(typeof(FILE_BASIC_INFO)))) throw new Win32Exception(Marshal.GetLastWin32Error()); }
     private static bool ClearReadOnly(SafeFileHandle handle, out FILE_BASIC_INFO original) { ReadBasicInformation(handle, out original); if ((original.FileAttributes & FILE_ATTRIBUTE_READONLY) == 0) return false; var writable = original; writable.FileAttributes &= ~FILE_ATTRIBUTE_READONLY; if (!SetBasicInformationByHandle(handle, FileBasicInfo, ref writable, (uint)Marshal.SizeOf(typeof(FILE_BASIC_INFO)))) throw new Win32Exception(Marshal.GetLastWin32Error()); return true; }

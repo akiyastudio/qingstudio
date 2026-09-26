@@ -1,7 +1,27 @@
 const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const { stopProcessAndWait } = require('../infrastructure/process-termination.cjs');
 const { CoordinatedDatabaseClient } = require('./coordinated-database-client.cjs');
 const { WorkspaceDatabaseOperationPolicy } = require('./workspace-database-operation-policy.cjs');
+
+// A durable media operation keeps its staged copy of the core/media/versioning
+// databases in a deterministic sibling directory of the core database
+// (`<core>.media-operation-<operation digest>`). Its presence means the next
+// `connect()` in any worker replays that publication over the live files, so the
+// request paying for it needs the exclusive lease.
+const pendingMediaOperationDirectories = database => {
+  const absolute = path.resolve(String(database || ''));
+  const prefix = `${path.basename(absolute)}.media-operation-`;
+  try {
+    return fs.readdirSync(path.dirname(absolute), { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && entry.name.startsWith(prefix))
+      .map(entry => path.join(path.dirname(absolute), entry.name))
+      .sort();
+  } catch {
+    return [];
+  }
+};
 
 const INFRASTRUCTURE_FAILURE_PATTERN = /(?:SQLITE_|database disk image is malformed|database service exited|EPIPE|ECONNRESET|timed out|operation timeout|操作超时|I\/O error|readonly database)/i;
 let databaseClientSequence = 0;
@@ -20,7 +40,7 @@ const markOutcomeUnknown = (error, request) => {
 };
 
 class PythonDatabaseClient {
-  constructor({ getRunConfig, getDatabasePath, writeLog, coordinator, operationPolicy = new WorkspaceDatabaseOperationPolicy(), defaultTimeoutMs = 30000, processStopTimeoutMs = 2000, rollbackSettleMs = 25, scriptName = 'workspace_db.py', processSupervisor = null, processId = '', domainId = '', onHealthChange = () => undefined, failureThreshold = 3, circuitCooldownMs = 5000, maximumPending = 100, maximumProtocolBuffer = 1024 * 1024, maximumProtocolResponse = 16 * 1024 * 1024 }) {
+  constructor({ getRunConfig, getDatabasePath, writeLog, coordinator, operationPolicy = null, defaultTimeoutMs = 30000, processStopTimeoutMs = 2000, rollbackSettleMs = 25, scriptName = 'workspace_db.py', processSupervisor = null, processId = '', domainId = '', onHealthChange = () => undefined, failureThreshold = 3, circuitCooldownMs = 5000, maximumPending = 100, maximumProtocolBuffer = 1024 * 1024, maximumProtocolResponse = 16 * 1024 * 1024 }) {
     this.getRunConfig = getRunConfig;
     this.getDatabasePath = getDatabasePath;
     this.writeLog = writeLog;
@@ -38,6 +58,10 @@ class PythonDatabaseClient {
     this.processStopTimeoutMs = processStopTimeoutMs;
     this.rollbackSettleMs = rollbackSettleMs;
     this.health = { domainId: this.domainId, state: 'healthy', failures: 0, circuitOpenedAt: 0, lastError: '', updatedAt: Date.now() };
+    this.pendingMediaOperation = pendingMediaOperationDirectories;
+    const policy = operationPolicy || new WorkspaceDatabaseOperationPolicy({
+      isRecoveryPending: database => this.pendingMediaOperation(database).length > 0,
+    });
     this.managedProcess = null;
     this.process = null;
     this.nextId = 0;
@@ -47,7 +71,7 @@ class PythonDatabaseClient {
     this.stopping = false;
     this.coordinated = new CoordinatedDatabaseClient({
       coordinator,
-      operationPolicy,
+      operationPolicy: policy,
       getDatabasePath,
       scriptName,
       execute: request => this.callOnce(request.root, request.database, request.action, request.payload, request.timeoutMs, request),
@@ -209,18 +233,41 @@ class PythonDatabaseClient {
     });
     let stderr = '';
     child.stderr.setEncoding('utf8');
-    child.stderr.on('data', data => { stderr = (stderr + data).slice(-4000); });
+    // A worker that dies mid-request leaves its whole traceback here, and that
+    // traceback is the only record of *why* it died. Keep enough of it to reach
+    // the exception line instead of only the tail of the message.
+    child.stderr.on('data', data => { stderr = (stderr + data).slice(-16000); });
     child.stdin.on('error', () => undefined);
     const finishRequests = (error, expectedStop = false) => {
       if (finished) return;
       finished = true;
       if (!expectedStop) this.noteFailure(error);
       if (this.process === child) this.process = null;
+      error.domainId = this.domainId;
+      error.workerId = this.processId;
       for (const [id, request] of this.pending.entries()) {
         if (request.child !== child) continue;
         clearTimeout(request.timer);
         request.signal?.removeEventListener?.('abort', request.onAbort);
-        request.reject(markOutcomeUnknown(error, request));
+        // A protocol failure is already a precise diagnosis and owns its error
+        // code; only an unclassified worker death needs the domain/action prefix
+        // to become actionable. The infrastructure wording stays intact either
+        // way so the retry policy keeps working.
+        const named = error.code || !request.action
+          ? error
+          : new Error(`${this.domainId} 工作进程 ${request.action} 失败：${error.message}`);
+        const rejected = markOutcomeUnknown(named, request);
+        // `markOutcomeUnknown` returns a fresh clone for idempotent requests and
+        // copies nothing from the prototype, so the worker fields have to be
+        // restated here or an idempotent action loses the diagnosis entirely.
+        if (error.workerFailed) rejected.workerFailed = true;
+        if (error.workerExitCode !== undefined) rejected.workerExitCode = error.workerExitCode;
+        if (error.workerSignal !== undefined) rejected.workerSignal = error.workerSignal;
+        if (error.workerStderr !== undefined) rejected.workerStderr = error.workerStderr;
+        rejected.action = request.action;
+        rejected.workerId = request.action ? this.processId : undefined;
+        rejected.domainId = this.domainId;
+        request.reject(rejected);
         this.pending.delete(id);
       }
       if (!expectedStop && !this.stopping && !this.processSupervisor) this.writeLog('warn', 'Database service stopped', { scriptName: this.scriptName, error: error.message || String(error) });
@@ -231,7 +278,22 @@ class PythonDatabaseClient {
       else finishRequests(error, Boolean(this.stopping || managedProcess?.stopping || this.processSupervisor?.stopping));
     };
     child.on('error', finish);
-    child.on('exit', code => finish(new Error(stderr.trim() || `Workspace database service exited with code ${code}`)));
+    child.on('exit', (code, signal) => {
+      // A worker that dies while a request is in flight used to surface as a bare
+      // `[Errno 9] Bad file descriptor` with no hint of which worker, which action
+      // or which stderr line produced it, because the stderr tail was consumed as
+      // the whole error message. Name the worker and keep the traceback attached.
+      const tail = stderr.trim();
+      const exitReason = `database service exited with code ${code}${signal ? ` (signal ${signal})` : ''}`;
+      const error = new Error(tail ? `${exitReason}; stderr: ${tail}` : `Workspace ${exitReason}`);
+      error.workerFailed = true;
+      error.workerExitCode = code ?? null;
+      error.workerSignal = signal ?? null;
+      error.workerId = this.processId;
+      error.domainId = this.domainId;
+      if (tail) error.workerStderr = tail;
+      finish(error);
+    });
   }
 
   call(root, action, payload = {}, timeoutMs = this.defaultTimeoutMs, options = {}) {
@@ -296,7 +358,9 @@ class PythonDatabaseClient {
       };
       const request = { id, root, database, action, payload, operationId };
       const serialized = JSON.stringify(request);
-      this.pending.set(id, { id, resolve, reject, timer, child, serialized, onAbort, signal, operationId, idempotent, protocolChunks: [], protocolBytes: 0 });
+      // `action` is part of the in-flight record so a failure can name the
+      // operation that lost its worker.
+      this.pending.set(id, { id, action, resolve, reject, timer, child, serialized, onAbort, signal, operationId, idempotent, protocolChunks: [], protocolBytes: 0 });
       signal?.addEventListener?.('abort', onAbort, { once: true });
       try {
         child.stdin.write(`${serialized}\n`, error => {

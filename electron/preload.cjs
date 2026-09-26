@@ -3,7 +3,6 @@ let applicationClosing = false;
 let componentInstallPending = false;
 let configBaseline;
 const rememberConfig = value => { configBaseline = value == null ? undefined : structuredClone(value); return value; };
-ipcRenderer.on('config-changed', (_event, config) => rememberConfig(config));
 ipcRenderer.on('application-quit:state', (_event, state) => { applicationClosing = ['saving', 'closing', 'failed'].includes(state?.phase); });
 // Sandboxed preloads only expose Electron's limited preload `require`; local
 // CommonJS modules are unavailable here even when the file exists on disk.
@@ -122,8 +121,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   loadConfig: () => ipcRenderer.invoke('loadConfig').then(rememberConfig),
   loadStartupSnapshot: () => ipcRenderer.invoke('load-startup-snapshot').then(snapshot => { rememberConfig(snapshot?.config); return snapshot; }),
-  saveConfig: config => {
-    const baseline = configBaseline;
+  saveConfig: (config, draftBaseline) => {
+    const baseline = draftBaseline === undefined ? configBaseline : draftBaseline;
     return ipcRenderer.invoke('saveConfig', config, baseline).then(result => { if (result.success) rememberConfig(result.savedConfig); return result; });
   },
   onConfigChanged: callback => { const listener = (_event, config) => callback(config); ipcRenderer.on('config-changed', listener); return () => ipcRenderer.removeListener('config-changed', listener); },
@@ -229,6 +228,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getWorkspaceProjects: (workspacePath) => ipcRenderer.invoke('workspace-projects', workspacePath),
   onWorkspaceFilesChanged: (callback) => { const subscription = (_event, value) => callback(value); ipcRenderer.on('workspace-files-changed', subscription); return () => ipcRenderer.removeListener('workspace-files-changed', subscription); },
   onWorkspaceProjectsChanged: (callback) => { const subscription = (_event, value) => callback(value); ipcRenderer.on('workspace-projects-changed', subscription); return () => ipcRenderer.removeListener('workspace-projects-changed', subscription); },
+  onWorkspaceVersionsChanged: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('workspace-versions-changed', listener); return () => ipcRenderer.removeListener('workspace-versions-changed', listener); },
   createWorkspaceProject: (workspacePath, date, name, options) => ipcRenderer.invoke('workspace-create-project', workspacePath, date, name, options),
   chooseExistingProject: () => ipcRenderer.invoke('workspace-choose-existing-project'),
   inspectExistingProject: (sourcePath) => ipcRenderer.invoke('workspace-inspect-existing-project', sourcePath),
@@ -250,7 +250,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cleanupDeletedWorkspaceProjects: (workspacePath) => ipcRenderer.invoke('workspace-cleanup-deleted-projects', workspacePath),
   getProjectContents: (workspacePath, status, name) => ipcRenderer.invoke('workspace-project-contents', workspacePath, status, name),
   watchFileRoot: (workspacePath, status, name, options) => ipcRenderer.invoke('workspace-watch-file-root', workspacePath, status, name, options),
-  unwatchFileRoot: (workspacePath, status, name) => ipcRenderer.invoke('workspace-unwatch-file-root', workspacePath, status, name),
+  unwatchFileRoot: (workspacePath, status, name, options) => ipcRenderer.invoke('workspace-unwatch-file-root', workspacePath, status, name, options),
   browseProjectFiles: (workspacePath, status, name, relativePath, cacheConfig) => ipcRenderer.invoke('workspace-browse-files', workspacePath, status, name, relativePath, cacheConfig),
   inspectProjectToolSources: (workspacePath, status, name, relativePaths, collectVideos, collectDirectConvertibleImages, collectRecursiveConvertibleImages) => ipcRenderer.invoke('workspace-inspect-tool-sources', workspacePath, status, name, relativePaths, collectVideos, collectDirectConvertibleImages, collectRecursiveConvertibleImages),
   resolveProjectShortcut: (workspacePath, status, name, relativePath) => ipcRenderer.invoke('workspace-resolve-shortcut', workspacePath, status, name, relativePath),

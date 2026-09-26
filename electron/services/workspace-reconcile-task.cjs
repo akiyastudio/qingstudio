@@ -1,9 +1,9 @@
-const createWorkspaceReconcileTask = ({ backgroundTasks, getWatchedWorkspacePath, getProjects, reconcileWorkspaceCatalog, writeLog }) => {
+const createWorkspaceReconcileTask = ({ backgroundTasks, getWatchedWorkspacePath, isWorkspaceWatched = root => getWatchedWorkspacePath() === root, getProjects, reconcileWorkspaceCatalog, writeLog }) => {
   let generation = 0;
   const runningByRoot = new Map();
   const run = async (root, restartTask = null) => {
     const runGeneration = generation;
-    if (getWatchedWorkspacePath() !== root) {
+    if (!isWorkspaceWatched(root)) {
       if (restartTask?.id) throw new Error('工作区当前未处于可对账状态');
       return undefined;
     }

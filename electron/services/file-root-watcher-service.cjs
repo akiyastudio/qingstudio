@@ -298,13 +298,28 @@ const createFileRootWatcherService = ({ getMainWindow, getThumbnailService, getM
       if (pathIsInside(suppressed, candidate)) state.changes.delete(changedName);
     }
   };
+  const invalidatePath = targetPath => {
+    const target = comparable(targetPath);
+    let published = false;
+    for (const state of watchers.values()) for (const binding of state.bindings.values()) {
+      const watched = binding.fileNameFilterKey || state.key;
+      if (!pathIsInside(watched, target) && !pathIsInside(target, watched)) continue;
+      sendToApplicationRenderers(getMainWindow(), 'workspace-files-changed', {
+        root: binding.publishRoot,
+        fileName: [binding.virtualPrefix, binding.virtualFileName].filter(Boolean).join('/'),
+        eventType: 'rename',
+      });
+      published = true;
+    }
+    return published;
+  };
   const stop = () => {
     for (const state of watchers.values()) closeState(state);
     watchers.clear();
     suspendedSnapshots.clear();
     staleReleaseCounts.clear();
   };
-  return { acquire, release, suspend, resume, discardChangesInside, stop };
+  return { acquire, release, suspend, resume, discardChangesInside, invalidatePath, stop };
 };
 
 module.exports = { createFileRootWatcherService };

@@ -35,6 +35,16 @@ export const nextPanelTaskStartedAt = (
   return previous?.state === 'running' && retainedStartedAt ? retainedStartedAt : now;
 };
 
+// A panel session ends for good when its owner withdraws it, even while it is
+// still reported as running. User-initiated clearing keeps using the guarded
+// dismissal so a live task can never be dropped from the drawer by mistake.
+export const removePanelTaskSession = <T>(tasks: Record<string, T>, key: string) => {
+  if (!(key in tasks)) return tasks;
+  const next = { ...tasks };
+  delete next[key];
+  return next;
+};
+
 export const removePanelTasksByOwnerPageId = <T extends { ownerPageId: string }>(tasks: Record<string, T>, ownerPageId: string) => {
   let changed = false;
   const remaining = Object.fromEntries(Object.entries(tasks).filter(([, task]) => {

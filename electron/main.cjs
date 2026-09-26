@@ -873,7 +873,8 @@ const mediaRepository = {
   failTrackingCommit: mediaInteractionRepository.failTrackingCommit,
   getMainBranchMedia: mediaInteractionRepository.getMainBranchMedia,
 };
-const versionService = createVersionService({ repository: mediaRepository });
+const notifyVersionChange = change => sendToApplicationRenderers(mainWindow, 'workspace-versions-changed', change);
+const versionService = createVersionService({ repository: mediaRepository, onChanged: notifyVersionChange });
 let selectionService = null;
 const versionStaleDetectionService = createVersionStaleDetectionService({ versionService, backgroundTasks, writeLog });
 // Directory walks and deferred full-hash backfills can take minutes on large
@@ -909,7 +910,7 @@ const trackingScanDatabase = new PythonDatabaseClient({
   defaultTimeoutMs: 30 * 60 * 1000,
 });
 const trackingScanRepository = createMediaRepository(trackingScanDatabase);
-const trackingScanService = createVersionService({ repository: trackingScanRepository });
+const trackingScanService = createVersionService({ repository: trackingScanRepository, onChanged: notifyVersionChange });
 const workspaceService = createWorkspaceService({
   repository: workspaceRepository,
   reconcileRepository: workspaceMaintenanceRepository,

@@ -18,7 +18,8 @@ export type PendingFileOperation = {
   optimisticEntries?: PendingProjectFileEntry[];
 };
 
-const normalizePath = (value: string) => value.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').toLocaleLowerCase('zh-CN');
+const normalizeRelativePath = (value: string) => value.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+const normalizePath = (value: string) => normalizeRelativePath(value).toLocaleLowerCase('zh-CN');
 const parentPath = (value: string) => normalizePath(value).split('/').slice(0, -1).join('/');
 
 export const pendingPathConflicts = (operations: PendingFileOperation[], paths: string[]) => {
@@ -37,6 +38,19 @@ export const addPendingFileOperation = (operations: PendingFileOperation[], oper
 export const removePendingFileOperation = (operations: PendingFileOperation[], operationId: string) => (
   operations.filter(operation => operation.id !== operationId)
 );
+
+export const reconcileDirectoryPaths = (paths: string[], directoryPath: string, entries: ProjectFileEntry[], operations: PendingFileOperation[] = []) => {
+  const directory = normalizePath(directoryPath);
+  const prefix = directory ? `${directory}/` : '';
+  const present = new Set(entries.map(entry => normalizePath(entry.relativePath)));
+  const next = paths.filter(value => {
+    const key = normalizePath(value);
+    if (!key || !key.startsWith(prefix) || pendingPathConflicts(operations, [value])) return true;
+    const child = prefix + key.slice(prefix.length).split('/')[0];
+    return present.has(child);
+  });
+  return next.length === paths.length ? paths : next;
+};
 
 // The selection retained by a rename must not turn a click on another file
 // into multi-selection instead of opening it in single-click mode.
@@ -93,10 +107,12 @@ export const applyPendingFileOperations = (
   return visible;
 };
 
+// Refresh targets are also page/cache keys: preserve their spelling. Case-folded
+// identities are only for locking and matching entries, not directory reads.
 export const operationRefreshDirectories = (
   operation: Pick<PendingFileOperation, 'affectedDirectories'>,
   result?: { affectedDirectories?: string[] },
-) => Array.from(new Set([...(operation.affectedDirectories || []), ...(result?.affectedDirectories || [])].map(normalizePath)));
+) => Array.from(new Set([...(operation.affectedDirectories || []), ...(result?.affectedDirectories || [])].map(normalizeRelativePath)));
 
 export const claimClipboardGeneration = (currentGeneration: number, pendingAcquired: boolean) => pendingAcquired
   ? currentGeneration + 1

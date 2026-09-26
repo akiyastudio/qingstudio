@@ -569,7 +569,7 @@ const SettingsPanel = ({ title, onClose, children }: { title: string; onClose: (
 </div>;
 };
 
-const SettingsPage = ({ activeSection, backupProjectFocus, onClearBackupProjectFocus, config, components, componentInstallPath, componentsLoading, onRefreshComponents, onComponentsChanged, onSave, onConfigRestored, getDefaultSettings }: { activeSection: BuiltInSettingsSection; backupProjectFocus?: WorkspaceProject | null; onClearBackupProjectFocus?: () => void; config: AppConfig; components: ComponentStatus[]; componentInstallPath: string; componentsLoading: boolean; onRefreshComponents: () => void | Promise<void>; onComponentsChanged: () => void | Promise<void>; onSave: (config: AppConfig) => boolean | Promise<boolean>; onConfigRestored: (config: AppConfig) => void; getDefaultSettings: () => AppConfig | Promise<AppConfig> }) => {
+const SettingsPage = ({ activeSection, backupProjectFocus, onClearBackupProjectFocus, config, components, componentInstallPath, componentsLoading, onRefreshComponents, onComponentsChanged, onSave, onConfigRestored, getDefaultSettings }: { activeSection: BuiltInSettingsSection; backupProjectFocus?: WorkspaceProject | null; onClearBackupProjectFocus?: () => void; config: AppConfig; components: ComponentStatus[]; componentInstallPath: string; componentsLoading: boolean; onRefreshComponents: () => void | Promise<void>; onComponentsChanged: () => void | Promise<void>; onSave: (config: AppConfig, options?: { baseline?: AppConfig }) => boolean | Promise<boolean>; onConfigRestored: (config: AppConfig) => void; getDefaultSettings: () => AppConfig | Promise<AppConfig> }) => {
   const toast = useUserFacingToast();
   const onNotice = useCallback((message: string, duration?: number) => { toast.show(message, duration); }, [toast]);
   const appDialog = useAppDialog();
@@ -613,7 +613,7 @@ const SettingsPage = ({ activeSection, backupProjectFocus, onClearBackupProjectF
     initial: config,
     normalize: next => { const workspacePaths = normalizeWorkspacePaths(next.workspacePath, next.workspacePaths); return { ...next, workspacePath: workspacePaths[0] || '', workspacePaths }; },
     applyDraft: next => { draftRef.current = next; setDraft(next); },
-    save: next => onSaveRef.current(next),
+    save: (next, baseline) => onSaveRef.current(next, { baseline }),
     onFailure: (_next, error) => onNoticeRef.current(`保存设置失败：${error.message || '未知错误'}`, 6000),
   });
   const backupSnapshotsRef = useRef<HTMLDivElement>(null);

@@ -17,6 +17,14 @@ import time
 import uuid
 from pathlib import Path
 
+# Some regression tests load this module directly through importlib instead of
+# importing it from the Python source directory. Registering the sibling module
+# directory up front keeps every sibling import (including the durability table
+# this module is classified by) resolvable in both loading modes.
+_SOURCE_DIRECTORY = str(Path(__file__).resolve().parent)
+if _SOURCE_DIRECTORY not in sys.path:
+    sys.path.insert(0, _SOURCE_DIRECTORY)
+
 try:
     from compatibility.registry import action_names as compatibility_action_names
     from compatibility.registry import dispatch_action as dispatch_compatibility_action
@@ -24,6 +32,14 @@ try:
     from database_error_codes import error_response
     from workspace_db_domains import ALL_ACTIONS, MEDIA_ACTIONS, PROGRESS_ACTIONS, READ_ONLY_ACTIONS, TRACKING_ACTIONS, VERSIONING_ONLY_ACTIONS
     from workspace_db_support import meta_value as _meta_value, set_meta as _set_meta
+    from workspace_durability import (
+        BATCH_FILESYSTEM_EFFECT_ACTIONS, DURABILITY_PUBLICATION, DURABILITY_TRANSACTION,
+        ELECTRON_EXCLUSIVE_ACTIONS, EXCLUSIVE_LEASE_ACTIONS, PUBLICATION_ACTIONS, TRANSACTION_ACTIONS,
+        durability_class as workspace_durability_class,
+        durability_manifest as workspace_durability_manifest,
+        requires_exclusive_lease as workspace_requires_exclusive_lease,
+        requires_publication as workspace_requires_publication,
+    )
     from workspace_media_actions import (
         ACTION_NAMES as MEDIA_DOMAIN_ACTIONS, CLOSE_ON_ERROR_ACTIONS as MEDIA_CLOSE_ON_ERROR_ACTIONS,
         dispatch_action as dispatch_media_action,
@@ -34,6 +50,7 @@ try:
         _component_version_row,
         _incremental_snapshot_row, _media_operation_digest, _media_sync_marker,
         _prune_incremental_sync_completions, _prune_legacy_sync_completions,
+        reconcile_abandoned_incremental_snapshots as _reconcile_abandoned_incremental_snapshots,
         backfill_full_fingerprints as _media_backfill_full_fingerprints,
         canonical_path, delete_version_rows, directory_identity,
         file_identity, full_fingerprint, is_project_descendant, media_bundle, media_type,
@@ -53,15 +70,20 @@ try:
         migration_30, migration_31, migration_32, migration_33, migration_34,
     )
 except ModuleNotFoundError:
-    # Some regression tests load this file directly through importlib instead
-    # of importing it from the Python source directory.
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from compatibility.registry import action_names as compatibility_action_names
     from compatibility.registry import dispatch_action as dispatch_compatibility_action
     from compatibility.registry import integrated_action_names, resolve_export as resolve_compatibility_export, run_hooks as run_compatibility_hooks
     from database_error_codes import error_response
     from workspace_db_domains import ALL_ACTIONS, MEDIA_ACTIONS, PROGRESS_ACTIONS, READ_ONLY_ACTIONS, TRACKING_ACTIONS, VERSIONING_ONLY_ACTIONS
     from workspace_db_support import meta_value as _meta_value, set_meta as _set_meta
+    from workspace_durability import (
+        BATCH_FILESYSTEM_EFFECT_ACTIONS, DURABILITY_PUBLICATION, DURABILITY_TRANSACTION,
+        ELECTRON_EXCLUSIVE_ACTIONS, EXCLUSIVE_LEASE_ACTIONS, PUBLICATION_ACTIONS, TRANSACTION_ACTIONS,
+        durability_class as workspace_durability_class,
+        durability_manifest as workspace_durability_manifest,
+        requires_exclusive_lease as workspace_requires_exclusive_lease,
+        requires_publication as workspace_requires_publication,
+    )
     from workspace_media_actions import (
         ACTION_NAMES as MEDIA_DOMAIN_ACTIONS, CLOSE_ON_ERROR_ACTIONS as MEDIA_CLOSE_ON_ERROR_ACTIONS,
         dispatch_action as dispatch_media_action,
@@ -94,6 +116,42 @@ except ModuleNotFoundError:
 
 class UndoRecordRetiredError(RuntimeError):
     code = "UNDO_RECORD_RETIRED"
+
+
+# Session states that mean "this progress node is genuinely mid-flight": a compare
+# is running, or the user is confirming, or a commit is applying. Only these may
+# block another version-tree mutation or block starting a new compare.
+#
+# `failed` is deliberately NOT here. A failed session is either resumable (it kept
+# its rows, so the user can retry the commit) or terminal (its snapshot went stale,
+# so the compare has to be redone). Neither is "in progress", yet gating on it
+# meant one abandoned session blocked every version-tree edit in the project with
+# `node_busy`, and the two escape hatches were both closed: a stale snapshot can
+# never be committed, and `tracking_session_create` only released a failed session
+# that had neither a batch nor any item. A failed session is instead released when
+# the next compare starts, so it cannot accumulate.
+ACTIVE_TRACKING_SESSION_STATES = ("comparing", "pending_confirm", "committing")
+
+# A session whose snapshot turned stale cannot ever be committed: the files moved
+# while the user was deciding. The error string is the durable marker for that
+# state, so it is named once here and shared by every reader.
+STALE_TRACKING_MARKER = "tracking_snapshot_stale"
+
+# SQL fragment for "this progress node is genuinely mid-flight". Generated from the
+# constant so a gate can never drift from the definition again.
+ACTIVE_TRACKING_SQL_STATES = "(" + ",".join(f"'{state}'" for state in ACTIVE_TRACKING_SESSION_STATES) + ")"
+
+
+def _tracking_session_lifecycle_gate(connection, where: str, parameters=()):
+    """Return the mid-flight session that must block an edit, if there is one.
+
+    Returns the whole row so a caller that wants to hand the session back can read
+    its mode and parent; callers that only ask "is it busy" ignore the rest.
+    """
+    return connection.execute(
+        f"SELECT * FROM tracking_sessions WHERE {where} AND status IN {ACTIVE_TRACKING_SQL_STATES} LIMIT 1",
+        parameters,
+    ).fetchone()
 
 
 def backfill_full_fingerprints(db, requests: list[dict]):
@@ -2158,6 +2216,16 @@ def _connect_impl(root: str, database: str, include_domains=None, include_compat
                 _check_integrity(db, force=True)
         if pending_purge:
             _resume_purge_journal(db)
+        # An interrupted incremental scan is resumed from its own committed batch
+        # markers instead of replaying the whole action. The median cost is one
+        # indexed lookup per project that has an unfinished snapshot.
+        try:
+            _reconcile_abandoned_incremental_snapshots(db)
+        except Exception:
+            # Recovery is best effort here: a roll-forward failure leaves the
+            # snapshot resumable, and the next connection retries it.
+            if db.in_transaction:
+                db.rollback()
         return db
     backup_path = None
     if not is_fresh:
@@ -3573,11 +3641,7 @@ def progress_register(root: str, db, payload: dict, commit: bool = True, sync_lo
         if parent_context_changed:
             predicates.append("parent_progress_id=?")
             parameters.append(existing["id"])
-        active_session = db.execute(
-            f"""SELECT id,status FROM tracking_sessions WHERE ({' OR '.join(predicates)})
-                 AND status IN ('comparing','pending_confirm','committing','failed') LIMIT 1""",
-            parameters,
-        ).fetchone()
+        active_session = _tracking_session_lifecycle_gate(db, f"({' OR '.join(predicates)})", parameters)
         if active_session is not None:
             raise ValueError("node_busy: 节点正在比较、确认或提交，暂时不能修改来源、目录或跟踪策略")
     if existing and tracking_context_changed and tracking_enabled:
@@ -3800,10 +3864,7 @@ def progress_relation_update(db, payload: dict):
             raise ValueError("progress_detach_requires_unregister: 断开进度必须显式取消版本登记")
         if not detaching_progress and child["tracking_state"] in ("pending_compare", "pending_confirm", "committing"):
             raise ValueError("node_busy: 节点正在比较或提交，暂时不能修改关系")
-        active_session = db.execute(
-            "SELECT 1 FROM tracking_sessions WHERE progress_id=? AND status IN ('comparing','pending_confirm','committing') LIMIT 1",
-            (child_id,),
-        ).fetchone()
+        active_session = _tracking_session_lifecycle_gate(db, "progress_id=?", (child_id,))
         if active_session is not None and not detaching_progress:
             raise ValueError("node_busy: 节点正在比较或提交，暂时不能修改关系")
         if child["node_role"] == "selection" and parent_id is None:
@@ -4759,11 +4820,9 @@ def progress_folder_rename(root: str, db, payload: dict, fault_after=None):
         raise ValueError("external_progress_rename_unsupported: 第一版不支持重命名外链版本")
     if progress["missing_since"] is not None or progress["tracking_state"] in PROGRESS_RELOCATION_ACTIVE_STATES:
         raise ValueError("progress_folder_busy: 进度正在活动或待修复，不能重命名")
-    active = db.execute(
-        """SELECT 1 FROM tracking_sessions WHERE (progress_id=? OR parent_progress_id=?)
-           AND status IN ('comparing','pending_confirm','committing','failed') LIMIT 1""",
-        (progress_id, progress_id),
-    ).fetchone()
+    active = _tracking_session_lifecycle_gate(
+        db, "(progress_id=? OR parent_progress_id=?)", (progress_id, progress_id),
+    )
     if active is not None:
         raise ValueError("progress_folder_busy: 进度存在活动或待修复的跟踪会话")
     expected_folder_id = str(payload.get("expectedFolderId") or "")
@@ -4841,11 +4900,7 @@ def progress_update_tree_begin(db, payload: dict):
         if lease is not None and int(lease.get("createdAt") or 0) < stale_before:
             db.execute("DELETE FROM meta WHERE key=?", (_progress_tree_mutation_key(project["id"]),))
             lease = None
-        active = db.execute(
-            """SELECT 1 FROM tracking_sessions WHERE project_id=?
-               AND status IN ('comparing','pending_confirm','committing','failed') LIMIT 1""",
-            (project["id"],),
-        ).fetchone()
+        active = _tracking_session_lifecycle_gate(db, "project_id=?", (project["id"],))
         if active is not None:
             raise ValueError("node_busy: 项目中存在正在比较、确认或提交的版本，暂时不能修改版本树")
         if lease is not None and lease.get("token") != token:
@@ -4883,11 +4938,7 @@ def _progress_update_tree_legacy(root: str, db, payload: dict):
         raise ValueError("node_busy: 版本树正在由另一个操作修改")
     if mutation_token and (lease is None or lease.get("token") != mutation_token):
         raise ValueError("progress_tree_mutation_expired: 版本树变更令牌已失效")
-    active_session = db.execute(
-        """SELECT 1 FROM tracking_sessions WHERE project_id=?
-           AND status IN ('comparing','pending_confirm','committing','failed') LIMIT 1""",
-        (project["id"],),
-    ).fetchone()
+    active_session = _tracking_session_lifecycle_gate(db, "project_id=?", (project["id"],))
     if active_session is not None:
         raise ValueError("node_busy: 项目中存在正在比较、确认或提交的版本，暂时不能修改版本树")
     rows = {row["id"]: row for row in progress_rows(db, project["id"])}
@@ -5018,11 +5069,7 @@ def _progress_update_tree_single(root: str, db, payload: dict):
         raise ValueError("node_busy: 版本树正在由另一个操作修改")
     if mutation_token and (lease is None or lease.get("token") != mutation_token):
         raise ValueError("progress_tree_mutation_expired: 版本树变更令牌已失效")
-    active_session = db.execute(
-        """SELECT 1 FROM tracking_sessions WHERE project_id=?
-           AND status IN ('comparing','pending_confirm','committing','failed') LIMIT 1""",
-        (project["id"],),
-    ).fetchone()
+    active_session = _tracking_session_lifecycle_gate(db, "project_id=?", (project["id"],))
     if active_session is not None:
         raise ValueError("node_busy: 项目中存在正在比较、确认或提交的版本，暂时不能修改版本树")
 
@@ -5825,27 +5872,36 @@ def tracking_session_create(root: str, db, payload: dict):
     if mutation is not None:
         db.commit()
         raise ValueError("node_busy: 版本树正在修改，暂时不能开始版本比较")
-    active = db.execute(
-        """SELECT * FROM tracking_sessions WHERE progress_id=?
-           AND status IN ('comparing','pending_confirm','committing','failed') LIMIT 1""",
-        (progress["id"],),
-    ).fetchone()
+    # Gating and reuse are two different questions, so they are asked separately.
+    # The gate only cares about sessions that are genuinely mid-flight; a failed
+    # session must never block an edit. Reuse cares about a failed session whose
+    # confirmed work can still be committed, which is a completely different set.
+    active = _tracking_session_lifecycle_gate(db, "progress_id=?", (progress["id"],))
     if active is not None:
-        failed_item_count = db.execute(
-            "SELECT COUNT(*) FROM tracking_session_items WHERE session_id=?", (active["id"],)
-        ).fetchone()[0] if active["status"] == "failed" else 0
-        if active["status"] == "failed" and not active["committed_batch_id"] and not failed_item_count:
-            # A failed compare is terminal. Keeping it behind the one-active-session
-            # index makes every later refresh fail forever, so discard it before
-            # creating the retry session. The progress node remains stale/repairable.
-            tracking_session_release(db, {"sessionId": active["id"]})
-        else:
+        return {
+            "success": True, "sessionId": str(active["id"]), "progressId": progress["id"],
+            "parentProgressId": active["parent_progress_id"], "mode": active["mode"],
+            "sessionStatus": active["status"], "reused": True,
+            "parentFolderPath": parent_path, "progressFolderPath": progress_path,
+        }
+    resumable = db.execute(
+        "SELECT * FROM tracking_sessions WHERE progress_id=? AND status='failed'", (progress["id"],),
+    ).fetchall()
+    for session in resumable:
+        error_text = str(session["error"] or "")
+        if session["committed_batch_id"] and STALE_TRACKING_MARKER not in error_text:
+            # The user can still commit this one, so hand it back instead of
+            # starting over. `tracking_commit_plan` drives the repair from here.
             return {
-                "success": True, "sessionId": active["id"], "progressId": progress["id"],
-                "parentProgressId": active["parent_progress_id"], "mode": active["mode"],
-                "sessionStatus": active["status"], "reused": True,
+                "success": True, "sessionId": str(session["id"]), "progressId": progress["id"],
+                "parentProgressId": session["parent_progress_id"], "mode": session["mode"],
+                "sessionStatus": session["status"], "reused": True,
                 "parentFolderPath": parent_path, "progressFolderPath": progress_path,
             }
+        # A stale snapshot can never be committed, so this session is dead weight.
+        # The unique index covers failed sessions too, so leaving it parked would
+        # make every later compare fail on the index while its gate never clears.
+        tracking_session_release(db, {"sessionId": session["id"]})
     timestamp = int(time.time() * 1000)
     session_id = str(payload.get("sessionId") or uuid.uuid4())
     db.execute(
@@ -6377,6 +6433,19 @@ def tracking_commit_resources(root: str, db, payload: dict):
     }
 
 
+def _tracking_covered_copy_names(rows, rename_from_parent):
+    covered = set()
+    for item in rows:
+        if item["item_kind"] in ("copy_missing", "missing") or not item["source_name"] or not item["reference_name"]:
+            continue
+        covered.add(item["reference_name"].casefold())
+        if rename_from_parent:
+            covered.add(_rename_target_preserving_source_extension(
+                item["source_name"], item["reference_name"],
+            ).casefold())
+    return covered
+
+
 def tracking_commit_plan(root: str, db, payload: dict):
     session_id = str(payload.get("sessionId") or "")
     session = db.execute("SELECT * FROM tracking_sessions WHERE id=?", (session_id,)).fetchone()
@@ -6442,6 +6511,7 @@ def tracking_commit_plan(root: str, db, payload: dict):
     matches = []
     incremental = []
     copies = []
+    covered_copy_names = _tracking_covered_copy_names(rows, session["rename_from_parent"])
     for item in rows:
         if item["item_kind"] == "missing":
             # Older builds allowed a removed current file to be accepted. There
@@ -6450,7 +6520,8 @@ def tracking_commit_plan(root: str, db, payload: dict):
             # batch source.
             continue
         if item["item_kind"] == "copy_missing":
-            copies.append(item["reference_name"])
+            if item["reference_name"].casefold() not in covered_copy_names:
+                copies.append(item["reference_name"])
         elif item["reference_name"] and item["source_name"]:
             matches.append({
                 "reference": item["reference_name"], "source": item["source_name"],
@@ -6463,6 +6534,10 @@ def tracking_commit_plan(root: str, db, payload: dict):
         elif item["source_name"]:
             incremental.append(item["source_name"])
     existing_copy_operations = _tracking_copy_operations(session)
+    conflicting_operations = [operation for operation in existing_copy_operations
+                              if str(operation.get("referenceName") or "").casefold() in covered_copy_names]
+    if conflicting_operations:
+        raise ValueError("tracking_copy_conflict: 旧补齐计划与已确认匹配重叠，请先保留并处理冲突文件后重新比较")
     if copies and not existing_copy_operations:
         if prepared is None:
             raise ValueError("tracking_copy_plan_invalid: 旧跟踪会话缺少可验证的父版本快照")
@@ -6495,9 +6570,12 @@ def _copy_tracking_file_atomic(source_path: str, target_path: str):
         f".{os.path.basename(target_path)}.{uuid.uuid4().hex}.photoflow-copy",
     )
     try:
-        shutil.copy2(source_path, temporary_path)
-        with open(temporary_path, "rb") as copied:
+        shutil.copyfile(source_path, temporary_path)
+        # Windows requires a writable handle for fsync. Apply source attributes
+        # afterwards so read-only source files can also be copied and flushed.
+        with open(temporary_path, "rb+") as copied:
             os.fsync(copied.fileno())
+        shutil.copystat(source_path, temporary_path)
         os.replace(temporary_path, target_path)
     finally:
         try:
@@ -6574,9 +6652,12 @@ def _prepared_tracking_commit_snapshot(db, session):
              AND status IN ('recognized','accepted') ORDER BY created_at,id""",
         (session["id"],),
     ).fetchall()
+    covered_copy_names = _tracking_covered_copy_names(rows, session["rename_from_parent"])
     for item in rows:
         if item["item_kind"] == "copy_missing":
             name = item["reference_name"]
+            if name and name.casefold() in covered_copy_names:
+                continue
             if not name or name not in parent:
                 return None
             files[name] = parent[name]
@@ -7174,6 +7255,18 @@ def apply_pending_batch_operations(db, batch_id: str, fault_after=None):
         """SELECT * FROM batch_file_operations WHERE batch_id=? AND status IN ('pending','failed','running')
            ORDER BY created_at,id""", (batch_id,),
     ).fetchall()
+    if not operations:
+        # Nothing left to apply. This is the state after a repair that already
+        # performed its filesystem work: the batch still says 'needs_repair' and
+        # the version tree still offers a repair dialog, but the dialog refuses to
+        # continue because there is no operation to retry. Finish the transition
+        # here so "no work left" and "still needs repair" cannot both be true.
+        if batch["status"] != "ready":
+            timestamp = int(time.time() * 1000)
+            db.execute("UPDATE version_batches SET status='ready',updated_at=? WHERE id=?", (timestamp, batch_id))
+            set_progress_tracking_state_for_folder(db, batch["project_id"], batch["source_folder_path"], "ready")
+            db.commit()
+        return {"renamedCount": 0, "renameErrors": [], "repairRequired": False, "operationCount": 0}
     succeeded = 0
     errors = []
     for operation in operations:
@@ -8174,18 +8267,13 @@ def reconcile_cross_domain_references(db) -> dict:
     }
 
 
-MEDIA_DURABLE_ACTIONS = frozenset((
-    "media_sync_apply_batch", "media_sync_finalize",
-    "media_sync_paths_apply_batch", "media_sync_paths_finalize",
-    "media_create_version", "media_update_version", "media_component_update_version",
-    "media_component_delete_version", "media_refresh_metadata_fingerprint",
-    "media_set_thumbnail", "media_relocate_version", "media_delete_version",
-    "media_delete_project_missing_version", "media_record_compare",
-))
-BATCH_CROSS_DOMAIN_DURABLE_ACTIONS = frozenset((
-    "batch_register_baseline", "batch_commit_compare", "batch_retry_operations",
-))
-BATCH_FILESYSTEM_DURABLE_ACTIONS = frozenset(("batch_commit_compare", "batch_retry_operations"))
+# The durability classification lives in `workspace_durability.py`, which is the
+# single source of truth mirrored by Electron's operation policy. These aliases
+# keep the long-standing names importable for callers and tests that still use
+# them; new code should ask `workspace_durability_class(action)` instead.
+MEDIA_DURABLE_ACTIONS = PUBLICATION_ACTIONS
+BATCH_CROSS_DOMAIN_DURABLE_ACTIONS = PUBLICATION_ACTIONS
+BATCH_FILESYSTEM_DURABLE_ACTIONS = BATCH_FILESYSTEM_EFFECT_ACTIONS
 MEDIA_RECEIPT_SOFT_LIMIT = 512
 PURGE_RECEIPT_SOFT_LIMIT = 256
 
@@ -8239,6 +8327,53 @@ def _publish_sqlite_stage(source_path: str, destination: str) -> None:
     finally:
         target.close()
         source.close()
+
+
+MEDIA_OPERATION_STAGE_MARKER = ".media-operation-"
+# A durable publication either completes well inside this window or its worker is
+# already gone. Sweeping only older stages keeps this housekeeping from racing a
+# publication that has created its directory but not yet committed its journal.
+MEDIA_OPERATION_ORPHAN_GRACE_MS = 60 * 60 * 1000
+
+
+def _discard_orphaned_media_operation_stages(database: str, journal=None) -> int:
+    """Remove staged copies that no journal refers to.
+
+    A stage directory is created immediately before the journal row is committed,
+    so a crash in that window leaves a directory nothing will ever publish. The
+    supervisor decides whether a request must take the exclusive database lease
+    from the presence of this directory (see WorkspaceDatabaseOperationPolicy),
+    so an orphan would otherwise force every later request to request exclusive
+    access for work that no longer exists. A live journal keeps its stage, and
+    only directories inside this database's own namespace that are older than the
+    grace window are ever removed. Pass `journal=False` when the caller already
+    read it and found nothing, so the row is not queried twice.
+    """
+    if journal is None:
+        journal = _read_media_operation_journal(database)
+    if journal:
+        return 0
+    prefix = os.path.abspath(database) + MEDIA_OPERATION_STAGE_MARKER
+    directory = os.path.dirname(prefix)
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return 0
+    cutoff = time.time() - MEDIA_OPERATION_ORPHAN_GRACE_MS / 1000
+    removed = 0
+    for name in names:
+        candidate = os.path.join(directory, name)
+        if not os.path.abspath(candidate).startswith(prefix) or not os.path.isdir(candidate):
+            continue
+        try:
+            if os.path.getmtime(candidate) > cutoff:
+                continue
+        except OSError:
+            continue
+        shutil.rmtree(candidate, ignore_errors=True)
+        if not os.path.exists(candidate):
+            removed += 1
+    return removed
 
 
 def _read_media_operation_journal(database: str):
@@ -8461,7 +8596,9 @@ def _finalize_staged_batch_operation(journal: dict) -> dict:
 
 def _resume_media_operation_files(database: str):
     journal = _read_media_operation_journal(database)
-    if not journal: return None
+    if not journal:
+        _discard_orphaned_media_operation_stages(database, False)
+        return None
     state = str(journal.get("state") or "preparing")
     if state == "preparing":
         _clear_preparing_media_operation(database, journal)
@@ -8637,6 +8774,10 @@ def _media_get_fast_path(root: str, database: str, payload: dict):
 
 
 def _mutate_impl(root: str, database: str, action: str, payload: dict):
+    if action == "durability_report":
+        # Pure introspection: report the cross-runtime durability contract
+        # without opening, migrating or touching a database.
+        return {"success": True, **workspace_durability_manifest()}
     # Interactive version-tree and confirmation reads must never compete for
     # SQLite's writer slot with media scans or tracking commits.
     run_compatibility_hooks("bind_core", globals())
@@ -9138,8 +9279,12 @@ def mutate(root: str, database: str, action: str, payload: dict, operation_id: s
         if existing is not None:
             return existing
         return _run_durable_media_operation(root, database, action, payload, operation_id)
-    if action in MEDIA_DURABLE_ACTIONS or action in BATCH_CROSS_DOMAIN_DURABLE_ACTIONS:
+    if workspace_requires_publication(action):
         return _run_durable_media_operation(root, database, action, payload, operation_id)
+    # Everything else is a single SQLite write transaction. WAL plus
+    # synchronous=FULL already makes it crash-safe, and these actions carry
+    # their own idempotency markers, so staging a full copy of the core, media
+    # and versioning databases first would only add cost.
     return _mutate_impl(root, database, action, payload)
 
 

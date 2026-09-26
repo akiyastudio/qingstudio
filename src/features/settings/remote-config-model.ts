@@ -24,3 +24,19 @@ export const reconcileRemoteConfig = <T,>(local: T, previous: T, remote: T): T =
   }
   return result as T;
 };
+
+// Only untouched (or already acknowledged) fields may advance their save base.
+// A dirty field keeps the snapshot it was edited against, so a remote edit to
+// that same field still conflicts when this draft is saved.
+export const rebaseConfigDraft = <T,>(local: T, baseline: T, remote: T): { config: T; baseline: T } => {
+  if (equal(local, baseline) || equal(local, remote)) return { config: retainConfigReferences(local, remote), baseline: remote };
+  if (!record(local) || !record(baseline) || !record(remote)) return { config: local, baseline };
+  const config: Record<string, unknown> = {}, nextBaseline: Record<string, unknown> = {};
+  for (const key of new Set([...Object.keys(local), ...Object.keys(baseline), ...Object.keys(remote)])) {
+    if (['__proto__', 'constructor', 'prototype'].includes(key)) continue;
+    const next = rebaseConfigDraft(local[key], baseline[key], remote[key]);
+    if (next.config !== undefined) config[key] = next.config;
+    if (next.baseline !== undefined) nextBaseline[key] = next.baseline;
+  }
+  return { config: retainConfigReferences(local, config as T), baseline: nextBaseline as T };
+};

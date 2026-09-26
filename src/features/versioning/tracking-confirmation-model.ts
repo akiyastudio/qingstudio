@@ -124,6 +124,32 @@ export const resolveTrackingComparisonPaths = (
 
 export const setTrackingPanelMinimized = (state: TrackingConfirmationViewState, minimized: boolean) => ({ ...state, minimized });
 
+/**
+ * Turn a stored session failure into something a user can act on.
+ *
+ * The session row records whatever the database worker reported. When a worker is
+ * killed mid-operation that string is a bare OS error (`[Errno 9] Bad file
+ * descriptor`), which says nothing about the version commit the user asked for.
+ * A worker kill is recoverable by retrying, so say that; anything else is shown
+ * as recorded, and the message key keeps the raw detail available in the log.
+ */
+export type TrackingSessionNotice = {
+  key: 'message.e3ff2dea171b' | 'message.0dabe30cef58';
+  value0: string;
+  raw: boolean;
+};
+
+export const trackingSessionFailureNotice = (error: string | undefined | null): TrackingSessionNotice | undefined => {
+  const detail = (error || '').trim();
+  if (!detail) return undefined;
+  const workerLost = /\[Errno\s*9\]/i.test(detail)
+    || /bad file descriptor/i.test(detail)
+    || /database service exited/i.test(detail)
+    || /文件句柄无效/.test(detail);
+  if (workerLost) return { key: 'message.0dabe30cef58', value0: detail, raw: true };
+  return { key: 'message.e3ff2dea171b', value0: detail, raw: false };
+};
+
 export const createPreviewRequestGate = () => {
   let sequence = 0;
   return {

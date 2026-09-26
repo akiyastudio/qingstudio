@@ -56,6 +56,12 @@ class CoordinatedDatabaseClient {
     const operationSignal = AbortSignal.any([signal, preemptionController.signal].filter(Boolean));
     let attempt = 0;
     let promotedRead = false;
+    // A request that dies on its deadline is far more often waiting for a lease
+    // than doing work, and "who held the lease" is invisible after the fact. Time
+    // the wait and keep it on the failure so the retry policy and the log can see
+    // whether the cost was the queue or the query.
+    let attemptStartedAt = Date.now();
+    let executingAt = attemptStartedAt;
     while (true) {
       try {
         // The lease exists only for this attempt. A rejected attempt unwinds
@@ -70,10 +76,16 @@ class CoordinatedDatabaseClient {
           onPreempt: reason => preemptionController.abort(reason),
         }, () => {
           const deadlineAt = requestedDeadlineAt;
+          executingAt = Date.now();
           const remainingMs = Number.isFinite(deadlineAt) ? Math.max(0, deadlineAt - Date.now()) : timeoutMs;
           return this.execute({ root, database, databases: policy.databases, action, payload: requestPayload, timeoutMs: remainingMs, signal: operationSignal, deadlineAt, operationId, idempotent: policy.idempotent });
         });
       } catch (error) {
+        if (error && typeof error === 'object' && error.leaseWaitMs === undefined) {
+          error.leaseWaitMs = executingAt - attemptStartedAt;
+          error.mode = policy.mode;
+          error.queuedFor = (this.coordinator.status?.() || {});
+        }
         if (error?.code === 'DATABASE_WRITE_REQUIRED' && policy.mode === 'read' && !promotedRead) {
           promotedRead = true;
           requestPayload = { ...payload, _coordinatorWriteFallback: true };
@@ -86,6 +98,8 @@ class CoordinatedDatabaseClient {
         attempt += 1;
         if (Number.isFinite(requestedDeadlineAt) && Date.now() + delay >= requestedDeadlineAt) throw error;
         await this.waitForRetry(delay, operationSignal);
+        attemptStartedAt = Date.now();
+        executingAt = attemptStartedAt;
         if (operationSignal?.aborted) throw operationSignal.reason || Object.assign(new Error('数据库操作已取消'), { code: 'ABORT_ERR' });
       }
     }

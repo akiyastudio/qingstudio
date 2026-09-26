@@ -4,7 +4,7 @@ type SettingsSaveCoordinatorOptions<T> = {
   initial: T;
   normalize: (value: T) => T;
   applyDraft: (value: T) => void;
-  save: (value: T) => boolean | Promise<boolean>;
+  save: (value: T, baseline: T) => boolean | Promise<boolean>;
   onFailure: (value: T, error: Error) => void;
 };
 type TransactionSaveOptions = { incorporatesPending?: boolean };
@@ -21,12 +21,13 @@ export const createSettingsSaveCoordinator = <T,>({ initial, normalize, applyDra
   let lastFailedVersion = 0;
   let incorporatedThroughRevision = 0;
   const apply = (value: T) => {
+    const baseline = draft;
     const version = ++latestRevision;
     const normalized = normalize(value);
     draft = normalized;
     applyDraft(normalized);
     visibleRevision = version;
-    return { normalized, version };
+    return { normalized, version, baseline };
   };
   const rollbackFailed = async (value: T, version: number, reason: unknown) => {
     const error = reason instanceof Error ? reason : new Error(String(reason));
@@ -36,14 +37,14 @@ export const createSettingsSaveCoordinator = <T,>({ initial, normalize, applyDra
       draft = persisted;
       applyDraft(persisted);
       visibleRevision = persistedVersion;
-      try { await save(persisted); } catch { /* Re-applying still restores an optimistic parent draft. */ }
+      try { await save(persisted, persisted); } catch { /* Re-applying still restores an optimistic parent draft. */ }
     }
     return false;
   };
-  const saveApplied = async ({ normalized, version }: ReturnType<typeof apply>, incorporatesThrough = 0) => {
+  const saveApplied = async ({ normalized, version, baseline }: ReturnType<typeof apply>, incorporatesThrough = 0) => {
     if (version < persistedVersion) return true;
     try {
-      if (!await save(normalized)) throw new Error('设置没有保存成功');
+      if (!await save(normalized, baseline)) throw new Error('设置没有保存成功');
       persisted = normalized;
       persistedVersion = version;
       incorporatedThroughRevision = Math.max(incorporatedThroughRevision, incorporatesThrough);
@@ -52,13 +53,13 @@ export const createSettingsSaveCoordinator = <T,>({ initial, normalize, applyDra
       return true;
     } catch (reason) { return rollbackFailed(normalized, version, reason); }
   };
-  const saveMutation = async ({ mutation, version }: { mutation: (current: T) => T; version: number }) => {
+  const saveMutation = async ({ mutation, version, baseline }: { mutation: (current: T) => T; version: number; baseline: T }) => {
     if (version <= incorporatedThroughRevision && persistedVersion > version) return true;
     const baselineRevision = persistedVersion;
     const rebased = normalize(mutation(persisted));
     const commitRevision = version > baselineRevision ? version : ++latestRevision;
     try {
-      if (!await save(rebased)) throw new Error('设置没有保存成功');
+      if (!await save(rebased, baseline)) throw new Error('设置没有保存成功');
       persisted = rebased;
       persistedVersion = commitRevision;
       if (visibleRevision <= Math.max(version, baselineRevision)) {
@@ -75,7 +76,7 @@ export const createSettingsSaveCoordinator = <T,>({ initial, normalize, applyDra
   const enqueueMutation = (mutation: (current: T) => T) => {
     if (typeof mutation !== 'function') throw new TypeError('Settings mutation must be a function');
     const applied = apply(mutation(draft));
-    return queue(() => saveMutation({ mutation, version: applied.version }));
+    return queue(() => saveMutation({ mutation, version: applied.version, baseline: applied.baseline }));
   };
   const adoptPersisted = (value: T) => {
     const incorporatesThrough = latestRevision;

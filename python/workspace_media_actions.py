@@ -29,6 +29,11 @@ MEDIA_INCREMENTAL_INCOMPLETE_RETENTION_MS = 24 * 60 * 60 * 1000
 
 MEDIA_INCREMENTAL_INCOMPLETE_SOFT_LIMIT = 32
 
+# An incremental snapshot whose batch markers are older than this is abandoned.
+# The window has to outlast the longest legitimate scan (a paged full scan over a
+# network share), because rolling a live scan forward would race its own writer.
+MEDIA_INCREMENTAL_ABANDONED_GRACE_MS = 60 * 60 * 1000
+
 def directory_identity(path: str):
     try:
         stat = os.stat(path)
@@ -992,6 +997,96 @@ def _touch_incremental_snapshot_lease(db, snapshot_id: str, project_id: str, now
         "projectId": project_id, "heartbeatAt": now,
         "expiresAt": now + MEDIA_INCREMENTAL_INCOMPLETE_RETENTION_MS,
     }, sort_keys=True))
+
+
+def _abandoned_incremental_snapshots(db, now: int, project_id: str | None = None):
+    """Incomplete snapshots older than the grace window, with their progress.
+
+    Only the preparation timestamp is compared here. A snapshot whose lease
+    heartbeat is newer is filtered out by the caller, so a scan that is still
+    running is never a candidate.
+    """
+    values = (now - MEDIA_INCREMENTAL_ABANDONED_GRACE_MS,)
+    clause = ""
+    if project_id:
+        clause = " AND snapshots.project_id=?"
+        values = (*values, project_id)
+    return db.execute(
+        f"""SELECT snapshots.snapshot_id,snapshots.project_id,snapshots.created_at,
+                   (SELECT COUNT(*) FROM media_incremental_snapshot_batches batch
+                     WHERE batch.snapshot_id=snapshots.snapshot_id) AS batch_count,
+                   (SELECT COUNT(*) FROM media_incremental_snapshot_files file
+                     WHERE file.snapshot_id=snapshots.snapshot_id) AS file_count
+              FROM media_incremental_snapshots snapshots
+             WHERE snapshots.state!='finalized'{clause}
+               AND snapshots.created_at<?""",
+        (*values,),
+    ).fetchall()
+
+
+def reconcile_abandoned_incremental_snapshots(db, project_id: str | None = None, now: int | None = None) -> dict:
+    """Finish or discard incremental snapshots no writer is going to return to.
+
+    An interrupted scan used to stay `prepared` forever: the index was not
+    updated, the snapshot kept occupying the per-project incomplete limit, and
+    every later batch paid for it. Instead of replaying the whole action, this
+    resumes the snapshot from its own committed batch markers:
+
+    * every manifest batch has a committed marker -> roll forward through the
+      normal finalize path, so the index reflects the scan that did happen;
+    * no batch was applied -> the snapshot carries no value, so it is released;
+    * a partial batch set -> left alone and retried later, because a later retry
+      is safe (batches are idempotent) and guessing now could race a live writer.
+    """
+    now = int(now or time.time() * 1000)
+    report = {"resumed": [], "discarded": [], "deferred": []}
+    for row in _abandoned_incremental_snapshots(db, now, project_id):
+        snapshot_id = str(row["snapshot_id"])
+        lease_raw = _meta_value(db, f"media_sync_lease:{snapshot_id}")
+        try:
+            heartbeat = int(json.loads(lease_raw).get("heartbeatAt") or 0) if lease_raw else 0
+        except (TypeError, ValueError, json.JSONDecodeError):
+            heartbeat = 0
+        last_active = max(int(row["created_at"] or 0), heartbeat)
+        if last_active >= now - MEDIA_INCREMENTAL_ABANDONED_GRACE_MS:
+            continue
+        expected_batches = math.ceil(int(row["file_count"]) / MEDIA_INCREMENTAL_BATCH_SIZE)
+        applied_batches = int(row["batch_count"])
+        if applied_batches == 0:
+            _release_incremental_snapshot(db, snapshot_id)
+            report["discarded"].append(snapshot_id)
+            continue
+        if expected_batches and applied_batches >= expected_batches:
+            project = db.execute("SELECT name FROM projects WHERE id=?", (row["project_id"],)).fetchone()
+            if project is None:
+                _release_incremental_snapshot(db, snapshot_id)
+                report["discarded"].append(snapshot_id)
+                continue
+            try:
+                media_sync_paths_finalize(None, db, {
+                    "projectName": str(project["name"]), "snapshotId": snapshot_id,
+                })
+            except Exception:
+                # A failed roll-forward is retried on the next connection; the
+                # snapshot stays resumable because its markers are untouched.
+                if db.in_transaction:
+                    db.rollback()
+                report["deferred"].append(snapshot_id)
+                continue
+            report["resumed"].append(snapshot_id)
+            continue
+        report["deferred"].append(snapshot_id)
+    return report
+
+
+def _release_incremental_snapshot(db, snapshot_id: str) -> None:
+    for table in ("media_incremental_snapshot_batches", "media_incremental_snapshot_baseline",
+                  "media_incremental_snapshot_scopes", "media_incremental_snapshot_files"):
+        db.execute(f"DELETE FROM {table} WHERE snapshot_id=?", (snapshot_id,))
+    db.execute("DELETE FROM media_incremental_snapshots WHERE snapshot_id=?", (snapshot_id,))
+    db.execute("DELETE FROM meta WHERE key LIKE ?", (f"media_sync:{snapshot_id}:%",))
+    db.execute("DELETE FROM meta WHERE key=?", (f"media_sync_lease:{snapshot_id}",))
+    db.commit()
 
 def _assert_incremental_snapshot_capacity(db, project_id: str, snapshot_id: str) -> None:
     existing = db.execute(

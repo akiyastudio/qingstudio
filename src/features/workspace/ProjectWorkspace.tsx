@@ -18,6 +18,7 @@ import { mergeSourcePaths } from '../../components/source-path-picker-model';
 import type { CropRectangle } from '../../components/InteractiveCropEditor';
 import { ProjectVersionTree, type VersionTreeCanvasController } from '../../components/ProjectVersionTree';
 import { useAppDialog } from '../../components/AppDialogProvider';
+import { useVersionChanges } from '../versioning/public';
 import { useEscapeLayer } from '../../components/LayerProvider';
 import { ConverterView, ImportCard, MatchView, ResearchView, ScreenshotMainImageView, type ImportCompletion } from '../tools/ToolViews';
 import { resolveInspectedToolSources } from '../tools/tool-source-selection-model';
@@ -61,7 +62,7 @@ import { useProjectFileSelection } from './useProjectFileSelection';
 import { defaultProjectFileSortDirection, isFolderLikeEntry, sortProjectFileEntries } from './file-entry-sort-model';
 import { pageOwnsFileOperationNotification } from './file-operation-notification-model';
 import { presentOfficeExtractionResult, type OfficeExtractionPresentation } from './office-extraction-result-model';
-import { addPendingFileOperation, applyPendingFileOperations, claimClipboardGeneration, operationRefreshDirectories, pendingOperationForEntry, pendingPathConflicts, predictUniqueDirectoryName, removePendingFileOperation, selectionOutsidePendingRenames, type PendingFileOperation, type PendingProjectFileEntry } from './file-operation-state-model';
+import { addPendingFileOperation, applyPendingFileOperations, claimClipboardGeneration, operationRefreshDirectories, pendingOperationForEntry, pendingPathConflicts, predictUniqueDirectoryName, reconcileDirectoryPaths, removePendingFileOperation, selectionOutsidePendingRenames, type PendingFileOperation, type PendingProjectFileEntry } from './file-operation-state-model';
 import { directoryPreviewCacheKey, directoryPreviewCacheKeyWithin, pendingDirectoryPreviewSourceCacheKey, remapDirectoryPreviewCacheKey, remapPendingDirectoryPreviewEntries, settlePendingDirectoryPreviewRenameCaches, shouldCacheDirectoryPreviewResult } from './directory-preview-cache-model';
 import { ImportCompletionNotice, ToolModal } from './ProjectToolModal';
 import { ComponentToolbarActions, FileListColumnResizeHandle, ViewportContextMenu, ViewportSubmenu } from './ProjectWorkspaceLayout';
@@ -263,7 +264,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       return true;
     });
   }, [customProjectCategories, project.status, projectCategoryOrder]);
-  const { backgroundTasks, panelTasks, dismissBackgroundTask } = useTaskCenter();
+  const { backgroundTasks, panelTasks, dismissBackgroundTask, withdrawPanelTask } = useTaskCenter();
   const [folders, setFolders] = useState<Array<{ name: string; path: string; updatedAt: number }>>([]);
   const [initialVersionTreeSnapshot] = useState(() => peekVersionTreeSnapshot(workspacePath, project.name, project.path, project.status));
   const [progressFolders, setProgressFolders] = useState<ProgressFolder[]>(() => initialVersionTreeSnapshot?.progressFolders || []);
@@ -381,6 +382,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   projectPathRef.current = project.path;
   const projectLifecycleRef = useRef<ProjectWorkspaceLifecycleIdentity>();
   const watchReconcileStateRef = useRef({ identity: '', externalWatchRevision: -1, lastReconciledAt: 0 });
+  const fileRootSubscriptionRef = useRef('');
   const directoryEntriesCacheRef = useRef(new Map<string, ProjectFileEntry[]>());
   const optimisticDirectoryEntriesCacheRef = useRef(new Map<string, ProjectFileEntry[]>());
   const directoryPrefetchesRef = useRef(new Map<string, Promise<DirectoryPreviewLoadResult>>());
@@ -653,6 +655,18 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const [progressImportStatus, setProgressImportStatus] = useState<ProjectFileOperationProgress | null>(null);
   const progressSubmittingRef = useRef(false);
   const progressImportOperationIdRef = useRef('');
+  // The folder-mark modal reports a busy mirror into the task center while its
+  // operation runs, but that modal can be gone before the operation settles
+  // (minimized to the background, or closed by the success path) and the drawer
+  // never clears a task that is still running. The operation therefore ends its
+  // own mirror here instead of leaving it running forever.
+  const folderMarkBusyRef = useRef(false);
+  useEffect(() => {
+    if (folderMarkSetup && progressSubmitting) { folderMarkBusyRef.current = true; return; }
+    if (!folderMarkBusyRef.current || progressSubmitting) return;
+    folderMarkBusyRef.current = false;
+    withdrawPanelTask(panelTaskSessionKey(pageId, 'folder-mark'));
+  }, [folderMarkSetup, pageId, progressSubmitting, withdrawPanelTask]);
   const progressMutationStatus = useMemo(() => versionTreeTaskPanelProgress(
     backgroundTasks,
     project.name,
@@ -1036,6 +1050,15 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     setSearchOpen(false);
     setSearchQuery('');
   };
+  const reconcileDirectoryUiState = useCallback((directory: string, entries: ProjectFileEntry[]) => {
+    const reconcile = (paths: string[]) => reconcileDirectoryPaths(paths, directory, entries, pendingFileOperationsRef.current);
+    setSelectedPaths(reconcile);
+    setCutPaths(reconcile);
+    setPreviewPath(current => current && !reconcile([current]).length ? '' : current);
+    setPreviewMediaPath(current => current && !reconcile([current]).length ? '' : current);
+    setPreviewHighlightPath(current => current && !reconcile([current]).length ? '' : current);
+    selectionAnchorPathRef.current = reconcile([selectionAnchorPathRef.current])[0] || '';
+  }, [setSelectedPaths, setPreviewPath, setPreviewMediaPath, setPreviewHighlightPath]);
   const refresh = async (relativePath?: string, options: { includeProjectContents?: boolean } = {}): Promise<boolean> => {
     const safeRelativePath = typeof relativePath === 'string' ? relativePath : currentRelativePathRef.current;
     const requestedPath = safeRelativePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
@@ -1079,6 +1102,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       const entries = mergeRefreshedEntryMetadata(browseResult.entries, retainedEntries || []);
       directoryEntriesCacheRef.current.set(requestedPath, entries);
       setFileEntries(entries);
+      reconcileDirectoryUiState(requestedPath, entries);
     } else {
       // Never leave entries from the previous directory under a new breadcrumb.
       if (retainedEntries === undefined || browseResult.missingDirectory) setFileEntries([]);
@@ -1149,9 +1173,10 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       return;
     }
     const nextDirectoryEntries = result.entries.filter(entry => entry.kind !== 'folder');
+    reconcileDirectoryUiState(directoryPath, result.entries);
     setSearchEntries(current => mergeRefreshedRecursiveDirectoryEntries(current, nextDirectoryEntries, directoryPath));
     directoryEntriesCacheRef.current.set(directoryPath, result.entries);
-  }, [currentFolderRecursiveSearchActive, mediaCacheConfig, project.name, project.path, project.status, recursiveFlatOpen, searchQuery, workspacePath]);
+  }, [currentFolderRecursiveSearchActive, mediaCacheConfig, project.name, project.path, project.status, recursiveFlatOpen, searchQuery, workspacePath, reconcileDirectoryUiState]);
   const upsertOptimisticDirectoryEntry = (directoryPath: string, entry: ProjectFileEntry, previousRelativePath = '') => {
     const normalizedDirectory = normalizeProjectRelativePath(directoryPath);
     const currentDirectory = normalizeProjectRelativePath(currentRelativePathRef.current);
@@ -1381,6 +1406,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     if (!active || !foregroundDirectoryReady) return;
     let disposed = false;
     let watchStarted = false;
+    const subscriptionId = crypto.randomUUID();
+    fileRootSubscriptionRef.current = subscriptionId;
     const watchIdentity = `${workspacePath}\0${project.status}\0${project.name}\0${project.path}`;
     const previousReconcile = watchReconcileStateRef.current;
     const forceReconcile = previousReconcile.identity !== watchIdentity
@@ -1390,7 +1417,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       if (disposed || !activeRef.current) return;
       watchStarted = true;
       setRootWatchFailed(false);
-      void projectWorkspaceClient.watchFileRoot(workspacePath, project.status, project.name, { reconcile }).then(result => {
+      void projectWorkspaceClient.watchFileRoot(workspacePath, project.status, project.name, { reconcile, subscriptionId }).then(result => {
         if (disposed) return;
         setRootWatchFailed(!result.success || result.degraded === true);
         if (result.reconciled) {
@@ -1402,7 +1429,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     return () => {
       disposed = true;
       cancelDeferredStart();
-      if (watchStarted) void projectWorkspaceClient.unwatchFileRoot(workspacePath, project.status, project.name);
+      if (fileRootSubscriptionRef.current === subscriptionId) fileRootSubscriptionRef.current = '';
+      if (watchStarted) void projectWorkspaceClient.unwatchFileRoot(workspacePath, project.status, project.name, { subscriptionId });
     };
   }, [active, externalWatchRevision, foregroundDirectoryReady, loadProgressFolders, project.name, project.path, project.status, projectWorkflows, watchRootDirectly, workspacePath]);
   useEffect(() => {
@@ -1410,7 +1438,10 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     // Network drives and some virtual filesystems cannot be watched. Keep a
     // low-frequency fallback without making polling the normal code path.
     const interval = window.setInterval(() => {
-      void projectWorkspaceClient.watchFileRoot(workspacePath, project.status, project.name, { reconcile: true }).then(result => {
+      const subscriptionId = fileRootSubscriptionRef.current;
+      if (!subscriptionId) return;
+      void projectWorkspaceClient.watchFileRoot(workspacePath, project.status, project.name, { reconcile: true, subscriptionId }).then(result => {
+        if (fileRootSubscriptionRef.current !== subscriptionId) return;
         if (result.success && !result.degraded) setRootWatchFailed(false);
         if (result.reconciled) {
           watchReconcileStateRef.current = {
@@ -1590,6 +1621,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       projectRootFilterActive || recursiveFlatOpen || currentFolderRecursiveSearchActive ? undefined : currentRelativePath,
       pendingFileOperations,
     ), [authoritativeActiveFileEntries, currentFolderRecursiveSearchActive, currentRelativePath, finalViewOpen, pendingFileOperations, projectRootFilterActive, recursiveFlatOpen]);
+  useVersionChanges(active && projectWorkflows, Boolean(pendingRelationChange), workspacePath, project.name, project.id, loadProgressFoldersSnapshot);
   const currentDirectoryFolders = useMemo(() => fileEntries.filter(isFolderLikeEntry), [fileEntries]);
   const folderAlphabetKeys = useMemo(() => availableFolderAlphabetKeys(currentDirectoryFolders.map(entry => entry.name)), [currentDirectoryFolders]);
   const folderAlphabetFilterVisible = folderAlphabetFilterEnabled && browseMode === 'grid' && !finalViewOpen && !recursiveSearchActive && !searchQuery.trim() && fileFilter === 'all' && ratingFilter === 'all' && currentDirectoryFolders.length > FOLDER_ALPHABET_FILTER_THRESHOLD;
@@ -3130,7 +3162,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     }
     setClipboardHasFiles(result.hasFiles);
   };
-  const runFileOperation = async (operation: 'trash' | 'copy' | 'cut' | 'paste' | 'rename', nextName?: string, targetPaths = selectedPaths, destinationRelativePath = operationDirectoryPath) => {
+  const runFileOperation = async (operation: 'trash' | 'copy' | 'cut' | 'paste' | 'rename', nextName?: string, targetPaths = selectedRelativePaths, destinationRelativePath = operationDirectoryPath) => {
+    if (operation !== 'paste' && !targetPaths.length) return;
     const requestedProjectPath = projectPathRef.current;
     if (finalViewOpen && operation !== 'copy') { onNotice('当前为只读视图，请到原文件夹修改。'); return; }
     if (operation !== 'paste' && activeFileEntries.some(entry => targetPaths.includes(entry.relativePath) && isUnsupportedShortcutContent(entry))) { onNotice('普通快捷方式中的文件是只读浏览内容，不能执行此操作'); return; }
@@ -4645,7 +4678,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       {fileMenu && createPortal(<ViewportContextMenu x={fileMenu.x} y={fileMenu.y} widthClass="w-52" allowSubmenus>
         {isFolderLikeEntry(fileMenu.entry) && !isUnsupportedShortcutContent(fileMenu.entry) && onOpenDirectoryPage && <><button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); onOpenDirectoryPage(entry.relativePath); }}><FolderPlus size={14}/>{t("ui.open.in.new.tab.79c5e0")}</button><div className="my-1 border-t border-slate-100"/></>}
         {projectWorkflows && isFolderLikeEntry(fileMenu.entry) && !fileMenuVersionTreeFolder && <><button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); void openMarkProgress(entry); }}><GitBranch size={14}/>{t("ui.mark.f10902")}</button><div className="my-1 border-t border-slate-100"/></>}
-        {projectWorkflows && fileMenuRegisteredProgressFolder && <><button disabled={fileMenuRegisteredProgressFolder.trackingState === 'committing' || fileMenuRegisteredProgressFolder.trackingState === 'needs_repair'} className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); void openMarkProgress(entry); }}><GitBranch size={14}/>{t("ui.edit.progress.a52b5e")}</button>{!fileMenuRegisteredProgressFolder.parentProgressId && <button className="project-menu-item" onClick={() => { const progressFolder = fileMenuRegisteredProgressFolder; setFileMenu(null); void unregisterLegacyOrphanProgress(progressFolder); }}><X size={14}/>{t("ui.unregister.legacy.detached.progress.f90ea2")}</button>}{progressTrackingAction(fileMenuRegisteredProgressFolder) && <button disabled={progressSubmitting || Boolean(workspaceActivityMessage) || fileMenuRegisteredProgressFolder.trackingState === 'committing'} title={t("ui.refresh.main.branch.version.tracking.using.749253")} className="project-menu-item" onClick={() => { const progressFolder = fileMenuRegisteredProgressFolder; setFileMenu(null); void refreshProgressTracking(progressFolder); }}><RefreshCw size={14}/>{progressTrackingRefreshLabel(fileMenuRegisteredProgressFolder)}</button>}<div className="my-1 border-t border-slate-100"/></>}
+        {projectWorkflows && fileMenuRegisteredProgressFolder && <><button disabled={fileMenuRegisteredProgressFolder.trackingState === 'committing' || fileMenuRegisteredProgressFolder.trackingState === 'needs_repair'} className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); void openMarkProgress(entry); }}><GitBranch size={14}/>{t("ui.edit.progress.a52b5e")}</button>{!fileMenuRegisteredProgressFolder.parentProgressId && <button className="project-menu-item" onClick={() => { const progressFolder = fileMenuRegisteredProgressFolder; setFileMenu(null); void unregisterLegacyOrphanProgress(progressFolder); }}><X size={14}/>{t("ui.unregister.legacy.detached.progress.f90ea2")}</button>}{progressTrackingAction(fileMenuRegisteredProgressFolder) && <button disabled={progressSubmitting || Boolean(workspaceActivityMessage)} title={t("ui.refresh.main.branch.version.tracking.using.749253")} className="project-menu-item" onClick={() => { const progressFolder = fileMenuRegisteredProgressFolder; setFileMenu(null); void refreshProgressTracking(progressFolder); }}><RefreshCw size={14}/>{progressTrackingRefreshLabel(fileMenuRegisteredProgressFolder)}</button>}<div className="my-1 border-t border-slate-100"/></>}
         {gatherToProject && <><button disabled={fileMenuContainsShortcutContent || gatheringInspiration || !inspirationProjects.length} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); startGatherInspiration(targets); }}><FolderInput size={14}/>{t("message.fb0d370ff144", { value0: inspirationTargetProject ? `“${inspirationTargetProject.name}”` : '…' })}</button>{inspirationTargetProject && <button disabled={fileMenuContainsShortcutContent || gatheringInspiration} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); setGatherPickerPaths(targets); }}><ChevronDown size={14}/>{t("ui.choose.another.project.952baa")}</button>}<div className="my-1 border-t border-slate-100"/></>}
         {projectWorkflows && canSelectFileMenuMedia && <><button className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); selectMediaFiles(targets); }}><CheckCircle2 size={14}/>{t("ui.selection.8c8db6")}</button><div className="my-1 border-t border-slate-100"/></>}
         {(fileMenu.entry.kind === 'image' || fileMenu.entry.kind === 'raw' || fileMenu.entry.kind === 'video') && <button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; const restoreSelection = fileMenuSelectionWasImplicitRef.current ? fileMenuSelectionSnapshotRef.current : null; setFileMenu(null); if (restoreSelection) { selectionAnchorPathRef.current = fileMenuSelectionAnchorSnapshotRef.current; setSelectedPaths(restoreSelection); } openPreviewFromMenu(entry); }}><PanelLeftOpen size={14}/>{t("ui.preview.13d61f")}</button>}

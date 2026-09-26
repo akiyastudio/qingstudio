@@ -2,7 +2,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { workspaceWindowContext, type WindowPanelSnapshot } from '../../platform/workspace-window-client';
 import type { BackgroundTask, LogEntry } from '../../types';
-import { nextPanelTaskStartedAt, panelTaskSessionKey, removePanelTasksByOwnerPageId } from './panel-task-session-model';
+import { nextPanelTaskStartedAt, panelTaskSessionKey, removePanelTaskSession, removePanelTasksByOwnerPageId } from './panel-task-session-model';
 import { pruneFinishedTaskToastIds, setTaskToastMinimized, taskToastInstanceKey } from './task-toast-model';
 import { initialBackgroundTaskStreamState, receiveBackgroundTaskDelta, receiveBackgroundTaskSnapshot, type BackgroundTaskStreamState } from './background-task-stream-model';
 
@@ -32,6 +32,7 @@ interface TaskCenterValue {
   panelTasks: Record<string, PanelTaskSnapshot>;
   reportPanelTask: (identity: Pick<PanelTaskSnapshot, 'key' | 'ownerPageId' | 'panelKind' | 'title'>, report: PanelTaskReport) => void;
   dismissPanelTask: (key: string) => void;
+  withdrawPanelTask: (key: string) => void;
   dismissPanelTasksByOwnerPageId: (pageId: string) => void;
   dismissBackgroundTask: (id: string) => Promise<unknown>;
   retryBackgroundTask: (id: string) => Promise<unknown>;
@@ -155,6 +156,12 @@ export const TaskCenterProvider = ({ children }: { children: React.ReactNode }) 
     setPanelTasks(current => removePanelTasksByOwnerPageId(current, pageId));
   }, []);
 
+  // Only the panel that owns a session withdraws it here, which is what lets an
+  // operation end its own busy mirror after its modal has already unmounted.
+  const withdrawPanelTask = useCallback((key: string) => {
+    setPanelTasks(current => removePanelTaskSession(current, key));
+  }, []);
+
   const dismissBackgroundTask = useCallback(async (id: string) => {
     return window.electronAPI.dismissBackgroundTask(id);
   }, []);
@@ -176,7 +183,7 @@ export const TaskCenterProvider = ({ children }: { children: React.ReactNode }) 
     return Boolean(task && minimizedToastTaskIds.has(taskToastInstanceKey(task)));
   }, [backgroundTasks, minimizedToastTaskIds]);
 
-  const value = useMemo<TaskCenterValue>(() => ({ backgroundTasks, backgroundTaskSyncing: backgroundTaskStream.syncing, backgroundTaskDegraded: backgroundTaskStream.degraded, panelTasks, reportPanelTask, dismissPanelTask, dismissPanelTasksByOwnerPageId, dismissBackgroundTask, retryBackgroundTask, minimizeTaskToast, restoreTaskToast, isTaskToastMinimized }), [backgroundTaskStream.degraded, backgroundTaskStream.syncing, backgroundTasks, dismissBackgroundTask, dismissPanelTask, dismissPanelTasksByOwnerPageId, isTaskToastMinimized, minimizeTaskToast, panelTasks, reportPanelTask, restoreTaskToast, retryBackgroundTask]);
+  const value = useMemo<TaskCenterValue>(() => ({ backgroundTasks, backgroundTaskSyncing: backgroundTaskStream.syncing, backgroundTaskDegraded: backgroundTaskStream.degraded, panelTasks, reportPanelTask, dismissPanelTask, withdrawPanelTask, dismissPanelTasksByOwnerPageId, dismissBackgroundTask, retryBackgroundTask, minimizeTaskToast, restoreTaskToast, isTaskToastMinimized }), [backgroundTaskStream.degraded, backgroundTaskStream.syncing, backgroundTasks, dismissBackgroundTask, dismissPanelTask, dismissPanelTasksByOwnerPageId, isTaskToastMinimized, minimizeTaskToast, panelTasks, reportPanelTask, restoreTaskToast, retryBackgroundTask, withdrawPanelTask]);
   return <TaskCenterContext.Provider value={value}>{children}</TaskCenterContext.Provider>;
 };
 

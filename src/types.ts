@@ -1039,7 +1039,7 @@ export interface IElectronAPI {
   saveBirthdays: (data: Record<string, string>) => Promise<{success: boolean, error?: string}>;
   loadConfig: () => Promise<AppConfig | null>;
   loadStartupSnapshot?: () => Promise<{ config: AppConfig | null; birthdays: Record<string, string> }>;
-  saveConfig: (config: AppConfig) => Promise<{success: boolean, savedConfig?: AppConfig, error?: string}>;
+  saveConfig: (config: AppConfig, baseline?: AppConfig) => Promise<{success: boolean, savedConfig?: AppConfig, error?: string}>;
   getPrivacyConsentState: () => Promise<PrivacyConsentState>;
   savePrivacyConsent: (request: { acceptCore?: boolean; revokeCore?: boolean; experienceProgramGranted?: boolean; faceRecognitionGranted?: boolean }) => Promise<{ success: boolean; state?: PrivacyConsentState; error?: string }>;
   openLegalDocument: (documentId: LegalDocumentId) => Promise<{ success: boolean; path?: string; error?: string }>;
@@ -1110,6 +1110,7 @@ export interface IElectronAPI {
   getWorkspaceProjects: (workspacePath: string) => Promise<{ success: boolean; root?: string; statuses: WorkspaceStatusGroup[]; error?: string }> ;
   onWorkspaceFilesChanged: (callback: (change: { root: string; fileName: string; eventType?: 'rename' | 'change'; reconciled?: boolean; watcherFailed?: boolean }) => void) => () => void;
   onWorkspaceProjectsChanged: (callback: (change: { root: string }) => void) => () => void;
+  onWorkspaceVersionsChanged: (callback: (change: { root: string; projectName?: string; projectId?: string; photoId?: string }) => void) => () => void;
   createWorkspaceProject: (workspacePath: string, date: ProjectDate | null, name: string, options?: { createPlanningFolder?: boolean; workspacePaths?: string[] }) => Promise<{ success: boolean; project?: WorkspaceProject; error?: string }> ;
   chooseExistingProject: () => Promise<{ success: boolean; cancelled?: boolean; sourcePath?: string; inspectionToken?: string; name?: string; fileCount?: number; folderCount?: number; totalBytes?: number; truncated?: boolean; error?: string }>;
   inspectExistingProject: (sourcePath: string) => Promise<{ success: boolean; sourcePath?: string; inspectionToken?: string; name?: string; fileCount?: number; folderCount?: number; totalBytes?: number; truncated?: boolean; error?: string }>;
@@ -1120,15 +1121,15 @@ export interface IElectronAPI {
   getShellNewFileTypes: (refresh?: boolean) => Promise<{ success: boolean; types: ShellNewFileType[]; error?: string }>;
   onShellNewFileTypesChanged: (callback: (types: ShellNewFileType[]) => void) => () => void;
   createProjectShellNewFile: (workspacePath: string, status: ProjectStatus, name: string, relativePath: string, typeId: string) => Promise<{ success: boolean; file?: { name: string; path: string; relativePath: string; extension: string; updatedAt: number }; error?: string }>;
-  undoLastRename: (workspacePath?: string, options?: { restoreConflictPolicy?: 'rename' | 'overwrite'; decisionToken?: string }) => Promise<UndoLastRenameResult>;
+  undoLastRename: (workspacePath?: string, options?: { projectPath?: string; restoreConflictPolicy?: 'rename' | 'overwrite'; decisionToken?: string }) => Promise<UndoLastRenameResult>;
   moveWorkspaceProject: (workspacePath: string, status: ProjectStatus, name: string, nextStatus: ProjectStatus) => Promise<{ success: boolean; project?: WorkspaceProject; error?: string }> ;
   finalizeSdImportedProjects: (workspacePath: string, projectNames: string[], options: { moveProjectAfterImport: boolean; workProjectNames: string[]; importedPathsByProject: Record<string, string[]> }) => Promise<{ success: boolean; projects: WorkspaceProject[]; movedProjects: WorkspaceProject[]; unchangedProjects: WorkspaceProject[]; failures: Array<{ projectName: string; error: string }>; error?: string }>;
   trashWorkspaceProject: (workspacePath: string, status: ProjectStatus, name: string) => Promise<{ success: boolean; operationId?: string; permanent?: boolean; error?: string; errorCode?: string }>;
   cleanupDeletedWorkspaceProjects: (workspacePath: string) => Promise<{ success: boolean; checkedCount: number; cleanedCount: number; outcomes: Array<{ projectId: string; name: string; cleaned: boolean; status: 'in_recycle_bin' | 'missing' | 'restored' | 'unknown'; removedArtifactCount?: number }>; error?: string }>;
 
   getProjectContents: (workspacePath: string, status: ProjectStatus, name: string) => Promise<{ success: boolean; folders: Array<{ name: string; path: string; updatedAt: number }>;error?: string }> ;
-  watchFileRoot: (workspacePath: string, status: ProjectStatus, name: string, options?: { reconcile?: boolean }) => Promise<{ success: boolean; root?: string; requiredRoots?: number; watchedRoots?: number; failedRoots?: Array<{ virtualPath: string; external: boolean; error: string }>; degraded?: boolean; reconciled?: boolean; reconciliationFailed?: boolean; error?: string }>;
-  unwatchFileRoot: (workspacePath: string, status: ProjectStatus, name: string) => Promise<{ success: boolean; error?: string }>;
+  watchFileRoot: (workspacePath: string, status: ProjectStatus, name: string, options?: { reconcile?: boolean; subscriptionId?: string }) => Promise<{ success: boolean; root?: string; requiredRoots?: number; watchedRoots?: number; failedRoots?: Array<{ virtualPath: string; external: boolean; error: string }>; degraded?: boolean; reconciled?: boolean; reconciliationFailed?: boolean; error?: string }>;
+  unwatchFileRoot: (workspacePath: string, status: ProjectStatus, name: string, options?: { subscriptionId?: string }) => Promise<{ success: boolean; error?: string }>;
   browseProjectFiles: (workspacePath: string, status: ProjectStatus, name: string, relativePath?: string, cacheConfig?: AppConfig['mediaCache']) => Promise<{ success: boolean; path?: string; entries: ProjectFileEntry[]; missingDirectory?: boolean; error?: string }>;
   inspectProjectToolSources: (workspacePath: string, status: ProjectStatus, name: string, relativePaths: string[], collectVideos?: boolean, collectDirectConvertibleImages?: boolean, collectRecursiveConvertibleImages?: boolean) => Promise<{ success: boolean; indexed: boolean; hasVideo: boolean; hasConvertibleImage: boolean; videoPaths: string[]; convertibleImagePaths: string[]; folderPaths: string[]; sources: ProjectToolSource[]; error?: string }>;
   resolveProjectShortcut: (workspacePath: string, status: ProjectStatus, name: string, relativePath: string) => Promise<{ success: boolean; target?: string; targetKind?: 'folder' | 'file'; error?: string }>;

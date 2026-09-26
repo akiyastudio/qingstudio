@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppDialog } from '../../components/AppDialogProvider';
+import { t } from '../../i18n/runtime';
 import { useTaskCenter } from '../background-tasks/TaskCenter';
 import { flushApplicationBeforeQuit } from './application-quit-client';
 import { workspaceWindowContext } from '../../platform/workspace-window-client';
@@ -37,12 +38,26 @@ export const useWorkspaceWindow = (onError: (message: string) => void, ready: bo
         }
         const running = Object.values(current.current.panelTasks).filter(task => task.state === 'running' && !task.nativeTabId);
         // Page-owned work is retained until its completion callbacks have run.
-        // Closing the page during that work could lose a continuation or a draft.
-        if (running.length && !quit) {
+        // Closing the page during that work loses a continuation or a draft, so
+        // the window asks first and lets the user drop it deliberately.
+        if (running.length) {
           const id = workspaceWindowContext()?.id;
-          if (id) await api.activate(id);
-          await current.current.dialog.alert({ title: '标签页中还有任务', message: '请等待任务完成，或先在任务面板中取消，再关闭标签页。', detail: running.map(task => task.title).join('\n') });
-          await api.respondClose(token, false);
+          // Bringing the tab forward is a convenience. A window whose tab list
+          // changed while closing must still receive the confirmation below.
+          if (id) await api.activate(id).catch(() => undefined);
+          const detail = running.slice(0, 5).map(task => `• ${String(task.title || '').split('').map(char => char < ' ' || char === '\u007f' ? ' ' : char).join('').trim().slice(0, 160)}`)
+            .concat(running.length > 5 ? [t("message.2f60df77b36a", { count: running.length - 5 })] : []).join('\n');
+          const confirmed = await current.current.dialog.confirm({
+            title: t("ui.close.window.e3896a"), message: t("ui.tasks.are.still.unfinished.close.this.7886ac"),
+            detail: t("ui.these.tasks.will.be.interrupted.after.59c433", { value0: detail }),
+            confirmLabel: t("ui.close.anyway.19bb74"), cancelLabel: t("ui.keep.it.open.a65b4c"), tone: 'danger', priority: true,
+          });
+          if (!confirmed) { await api.respondClose(token, false); return; }
+          // An accepted close must not be blocked by a frozen page or a long
+          // local task, exactly like an already confirmed application quit.
+          void flushApplicationBeforeQuit().catch(error => console.error('关闭窗口前保存设置失败，将继续关闭', error));
+          await Promise.resolve();
+          await api.respondClose(token, true);
           return;
         }
         await flushApplicationBeforeQuit();

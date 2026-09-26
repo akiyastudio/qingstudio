@@ -37,8 +37,9 @@ export const decideStartupSdAutoImport = ({
 
 export const shouldDeleteSourceForImportBatch = (
   deleteSourceRequested: boolean,
-  mode: 'manual' | 'startup',
-) => deleteSourceRequested && mode === 'manual';
+  _mode: 'manual' | 'startup',
+  // Both triggers honor the user's choice; the worker verifies copies before cleanup.
+) => deleteSourceRequested;
 
 export const handledStartupRequestAfterBatchStart = (
   request: StartupSdAutoImportRequest | null,

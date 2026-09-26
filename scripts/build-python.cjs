@@ -47,7 +47,8 @@ const result = spawnSync(python, [
   '--hidden-import', 'png_to_jpg', '--hidden-import', 'raw_decoder', '--hidden-import', 'rawpy',
   '--hidden-import', 'rename',
   '--hidden-import', 'thumbnail_db', '--hidden-import', 'thumbnail_image',
-  '--hidden-import', 'workspace_db', '--hidden-import', 'operations_db', '--hidden-import', 'backup_db',
+  '--hidden-import', 'workspace_db', '--hidden-import', 'workspace_durability',
+  '--hidden-import', 'operations_db', '--hidden-import', 'backup_db',
   ...compatibilityHiddenImports,
   'tools.py',
 ], { cwd: join(root, 'python'), stdio: 'inherit' });

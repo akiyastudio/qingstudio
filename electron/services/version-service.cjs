@@ -1,4 +1,6 @@
-const createVersionService = ({ repository }) => ({
+const VERSION_MUTATIONS = new Set(['createVersion', 'updateVersion', 'componentUpdateVersion', 'componentDeleteVersion', 'relocateVersion', 'deleteVersion', 'deleteProjectMissingVersion', 'registerProgress', 'registerProgressWithGraph', 'adoptMediaFolder', 'updateProgressTree', 'finishProgressTreeUpdate', 'renameProgressFolder', 'updateProgressRelation', 'repairLegacySelectionRelation', 'commitImportGraph', 'createVersionGraphEdge', 'deleteVersionGraphEdge', 'replaceVersionGraphEdgeSource', 'saveVersionTreeLayout', 'unregisterProgress', 'componentManageProgress', 'deleteMissingProgress', 'registerBatchBaseline', 'commitBatchCompare', 'retryBatchOperations', 'completeTrackingCommit']);
+const createVersionService = ({ repository, onChanged = () => undefined }) => {
+  const service = {
   syncProject: (root, projectName, externalRoots = [], options = {}) => repository.syncProject(root, projectName, externalRoots, options),
   syncChangedPaths: (root, projectName, changes, externalRoots = [], options = {}) => repository.syncChangedPaths(root, projectName, changes, externalRoots, options),
   setThumbnail: (root, payload) => repository.setThumbnail(root, payload),
@@ -55,6 +57,18 @@ const createVersionService = ({ repository }) => ({
   completeTrackingCommit: (root, payload) => repository.completeTrackingCommit(root, payload),
   failTrackingCommit: (root, payload) => repository.failTrackingCommit(root, payload),
   getMainBranchMedia: (root, payload) => repository.getMainBranchMedia(root, payload),
-});
+  };
+  for (const name of VERSION_MUTATIONS) {
+    const mutate = service[name];
+    service[name] = async (root, payload, ...args) => {
+      const result = await mutate(root, payload, ...args);
+      if (result?.success === true) {
+        try { onChanged({ root, projectName: payload?.projectName, projectId: result.photo?.projectId || result.projectId, photoId: result.photo?.id || payload?.photoId }); } catch { /* A committed mutation must not fail because an observer closed. */ }
+      }
+      return result;
+    };
+  }
+  return service;
+};
 
 module.exports = { createVersionService };

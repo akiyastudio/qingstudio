@@ -437,7 +437,14 @@ class WorkspaceWindowManager {
       target.webContents.send(`${CHANNEL}:dismiss-panel`, key); return true;
     });
     handle('open', (host, seed, options) => this.sharedTabs ? this.sharedTabs.open(host, validateSeed(seed)) : this.open(host, seed, { reuse: options?.reuse !== false }));
-    handle('activate', (host, id) => this.sharedTabs ? this.sharedTabs.request(host, 'activate', { id }) : this.activate(this.windows.get(host.nativeWindow.id), id));
+    // Shared tab lists address renderer-local ids, while a renderer's window
+    // context id is the native tab id of its own renderer. Asking to activate
+    // that id means "the tab this window is showing".
+    handle('activate', (host, id) => {
+      if (!this.sharedTabs) return this.activate(this.windows.get(host.nativeWindow.id), id);
+      const target = id === host.id ? host.localTabs?.find(tab => tab.active)?.id : id;
+      return target ? this.sharedTabs.request(host, 'activate', { id: target }) : undefined;
+    });
     handle('update', (host, label) => {
       if (typeof label !== 'string' || label.length > 512) throw new Error('无效的标签页标题');
       if (host.seed.label !== label) { host.seed.label = label; this.publish(); }

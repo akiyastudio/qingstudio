@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
 import { normalizeLanguage, setLanguage } from '../../i18n/runtime';
 import { workspaceWindowStartup } from '../../platform/workspace-window-client';
-import { reconcileRemoteConfig } from './remote-config-model';
+import { rebaseConfigDraft } from './remote-config-model';
 import { registerApplicationQuitFlush } from '../app/application-quit-client';
 import { LEGACY_VIDEO_PLAYBACK_SETTINGS_ID } from '../../compatibility/legacy-video-playback-settings';
 import { normalizeVideoShortcutBindings } from '../../contracts/video-shortcuts';
@@ -121,28 +121,34 @@ export const useStartupConfig = () => {
     const startup = workspaceWindowStartup();
     return startup ? normalizeStartupConfig(startup.config).config : null;
   });
-  const [config, setConfig] = useState<AppConfig | null>(initialConfig);
+  const [config, updateConfig] = useState<AppConfig | null>(initialConfig);
+  const draft = useRef({ config: initialConfig, baseline: workspaceWindowStartup()?.config || initialConfig });
+  const setConfig = useCallback((next: SetStateAction<AppConfig | null>) => {
+    const value = typeof next === 'function' ? next(draft.current.config) : next;
+    draft.current.config = value;
+    updateConfig(value);
+  }, []);
+  const saveConfig = useCallback((value: AppConfig, baseline?: AppConfig) => window.electronAPI.saveConfig(value, baseline || draft.current.baseline || undefined), []);
 
   const [startupSdAutoStart, setStartupSdAutoStart] = useState(false);
   const [startupBirthdays, setStartupBirthdays] = useState<Record<string, string> | null>(null);
   const [configLoaded, setConfigLoaded] = useState(Boolean(initialConfig));
   const [showWorkspaceSetup, setShowWorkspaceSetup] = useState(Boolean(initialConfig && !initialConfig.workspacePaths.length));
-  const lastConfigSnapshot = useRef<AppConfig | null>(initialConfig);
   useEffect(() => {
     if (!configLoaded) return;
     return window.electronAPI.onConfigChanged?.(snapshot => {
       const remote = normalizeStartupConfig(snapshot).config;
       setLanguage(normalizeLanguage(remote.language));
-      const previous = lastConfigSnapshot.current;
-      lastConfigSnapshot.current = remote;
-      setConfig(local => local && previous ? reconcileRemoteConfig(local, previous, remote) : remote);
+      const current = draft.current;
+      draft.current = current.config && current.baseline ? rebaseConfigDraft(current.config, current.baseline, remote) : { config: remote, baseline: remote };
+      updateConfig(draft.current.config);
     });
   }, [configLoaded]);
   useEffect(() => registerApplicationQuitFlush(async () => {
     if (!configLoaded || !config) return;
-    const result = await window.electronAPI.saveConfig(config);
+    const result = await saveConfig(config);
     if (!result.success) throw new Error(result.error || '设置未能保存');
-  }), [configLoaded, config]);
+  }), [configLoaded, config, saveConfig]);
 
   useEffect(() => {
     if (initialConfig) { setLanguage(normalizeLanguage(initialConfig.language)); return; }
@@ -157,10 +163,11 @@ export const useStartupConfig = () => {
             setLanguage(normalizeLanguage(normalized.config.language));
             if (!normalized.config.workspacePaths.length) setShowWorkspaceSetup(true);
             setStartupSdAutoStart(normalized.config.smartImport.autoStart === true);
-            lastConfigSnapshot.current = normalized.config;
+            draft.current.baseline = fileConfig;
             setConfig(normalized.config);
-            if (normalized.persistencePasses.some(Boolean) && window.electronAPI?.saveConfig) {
-              await window.electronAPI.saveConfig(normalized.config);
+            if (normalized.persistencePasses.some(Boolean) && typeof window.electronAPI?.saveConfig === 'function') {
+              const saved = await saveConfig(normalized.config);
+              if (saved.success && saved.savedConfig) draft.current.baseline = saved.savedConfig;
             }
             console.log('📋 Configuration loaded from file');
           } else if (window.electronAPI?.getUserPath) {
@@ -168,9 +175,12 @@ export const useStartupConfig = () => {
             if (userPath) {
               const defaultConfig = DEFAULT_CONFIG(userPath);
               setLanguage(normalizeLanguage(defaultConfig.language));
-              lastConfigSnapshot.current = defaultConfig;
+              draft.current.baseline = null;
               setConfig(defaultConfig);
-              if (window.electronAPI?.saveConfig) await window.electronAPI.saveConfig(defaultConfig);
+              if (typeof window.electronAPI?.saveConfig === 'function') {
+                const saved = await saveConfig(defaultConfig);
+                if (saved.success && saved.savedConfig) draft.current.baseline = saved.savedConfig;
+              }
               setShowWorkspaceSetup(true);
               console.log('📋 Configuration created with user path:', userPath);
             } else {
@@ -188,7 +198,7 @@ export const useStartupConfig = () => {
       }
     };
     void loadConfig();
-  }, [initialConfig]);
+  }, [initialConfig, saveConfig, setConfig]);
 
-  return { config, setConfig, configLoaded, showWorkspaceSetup, setShowWorkspaceSetup, startupBirthdays, startupSdAutoStart };
+  return { config, setConfig, saveConfig, configLoaded, showWorkspaceSetup, setShowWorkspaceSetup, startupBirthdays, startupSdAutoStart };
 };

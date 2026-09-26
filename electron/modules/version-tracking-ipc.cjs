@@ -39,7 +39,10 @@ const registerVersionTrackingIpc = context => {
     return job;
   };
   const requireStageSuccess = (result, message) => {
-    if (!result || result.success === false) throw new Error(result?.error || message);
+    if (!result || result.success === false) {
+      const details = (result?.renameErrors || []).map(item => item.error).filter(Boolean);
+      throw new Error(result?.error || (details.length ? `${message}：${details.join('；')}` : message));
+    }
     return result;
   };
   const releaseTrackingSessionExclusive = async (workspaceRoot, sessionId) => {
@@ -382,8 +385,9 @@ const registerVersionTrackingIpc = context => {
 
   const runTrackingCommit = async (workspaceRoot, sessionId) => {
     let committedBatchId;
+    let plan;
     try {
-      const plan = await versionService.getTrackingCommitPlan(workspaceRoot, sessionId);
+      plan = await versionService.getTrackingCommitPlan(workspaceRoot, sessionId);
       if (plan?.success === false && plan.staleSnapshot) return plan;
       requireStageSuccess(plan, '无法读取版本跟踪提交计划');
       if (plan.alreadyCommitted) return requireStageSuccess(
@@ -424,11 +428,13 @@ const registerVersionTrackingIpc = context => {
         matches: [...(plan.matches || []), ...copiedNames.map(name => ({ reference: name, source: name, target: name, distance: 0, confidence: '复制补齐' }))],
       });
       committedBatchId = result?.batch?.id;
-      if (result?.repairRequired) {
+        if (result?.repairRequired) {
+          const detail = (result.renameErrors || []).map(item => item.error).filter(Boolean).join('；');
+          const repairError = detail ? `文件操作需要修复：${detail}` : '文件操作需要修复后重试';
         await versionService.failTrackingCommit(workspaceRoot, {
-          sessionId, batchId: result.batch?.id, error: '文件操作需要修复后重试',
+            sessionId, batchId: result.batch?.id, error: repairError,
         });
-        return { ...result, success: false, sessionId, retryable: true, items: [] };
+          return { ...result, success: false, sessionId, retryable: true, items: [], error: repairError };
       }
       requireStageSuccess(result, '版本跟踪批次提交失败');
       const completed = await trackingScanService.completeTrackingCommit(workspaceRoot, { sessionId, batchId: result.batch?.id });
@@ -436,6 +442,20 @@ const registerVersionTrackingIpc = context => {
       scheduleMediaTrackingScan?.(workspaceRoot, plan.projectName, [], true);
       return { ...completed, batch: result.batch, renamedCount: result.renamedCount || 0 };
     } catch (error) {
+      // The session only stores the message, so a bare OS error would reach the
+      // user with no record of which worker or action produced it. Keep the full
+      // diagnosis in the log before collapsing it for the session row.
+      writeLog('error', 'Version tracking commit failed', {
+        sessionId, projectName: plan?.projectName, stage: error?.stage,
+        error: error?.message || String(error), code: error?.code,
+        action: error?.action, workerId: error?.workerId, domainId: error?.domainId,
+        workerExitCode: error?.workerExitCode, workerSignal: error?.workerSignal,
+        outcome: error?.outcome, leaseWaitMs: error?.leaseWaitMs, queryMode: error?.mode,
+        queue: error?.queuedFor,
+        cause: error?.cause ? (error.cause.message || String(error.cause)) : undefined,
+        stderr: error?.workerStderr ? String(error.workerStderr).slice(-4000) : undefined,
+        stack: error?.stack,
+      });
       if (workspaceRoot && sessionId) await versionService.failTrackingCommit(workspaceRoot, {
         sessionId, batchId: error.batchId || committedBatchId, error: error.message || String(error),
       }).catch(() => undefined);
@@ -465,6 +485,7 @@ const registerVersionTrackingIpc = context => {
           if (!result?.success) {
             const error = new Error(result?.error || '版本跟踪提交失败');
             error.trackingResult = result;
+            error.code = result?.code;
             throw error;
           }
           return result;
@@ -493,6 +514,15 @@ const registerVersionTrackingIpc = context => {
             const execution = await executionPromise;
             return { ...(execution.result || { success: false, sessionId, error: '版本跟踪提交没有返回结果' }), taskNotificationOwned: true };
           } catch (error) {
+            writeLog('error', 'Version tracking commit task failed', {
+              sessionId, error: error?.message || String(error), code: error?.code,
+              action: error?.action, workerId: error?.workerId, domainId: error?.domainId,
+              workerExitCode: error?.workerExitCode, outcome: error?.outcome,
+              trackingResult: error?.trackingResult
+                ? { error: error.trackingResult.error, code: error.trackingResult.code, retryable: error.trackingResult.retryable }
+                : undefined,
+              stack: error?.stack,
+            });
             return { ...(error.trackingResult || { success: false, sessionId, retryable: true, items: [], error: error.message || String(error) }), taskNotificationOwned: true };
           }
         }

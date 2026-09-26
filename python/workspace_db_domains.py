@@ -6,6 +6,9 @@ CATALOG_ACTIONS = (
     "catalog_sync", "maintenance_run", "add", "status", "archive_project", "unarchive_project",
     "rename", "delete", "restore_project", "deleted_projects_list", "deleted_project_cleanup_plan",
     "purge_deleted_project", "missing_projects_list", "purge_missing_project",
+    # Reports the action durability classification so the Electron operation
+    # policy can be asserted against it instead of duplicating the list.
+    "durability_report",
 )
 MEDIA_ACTIONS = (
     "media_sync_prepare", "media_sync_apply_batch", "media_sync_finalize",

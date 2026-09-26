@@ -1,7 +1,7 @@
 import type { IElectronAPI } from '../types';
 
 export type ProjectWorkspaceApiKey =
-  | 'onShellNewFileTypesChanged'
+  | 'onShellNewFileTypesChanged' | 'onWorkspaceVersionsChanged'
   | 'addInspirationToProject' | 'adoptVersionTreeFolder' | 'browseFinalVersions' | 'browseProjectFiles'
   | 'browseProjectShortcutPreview' | 'cancelBackgroundTask' | 'cancelListProjectFiles' | 'cancelMediaThumbnail'
   | 'cancelProjectFileCut' | 'cancelRecentProjectFiles' | 'chooseBrollSourceFiles' | 'chooseImportSourceFiles'

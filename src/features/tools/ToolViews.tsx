@@ -1036,9 +1036,11 @@ const ImportCard = ({ config, drives = [], storageDevices = [], destinationPath,
     if (decision !== 'start') return;
     if (startBatchRef.current(startupAutoImportSelections, 'startup')) {
       handledStartupAutoImportRef.current = startupAutoImportRequest?.id || 0;
-      setStatusMsg('启动自动导入已开始；本次将保留 SD 卡源文件');
+      setStatusMsg(shouldDeleteSourceForImportBatch(shouldDeleteSourceAfterImport, 'startup')
+        ? t('import.startup.startedDeleteSource')
+        : t('legacy.b3abd908ea1f'));
     }
-  }, [active, config?.sdDevices, directSource, selectedDrives, startupAutoImportError, startupAutoImportReady, startupAutoImportRequest, startupAutoImportSelections, storageDevices]);
+  }, [active, config?.sdDevices, directSource, selectedDrives, shouldDeleteSourceAfterImport, startupAutoImportError, startupAutoImportReady, startupAutoImportRequest, startupAutoImportSelections, storageDevices]);
 
   const handleDecision = (split: boolean) => {
     setStatus('processing');

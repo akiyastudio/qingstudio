@@ -238,13 +238,50 @@ const createFilePublicationService = ({ app, projectRoot, processSupervisor = nu
         indexed.set(index, item);
       }
       const completed = [];
-      let failure;
+      const failures = [];
       for (const [index, item] of [...indexed].sort((left, right) => left[0] - right[0])) {
-        if (!item.success) { failure ||= { index, item }; continue; }
+        if (!item.success) { failures.push({ index, item }); continue; }
         if (item.sourceDeleted !== deleteSource || typeof item.identity !== 'string' || !/^[a-f0-9]{64}$/i.test(String(item.sha256 || ''))) throw Object.assign(new Error('原生复制服务未返回完整提交凭据'), { code: 'FILE_PUBLICATION_PROTOCOL_ERROR', completed });
         completed.push({ index, identity: item.identity, sha256: item.sha256, sourceDeleted: deleteSource, published: true, resumedBytes: Number(item.resumedBytes) || 0 });
       }
-      if (failure) { const { index, item } = failure; throw Object.assign(new Error(item.error || '原生复制失败'), { code: item.code || 'FILE_PUBLICATION_FAILED', failedIndex: index, completed, published: item.published === true, sourceDeleted: item.sourceDeleted === true, destinationPath: requests[index].target, sourcePath: requests[index].source, identity: item.identity, sha256: item.sha256 }); }
+      // The parallel copy can report more than one failure: every worker that was
+      // already running when the first one failed still records its own result.
+      // Keeping only the first would let the caller count one published target
+      // when several were, so every failure is passed on. The thrown error keeps
+      // describing the first failure (its stage is the most advanced one, and its
+      // source/destination paths are what existing callers expect), while
+      // `failures` carries the whole set with each item's own stage.
+      //
+      // The native layer names the phase that failed (pre-publication,
+      // target-validation or source-cleanup). It is passed through untouched
+      // along with the original native code and message: callers decide what to
+      // tell the user, and only a confirmed source-cleanup failure may be
+      // answered with advice to remove the original.
+      if (failures.length) {
+        const { index, item } = failures[0];
+        throw Object.assign(new Error(item.error || '原生复制失败'), {
+          code: item.code || 'FILE_PUBLICATION_FAILED',
+          nativeError: item.nativeError || 0,
+          stage: typeof item.stage === 'string' ? item.stage : '',
+          failedIndex: index,
+          failures: failures.map(failure => ({
+            index: failure.index,
+            stage: typeof failure.item.stage === 'string' ? failure.item.stage : '',
+            published: failure.item.published === true,
+            sourceDeleted: failure.item.sourceDeleted === true,
+            code: failure.item.code || 'FILE_PUBLICATION_FAILED',
+            sourcePath: requests[failure.index].source,
+            destinationPath: requests[failure.index].target,
+          })),
+          completed,
+          published: item.published === true,
+          sourceDeleted: item.sourceDeleted === true,
+          destinationPath: requests[index].target,
+          sourcePath: requests[index].source,
+          identity: item.identity,
+          sha256: item.sha256,
+        });
+      }
       if (completed.length !== requests.length) throw Object.assign(new Error('原生复制服务返回了不完整结果'), { code: 'FILE_PUBLICATION_PROTOCOL_ERROR', completed });
       if (control?.getError()) throw Object.assign(control.getError(), { completed });
       return completed;

@@ -19,13 +19,9 @@ const createWorkspaceWatcherRuntime = ({
   createReconcileTask,
   writeLog,
 }) => {
-  let watcher = null;
-  let watchedRoot = '';
-  let watchTimer = null;
-  let reconciliationTimer = null;
-  const changes = new Map();
-  const knownEntries = new Map();
+  const workspaces = new Map();
   const suppressions = new Map();
+  const suppressionTimers = new Set();
   const catalogReconciliations = new Map();
   let shutdown = false;
 
@@ -36,24 +32,40 @@ const createWorkspaceWatcherRuntime = ({
   const pathIsInside = (parent, candidate) => candidate === parent || candidate.startsWith(`${parent}${path.sep}`);
   const isSuppressedChange = (root, fileName) => {
     const changedPath = comparablePath(path.resolve(root, String(fileName || '')));
-    return [...suppressions].some(([suppressedPath, count]) => count > 0 && pathIsInside(suppressedPath, changedPath));
+    return [...suppressions].some(([suppressedPath, state]) => state.count > 0 && pathIsInside(suppressedPath, changedPath));
   };
   const suppressPath = targetPath => {
     const key = comparablePath(targetPath);
-    suppressions.set(key, (suppressions.get(key) || 0) + 1);
-    for (const changedName of changes.keys()) {
-      const candidate = comparablePath(path.resolve(watchedRoot || path.dirname(targetPath), changedName));
-      if (pathIsInside(key, candidate)) changes.delete(changedName);
+    const state = suppressions.get(key) || { count: 0, targetPath: path.resolve(targetPath) };
+    state.count += 1;
+    suppressions.set(key, state);
+    for (const workspace of workspaces.values()) for (const changedName of workspace.changes.keys()) {
+      const candidate = comparablePath(path.resolve(workspace.root, changedName));
+      if (pathIsInside(key, candidate)) workspace.changes.delete(changedName);
     }
     getFileRootWatcherService()?.discardChangesInside(targetPath);
   };
   const releasePath = (targetPath, delayMs = 750) => {
     const key = comparablePath(targetPath);
-    setTimeout(() => {
-      const remaining = (suppressions.get(key) || 0) - 1;
-      if (remaining > 0) suppressions.set(key, remaining);
-      else suppressions.delete(key);
+    const state = suppressions.get(key);
+    if (!state) return;
+    const timer = setTimeout(() => {
+      suppressionTimers.delete(timer);
+      if (shutdown || suppressions.get(key) !== state) return;
+      state.count -= 1;
+      if (state.count > 0) return;
+      suppressions.delete(key);
+      // Native events were intentionally discarded during the mutation. All
+      // readers still need a terminal invalidation, including other windows.
+      // This is UI-only: mutation producers already schedule precise scans.
+      const published = getFileRootWatcherService()?.invalidatePath?.(state.targetPath);
+      if (!published) for (const workspace of workspaces.values()) if (pathIsInside(comparablePath(workspace.root), key)) {
+        sendToApplicationRenderers(getMainWindow(), 'workspace-files-changed', {
+          root: workspace.root, fileName: path.relative(workspace.root, state.targetPath).replace(/\\/g, '/'), eventType: 'rename',
+        });
+      }
     }, Math.max(0, delayMs));
+    suppressionTimers.add(timer);
   };
 
   const stableCatalogValue = value => Array.isArray(value) ? value.map(stableCatalogValue)
@@ -85,40 +97,41 @@ const createWorkspaceWatcherRuntime = ({
 
   const reconcileTask = createReconcileTask({
     backgroundTasks,
-    getWatchedWorkspacePath: () => watchedRoot,
+    isWorkspaceWatched: root => workspaces.has(comparablePath(root)),
     getProjects: root => catalogs.get(root)?.projects,
     reconcileWorkspaceCatalog: reconcileCatalog,
     writeLog,
   });
-  const startReconciliation = root => {
-    if (reconciliationTimer) clearInterval(reconciliationTimer);
-    reconciliationTimer = setInterval(() => { void reconcileTask.run(root); }, 5 * 60 * 1000);
+  const startReconciliation = workspace => {
+    if (workspace.reconciliationTimer) clearInterval(workspace.reconciliationTimer);
+    workspace.reconciliationTimer = setInterval(() => { void reconcileTask.run(workspace.root); }, 5 * 60 * 1000);
   };
   const scheduleTrackingScan = (...args) => getMediaTrackingScanScheduler()?.schedule(...args);
   const cancelTrackingScan = (...args) => getMediaTrackingScanScheduler()?.cancel(...args);
 
   const stop = (stopSchedulers = false) => {
     if (stopSchedulers) shutdown = true;
-    const previousRoot = watchedRoot;
-    if (watchTimer) clearTimeout(watchTimer);
-    watchTimer = null;
-    watcher?.close();
-    watcher = null;
-    watchedRoot = '';
-    changes.clear();
-    knownEntries.clear();
+    for (const workspace of workspaces.values()) {
+      clearTimeout(workspace.watchTimer);
+      clearInterval(workspace.reconciliationTimer);
+      workspace.watcher?.close();
+      for (const project of catalogs.get(workspace.root)?.projects || []) cancelTrackingScan(workspace.root, project.name);
+    }
+    workspaces.clear();
     suppressions.clear();
-    if (reconciliationTimer) clearInterval(reconciliationTimer);
-    reconciliationTimer = null;
+    for (const timer of suppressionTimers) clearTimeout(timer);
+    suppressionTimers.clear();
     reconcileTask.reset();
-    if (previousRoot) for (const project of catalogs.get(previousRoot)?.projects || []) cancelTrackingScan(previousRoot, project.name);
     if (stopSchedulers) {
       getMediaTrackingScanScheduler()?.stop();
       versionStaleDetectionService.stop();
     }
   };
 
-  const flushChanges = root => {
+  const flushChanges = workspace => {
+    const { root, changes, knownEntries } = workspace;
+    workspace.watchTimer = null;
+    if (workspaces.get(comparablePath(root)) !== workspace || shutdown) return;
     const describedChanges = describeActionableChanges(root, [...changes], fs);
     changes.clear();
     forgetMissingChanges(knownEntries, root, describedChanges);
@@ -181,29 +194,32 @@ const createWorkspaceWatcherRuntime = ({
 
   const watch = root => {
     if (shutdown) return;
-    if (watchedRoot === root && watcher) return;
-    stop();
+    root = path.resolve(root);
+    const key = comparablePath(root);
+    const existing = workspaces.get(key);
+    if (existing?.watcher) return;
+    const workspace = existing || { root, watcher: null, watchTimer: null, reconciliationTimer: null, changes: new Map(), knownEntries: new Map() };
+    workspaces.set(key, workspace);
     try {
-      watcher = fs.watch(root, { recursive: platform !== 'linux' }, (eventType, fileName) => {
-        if (isInternalChange(fileName) || !fileName || isSuppressedChange(root, fileName)) return;
-        recordActionableEntry(changes, knownEntries, root, String(fileName), eventType === 'rename' ? 'rename' : 'change', fs);
-        if (watchTimer) clearTimeout(watchTimer);
-        watchTimer = setTimeout(() => flushChanges(root), 200);
+      const watcher = fs.watch(root, { recursive: platform !== 'linux' }, (eventType, fileName) => {
+        if (workspaces.get(key) !== workspace || workspace.watcher !== watcher) return;
+        if (fileName && (isInternalChange(fileName) || isSuppressedChange(root, fileName))) return;
+        recordActionableEntry(workspace.changes, workspace.knownEntries, root, String(fileName || ''), !fileName || eventType === 'rename' ? 'rename' : 'change', fs);
+        if (!workspace.watchTimer) workspace.watchTimer = setTimeout(() => flushChanges(workspace), 200);
       });
+      workspace.watcher = watcher;
       watcher.on('error', error => {
+        if (workspaces.get(key) !== workspace || workspace.watcher !== watcher) return;
         writeLog('warn', 'Workspace file watcher stopped', { root, error: error.message || String(error) });
-        watcher?.close();
-        watcher = null;
-        watchedRoot = '';
+        watcher.close();
+        workspace.watcher = null;
         const mainWindow = getMainWindow();
         if (mainWindow && !mainWindow.isDestroyed()) sendToApplicationRenderers(mainWindow, 'workspace-projects-changed', { root });
       });
-      watchedRoot = root;
-      startReconciliation(root);
+      startReconciliation(workspace);
     } catch (error) {
       writeLog('warn', 'Unable to watch workspace for file changes', error);
-      watchedRoot = root;
-      startReconciliation(root);
+      startReconciliation(workspace);
     }
   };
 

@@ -3,7 +3,7 @@
   "productName": "照片流开源版",
   "private": true,
   "license": "Apache-2.0",
-  "version": "26.9.21.3",
+  "version": "26.9.26.4",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

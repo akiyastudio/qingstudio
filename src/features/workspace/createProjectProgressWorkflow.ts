@@ -413,6 +413,24 @@ export const createProjectProgressWorkflow = ({
     } catch (error) {
       setWorkspaceActivityMessage('');
       const action = draft.mode === 'create' ? '创建' : draft.mode === 'import' ? '导入' : draft.existingProgressId ? '修改' : '标记';
+      // The notice only carries the message, so a failure here used to leave no
+      // trace at all. Report the code and stack so a "still busy" outcome can be
+      // traced to the request that actually lost its lease.
+      const detail = error as { code?: unknown; action?: unknown; workerId?: unknown; leaseWaitMs?: unknown; outcome?: unknown; stack?: unknown };
+      window.electronAPI?.reportRendererError?.(
+        `${action}版本进度失败`,
+        JSON.stringify({
+          message: error instanceof Error ? error.message : String(error),
+          code: typeof detail?.code === 'string' ? detail.code : undefined,
+          failedAction: typeof detail?.action === 'string' ? detail.action : undefined,
+          workerId: typeof detail?.workerId === 'string' ? detail.workerId : undefined,
+          leaseWaitMs: typeof detail?.leaseWaitMs === 'number' ? detail.leaseWaitMs : undefined,
+          outcome: typeof detail?.outcome === 'string' ? detail.outcome : undefined,
+          mode: draft.mode,
+          progressId: draft.existingProgressId,
+          stack: typeof detail?.stack === 'string' ? detail.stack.slice(0, 1500) : undefined,
+        }),
+      );
       if (!taskOwnedImportFailure) onNotice(`${action}版本进度失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       progressSubmittingRef.current = false;

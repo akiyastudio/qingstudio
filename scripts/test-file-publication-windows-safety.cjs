@@ -13,7 +13,8 @@ const manifestResource = path.join(projectRoot, 'electron', 'native', 'FilePubli
 const frameworkRoots = [path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319'), path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework', 'v4.0.30319')];
 const frameworkRoot = frameworkRoots.find(candidate => fs.existsSync(path.join(candidate, 'csc.exe')));
 assert(frameworkRoot, 'Windows C# compiler is required');
-const testBase = [process.env.PHOTOFLOW_WINDOWS_NATIVE_TEST_ROOT, os.tmpdir()].find(candidate => candidate && fs.existsSync(candidate));
+const testBase = path.resolve(process.env.PHOTOFLOW_WINDOWS_NATIVE_TEST_ROOT || os.tmpdir());
+assert(fs.existsSync(testBase), `Windows native test root does not exist: ${testBase}`);
 const root = fs.mkdtempSync(path.join(testBase, 'photoflow-win-publication-'));
 try {
   const helper = path.join(root, 'file-publication-service-faults.exe');

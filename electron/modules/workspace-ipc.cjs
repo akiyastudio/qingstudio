@@ -2,6 +2,7 @@ const { localizeDialogOptions } = require("../services/localization.cjs");
 const { t: translateNative } = require("../services/localization.cjs");
 const { sendToApplicationRenderers } = require('../services/application-windows.cjs');
 const { getProtectedProjectFolderRegistry } = require('../services/protected-project-folder.cjs');
+const { undoMatchesScope, takeScopedUndo } = require('../services/undo-scope.cjs');
 const { createProjectFileTask } = require('../services/project-file-task-service.cjs');
 const { startDetachedBackgroundOperation } = require('../services/detached-background-operation.cjs');
 const { replaceVideoFileWithRollback } = require('../services/video-trim-commit-service.cjs');
@@ -934,8 +935,25 @@ const registerWorkspaceIpc = context => {
     return () => { release(); if (locks.get(cursor) === gate) locks.delete(cursor); };
   };
   const watchedProjectFileRoots = new Map();
-  const watchedProjectFileRootHealth = new Map();
+  const watchSenders = new WeakSet();
   const watchedProjectFileRootKey = (workspaceRoot, status, projectName) => `${process.platform === 'win32' ? path.resolve(workspaceRoot).toLocaleLowerCase() : path.resolve(workspaceRoot)}\0${String(status)}\0${process.platform === 'win32' ? String(projectName).toLocaleLowerCase() : String(projectName)}`;
+  const watchSubscriptionKey = (sender, workspaceRoot, status, projectName, options = {}) => {
+    const id = options.subscriptionId || '';
+    if (typeof id !== 'string' || id.length > 128) throw new Error('无效的目录监听订阅');
+    return JSON.stringify([sender?.id || 0, id, watchedProjectFileRootKey(workspaceRoot, status, projectName)]);
+  };
+  const releaseWatchSubscription = key => {
+    const subscription = watchedProjectFileRoots.get(key);
+    watchedProjectFileRoots.delete(key);
+    for (const binding of subscription?.bindings || []) releaseFileRootWatcher(binding.root, binding.options);
+  };
+  const trackWatchSender = sender => {
+    if (!sender?.once || watchSenders.has(sender)) return;
+    watchSenders.add(sender);
+    sender.once('destroyed', () => {
+      for (const [key, subscription] of watchedProjectFileRoots) if (subscription.sender === sender) releaseWatchSubscription(key);
+    });
+  };
   const externalTrackingChangeHandler = (publishRoot, projectName) => entries => scheduleMediaTrackingScan(
     publishRoot,
     projectName,
@@ -1640,23 +1658,38 @@ const registerWorkspaceIpc = context => {
     let persistentBoundRecord;
     let selectedDecisionOperation;
     try {
+      const undoRoot = workspacePath ? resolveWorkspaceRoot(workspacePath) : '';
+      const projectScope = typeof options.projectPath === 'string' ? options.projectPath : '';
+      const scopeKey = JSON.stringify([undoRoot ? comparablePath(undoRoot) : '', projectScope ? comparablePath(projectScope) : '']);
+      const matchesScope = candidate => undoMatchesScope(candidate, undoRoot, projectScope);
+      const readScopedRecord = async (root, id = '') => {
+        const records = projectScope && workspaceRepository.listUndoRecords
+          ? (await workspaceRepository.listUndoRecords(root, ['trash'])).records || []
+          : [(await workspaceRepository.latestUndoRecord(root)).record].filter(Boolean);
+        return records.find(record => (!id || record.id === id) && (!record.state || record.state === 'ready')
+          && (!projectScope || matchesScope({ kind: record.kind, ...record.payload, workspaceRoot: root })));
+      };
       pruneBlockedPersistentUndos();
       const requestedDecisionToken = String(options?.decisionToken || '');
       pruneRestoreDecisionTokens();
       const pendingDecision = requestedDecisionToken ? restoreDecisionTokens.get(requestedDecisionToken) : null;
+      if (requestedDecisionToken && !pendingDecision) throw new Error('撤销确认已失效，请重新发起撤销');
+      if (pendingDecision && (pendingDecision.undoScopeKey !== scopeKey || !matchesScope(pendingDecision.operation))) {
+        throw new Error('撤销确认不属于当前项目，请在原项目中继续');
+      }
       if (pendingDecision) {
         operation = pendingDecision.operation;
         const queuedIndex = renameHistory.lastIndexOf(operation);
         if (queuedIndex >= 0) renameHistory.splice(queuedIndex, 1);
-      } else operation = renameHistory.pop();
+      } else operation = takeScopedUndo(renameHistory, undoRoot, projectScope);
       selectedDecisionOperation = operation;
       if (!operation && workspacePath) {
         const workspaceRoot = resolveWorkspaceRoot(workspacePath);
         schedulePersistentUndoClaimGc(workspaceRoot);
-        const latest = await workspaceRepository.latestUndoRecord(workspaceRoot);
-        if (latest.record) {
-          operation = { kind: latest.record.kind, ...latest.record.payload, persistentId: latest.record.id, workspaceRoot };
-          persistentBoundRecord = latest.record;
+        const latest = await readScopedRecord(workspaceRoot);
+        if (latest) {
+          operation = { kind: latest.kind, ...latest.payload, persistentId: latest.id, workspaceRoot };
+          persistentBoundRecord = latest;
           loadedFromJournal = true;
         }
       }
@@ -1676,8 +1709,7 @@ const registerWorkspaceIpc = context => {
             return serializeUndoRecoveryError(claimed.error);
           }
           if (!persistentBoundRecord) {
-            const latest = await workspaceRepository.latestUndoRecord(operation.workspaceRoot);
-            persistentBoundRecord = latest.record;
+            persistentBoundRecord = await readScopedRecord(operation.workspaceRoot, operation.persistentId);
           }
           if (!persistentBoundRecord || persistentBoundRecord.id !== operation.persistentId
               || persistentBoundRecord.kind !== 'trash' || !/^[0-9a-f]{64}$/u.test(String(persistentBoundRecord.claimToken || ''))) {
@@ -1706,6 +1738,7 @@ const registerWorkspaceIpc = context => {
           return serializeUndoRecoveryError(overflowEntry.error);
         }
       }
+      if (!matchesScope(operation)) throw Object.assign(new Error('撤销记录的位置已变化，请在原项目中检查恢复状态'), { code: 'UNDO_SCOPE_MISMATCH' });
       if (operation.kind === 'remove-created') {
         const phase = operation.removeCreatedPhase || (operation.removeCreatedPhase = {});
 
@@ -1789,6 +1822,7 @@ const registerWorkspaceIpc = context => {
           const decisionToken = crypto.randomUUID();
           const decision = {
             operation,
+            undoScopeKey: scopeKey,
             persistentId: operation.persistentId || '',
             claimToken: persistentBoundRecord?.claimToken || '',
             workspaceKey: persistentClaimDescriptor ? comparablePath(persistentClaimDescriptor.workspaceRoot) : '',
@@ -2235,73 +2269,74 @@ const registerWorkspaceIpc = context => {
     }
   });
 
-  const watchProjectFileRoot = async (workspacePath, status, projectName, options = {}) => {
-    const root = path.resolve(await getReadyProjectPath(workspacePath, status, projectName));
+  const watchProjectFileRoot = async (workspacePath, status, projectName, options = {}, sender) => {
     const publishRoot = path.resolve(ensureWorkspace(workspacePath));
-    const relativeRoot = path.relative(publishRoot, root);
-    const projectPrefix = relativeRoot.startsWith('..') || path.isAbsolute(relativeRoot) ? projectName : relativeRoot.replace(/\\/g, '/');
-    const key = watchedProjectFileRootKey(publishRoot, status, projectName);
-    const previousHealth = watchedProjectFileRootHealth.get(key);
-    const previousBindings = watchedProjectFileRoots.get(key) || [];
-    for (const binding of previousBindings) releaseFileRootWatcher(binding.root, binding.options);
-    watchedProjectFileRoots.delete(key);
-    watchedProjectFileRootHealth.delete(key);
-    mediaService.grantRoot(root);
-    const bindings = [{ root, options: { publishRoot, virtualPrefix: projectPrefix, onChanged: externalTrackingChangeHandler(publishRoot, projectName) }, virtualPath: '', external: false }];
-    const acquired = [];
-    const failedRoots = [];
-    for (const binding of bindings) {
-      const result = acquireFileRootWatcher(binding.root, binding.options);
-      if (!result.success) {
-        failedRoots.push({ virtualPath: binding.virtualPath, external: binding.external, error: result.error || '无法监听此位置' });
-        continue;
+    const key = watchSubscriptionKey(sender, publishRoot, status, projectName, options);
+    const previousHealth = watchedProjectFileRoots.get(key)?.health;
+    releaseWatchSubscription(key);
+    const subscription = { sender, bindings: [] };
+    watchedProjectFileRoots.set(key, subscription);
+    trackWatchSender(sender);
+    const current = () => watchedProjectFileRoots.get(key) === subscription && !sender?.isDestroyed?.();
+    const cancelled = () => ({ success: false, cancelled: true, root: publishRoot });
+    try {
+      const root = path.resolve(await getReadyProjectPath(workspacePath, status, projectName));
+      if (!current()) return cancelled();
+      const relativeRoot = path.relative(publishRoot, root);
+      const projectPrefix = relativeRoot.startsWith('..') || path.isAbsolute(relativeRoot) ? projectName : relativeRoot.replace(/\\/g, '/');
+      mediaService.grantRoot(root);
+      const bindings = [{ root, options: { publishRoot, virtualPrefix: projectPrefix, onChanged: externalTrackingChangeHandler(publishRoot, projectName) }, virtualPath: '', external: false }];
+      const acquired = subscription.bindings;
+      const failedRoots = [];
+      for (const binding of bindings) {
+        const result = acquireFileRootWatcher(binding.root, binding.options);
+        if (!result.success) {
+          failedRoots.push({ virtualPath: binding.virtualPath, external: binding.external, error: result.error || '无法监听此位置' });
+          continue;
+        }
+        acquired.push(binding);
       }
-      acquired.push(binding);
-    }
-    watchedProjectFileRoots.set(key, acquired);
-    const mainWatched = acquired.includes(bindings[0]);
-    let degraded = !mainWatched || failedRoots.length > 0;
-    let reconciliationFailed = false;
-    const supportsTrackingReconciliation = projectName !== INSPIRATION_VIRTUAL_PROJECT_NAME;
-    let reconciled = false;
-    const shouldReconcile = options.reconcile !== false || previousHealth?.degraded && !degraded;
-    if (supportsTrackingReconciliation && shouldReconcile && mainWatched) {
-      try {
-        const reconciliation = await versionService.detectProgressStale(publishRoot, { projectName, changedPaths: [] });
-        if (!reconciliation?.success) throw new Error(reconciliation?.error || '无法补扫版本跟踪状态');
-        reconciled = true;
-      } catch (error) {
-        reconciliationFailed = true;
-        degraded = true;
-        writeLog('warn', 'Unable to reconcile tracking state after watcher install', { projectName, error: error.message || String(error) });
+      const mainWatched = acquired.includes(bindings[0]);
+      let degraded = !mainWatched || failedRoots.length > 0;
+      let reconciliationFailed = false;
+      const supportsTrackingReconciliation = projectName !== INSPIRATION_VIRTUAL_PROJECT_NAME;
+      let reconciled = false;
+      const shouldReconcile = options.reconcile !== false || previousHealth?.degraded && !degraded;
+      if (supportsTrackingReconciliation && shouldReconcile && mainWatched) {
+        try {
+          const reconciliation = await versionService.detectProgressStale(publishRoot, { projectName, changedPaths: [] });
+          if (!reconciliation?.success) throw new Error(reconciliation?.error || '无法补扫版本跟踪状态');
+          reconciled = true;
+        } catch (error) {
+          reconciliationFailed = true;
+          degraded = true;
+          writeLog('warn', 'Unable to reconcile tracking state after watcher install', { projectName, error: error.message || String(error) });
+        }
       }
+      if (!current()) return cancelled();
+      subscription.health = { degraded };
+      return {
+        success: mainWatched, root: publishRoot, requiredRoots: bindings.length, watchedRoots: acquired.length,
+        failedRoots, degraded, reconciled, reconciliationFailed,
+        ...(!mainWatched ? { error: '无法监听项目文件夹' } : {}),
+      };
+    } catch (error) {
+      if (current()) releaseWatchSubscription(key);
+      throw error;
     }
-    watchedProjectFileRootHealth.set(key, { degraded });
-    return {
-      success: mainWatched, root: publishRoot, requiredRoots: bindings.length, watchedRoots: acquired.length,
-      failedRoots, degraded, reconciled, reconciliationFailed,
-      ...(!mainWatched ? { error: '无法监听项目文件夹' } : {}),
-    };
   };
 
   ipcMain.handle('workspace-watch-file-root', async (_event, workspacePath, status, projectName, options = {}) => {
     const startedAt = Date.now();
-    try { return await watchProjectFileRoot(workspacePath, status, projectName, options); }
+    try { return await watchProjectFileRoot(workspacePath, status, projectName, options, _event?.sender); }
     catch (error) { return { success: false, error: error.message || String(error) }; }
     finally { logSlowWorkspaceInteraction('watch-file-root', startedAt, { projectName, reconcile: options.reconcile !== false }); }
   });
 
-  ipcMain.handle('workspace-unwatch-file-root', async (_event, workspacePath, status, projectName) => {
+  ipcMain.handle('workspace-unwatch-file-root', async (_event, workspacePath, status, projectName, options = {}) => {
     try {
-      let root;
-      try { root = path.resolve(getProjectPath(workspacePath, status, projectName)); }
-      catch { root = path.resolve(String(workspacePath || '')); }
       const publishRoot = path.resolve(ensureWorkspace(workspacePath));
-      const key = watchedProjectFileRootKey(publishRoot, status, projectName);
-      const bindings = watchedProjectFileRoots.get(key) || [{ root, options: { publishRoot, virtualPrefix: path.relative(publishRoot, root).replace(/\\/g, '/') } }];
-      for (const binding of bindings) releaseFileRootWatcher(binding.root, binding.options);
-      watchedProjectFileRoots.delete(key);
-      watchedProjectFileRootHealth.delete(key);
+      releaseWatchSubscription(watchSubscriptionKey(_event?.sender, publishRoot, status, projectName, options));
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message || String(error) };

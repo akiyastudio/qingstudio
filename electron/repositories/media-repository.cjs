@@ -3,17 +3,48 @@ const crypto = require('crypto');
 
 const MEDIA_SYNC_BATCH_SIZE = 64;
 
+// These actions publish a staged copy of the core/media/versioning SQLite files
+// back over the live databases. Killing the worker halfway through leaves a
+// media-operation journal whose replay is charged to the next request that opens
+// the database, so a timeout shorter than the publication itself turns one slow
+// scan into an endless replay loop. Budget the publication cost, not one query:
+// a fixed floor covers staging and publishing the database set, plus a per-file
+// allowance for the metadata probe each item performs on the network volume.
+// These actions used to copy the whole database set per call, so their budget had
+// to cover that publication. The incremental index now writes in place, so the
+// only real cost is reading the changed files themselves; a per-file allowance
+// plus a floor leaves room for a slow network volume without inviting a 30 minute
+// stall. The staged actions keep their larger budget because they still publish.
+const MEDIA_SYNC_PATH_FLOOR_MS = 2 * 60 * 1000;
+const MEDIA_SYNC_PATH_PER_FILE_MS = 500;
+const MEDIA_SYNC_PATH_TIMEOUT_MS = 10 * 60 * 1000;
+const mediaPathTimeoutMs = itemCount => Math.min(
+  MEDIA_SYNC_PATH_TIMEOUT_MS,
+  MEDIA_SYNC_PATH_FLOOR_MS + Math.max(0, Number(itemCount) || 0) * MEDIA_SYNC_PATH_PER_FILE_MS,
+);
+const MEDIA_PUBLICATION_FLOOR_MS = 6 * 60 * 1000;
+const MEDIA_PUBLICATION_PER_FILE_MS = 2 * 1000;
+const MEDIA_PUBLICATION_TIMEOUT_MS = 30 * 60 * 1000;
+const mediaPublicationTimeoutMs = itemCount => Math.min(
+  MEDIA_PUBLICATION_TIMEOUT_MS,
+  MEDIA_PUBLICATION_FLOOR_MS + Math.max(0, Number(itemCount) || 0) * MEDIA_PUBLICATION_PER_FILE_MS,
+);
+
 const cancelledError = () => Object.assign(new Error('媒体索引已让路给前台文件操作'), { code: 'TASK_CANCELLED' });
 const throwIfCancelled = signal => { if (signal?.aborted) throw cancelledError(); };
 
 const createMediaRepository = client => {
   const prepareMediaSync = (root, projectName, externalRoots = [], options = {}, callOptions = {}) => client.call(root, 'media_sync_prepare', { projectName, externalRoots, ...options }, 30 * 60 * 1000, callOptions);
-  const applyMediaSyncBatch = (root, payload, callOptions = {}) => client.call(root, 'media_sync_apply_batch', payload, 2 * 60 * 1000, callOptions);
-  const finalizeMediaSync = (root, payload, callOptions = {}) => client.call(root, 'media_sync_finalize', payload, 2 * 60 * 1000, callOptions);
-  const prepareChangedPaths = (root, payload, callOptions = {}) => client.call(root, 'media_sync_paths_prepare', payload, 30 * 60 * 1000, callOptions);
-  const applyChangedPathsBatch = (root, payload, callOptions = {}) => client.call(root, 'media_sync_paths_apply_batch', payload, 2 * 60 * 1000, callOptions);
-  const finalizeChangedPaths = (root, payload, callOptions = {}) => client.call(root, 'media_sync_paths_finalize', payload, 2 * 60 * 1000, callOptions);
-  const abortMediaSync = (root, projectName, snapshotId) => client.call(root, 'media_sync_abort', { projectName, snapshotId }, 2 * 60 * 1000);
+  const applyMediaSyncBatch = (root, payload, callOptions = {}) => client.call(root, 'media_sync_apply_batch', payload, mediaPublicationTimeoutMs(payload?.files?.length), callOptions);
+  const finalizeMediaSync = (root, payload, callOptions = {}) => client.call(root, 'media_sync_finalize', payload, MEDIA_PUBLICATION_FLOOR_MS, callOptions);
+  // The incremental index writes in place: `prepareChangedPaths` walks the changed
+  // paths, and apply/finalize each commit one SQLite transaction. None of them
+  // copies the database set any more, so they take the path budget. The staged
+  // full-scan actions keep the publication budget.
+  const prepareChangedPaths = (root, payload, callOptions = {}) => client.call(root, 'media_sync_paths_prepare', payload, mediaPathTimeoutMs(payload?.changes?.length), callOptions);
+  const applyChangedPathsBatch = (root, payload, callOptions = {}) => client.call(root, 'media_sync_paths_apply_batch', payload, mediaPathTimeoutMs(payload?.files?.length), callOptions);
+  const finalizeChangedPaths = (root, payload, callOptions = {}) => client.call(root, 'media_sync_paths_finalize', payload, MEDIA_SYNC_PATH_FLOOR_MS, callOptions);
+  const abortMediaSync = (root, projectName, snapshotId) => client.call(root, 'media_sync_abort', { projectName, snapshotId }, MEDIA_PUBLICATION_FLOOR_MS);
   const syncProject = async (root, projectName, externalRoots = [], options = {}) => {
     const signal = options?.signal;
     const callOptions = { signal, priority: options.background === true ? -10 : 0, preemptible: options.background === true };
@@ -225,4 +256,7 @@ const createMediaRepository = client => {
   });
 };
 
-module.exports = { createMediaRepository, MEDIA_SYNC_BATCH_SIZE };
+module.exports = {
+  createMediaRepository, MEDIA_SYNC_BATCH_SIZE,
+  MEDIA_PUBLICATION_FLOOR_MS, MEDIA_PUBLICATION_PER_FILE_MS, MEDIA_PUBLICATION_TIMEOUT_MS, mediaPublicationTimeoutMs,
+};

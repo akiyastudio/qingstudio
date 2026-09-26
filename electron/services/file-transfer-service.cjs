@@ -389,6 +389,96 @@ const stagingRecoveryError = ({ source, destination, staging, cause, strategy })
 };
 const publicationServiceMissingError = source => Object.assign(new Error('平台原子文件发布服务不可用，未发布任何目标，源内容已保留'), { code: 'FILE_PUBLICATION_SERVICE_MISSING', sourcePath: source, sourceRetained: true, published: false, recoveryRequired: false });
 
+// A cut can publish every target and still fail to remove the source, most often
+// because another program holds the original open. The operator-facing message
+// has to answer three questions the raw native text does not: did my file arrive,
+// why is there still a copy at the old location, and what am I supposed to do
+// about it. "已安全移动 0/4 个文件" answers none of them and reads like nothing
+// happened, even though the targets are already published.
+//
+// Which phase failed decides what may be claimed, and the claims are built from
+// named file lists rather than totals:
+//
+//  - `cleanupFiles`  arrived, target verified, original still there — the only
+//    files the operator may be told to delete, always named by full path so
+//    "这个文件" can never be ambiguous;
+//  - `unverifiedFiles` may or may not have arrived — never counted as arrivals
+//    and never offered for deletion;
+//  - everything else published has had its original deleted, so it must never be
+//    described as still present.
+//
+// A failed target validation or a failure before publication leaves a state that
+// has to be checked by hand, so nothing is counted and nothing is deleted.
+const SOURCE_CLEANUP_STAGE = 'source-cleanup';
+const asTrimmedList = value => (Array.isArray(value) ? value : []).map(item => String(item || '').trim()).filter(Boolean);
+const joinNames = names => names.join('、');
+const sourceCleanupFailureMessage = ({ entryName = '', entryPath = '', filesMoved = 0, publishedCount = 0, retainedCount = 0, unverifiedCount = 0, unverifiedName = '', cleanupFiles = null, unverifiedFiles = null, affectedFiles = null, totalFiles = 0, stage = '', cause = null, recoveryRequired = false } = {}) => {
+  const deleted = Math.max(0, Number(filesMoved) || 0);
+  const published = Math.max(deleted, Number(publishedCount) || 0);
+  const total = Math.max(0, Number(totalFiles) || 0);
+  const name = String(entryName || '').trim();
+  const location = String(entryPath || '').trim();
+  const causeText = String(cause || '').trim();
+  const cleanupNames = asTrimmedList(cleanupFiles);
+  const unverifiedNames = asTrimmedList(unverifiedFiles);
+  const affectedNames = asTrimmedList(affectedFiles);
+  const retained = cleanupFiles ? cleanupNames.length : Math.max(0, Number(retainedCount) || 0);
+  const unverified = unverifiedFiles ? unverifiedNames.length : Math.max(0, Number(unverifiedCount) || 0);
+  const unverifiedLabel = unverifiedFiles
+    ? (unverifiedNames.length > 1 ? `${unverifiedNames.length} 个` : '')
+    : String(unverifiedName || '').trim();
+  const arrived = published > 0;
+  const cleanupFailed = String(stage || '') === SOURCE_CLEANUP_STAGE;
+  if (!cleanupFailed) {
+    // The batch result cannot say which files arrived, so no count is reported —
+    // only the files whose state is in doubt are named, so the operator knows
+    // what to check.
+    const pending = total > 0 ? `${total}` : '';
+    const lines = [`${pending ? `${pending} 个文件` : '文件'}的复制状态待核实，暂时不要删除原文件。`];
+    const inDoubt = affectedNames.length ? affectedNames : [location ? `${name}（${location}）` : name].filter(Boolean);
+    if (inDoubt.length) lines.push(`未能确认的文件：${joinNames(inDoubt)}。`);
+    if (causeText) lines.push(`系统提示：${causeText}`);
+    lines.push('请先在项目里核对哪些文件已经到位，确认后再自行处理原文件。');
+    return lines.join('');
+  }
+  const lines = [];
+  if (arrived) {
+    // Only files whose original is gone may be called moved, and only files
+    // whose original is still there may be called leftovers. Zero-count groups
+    // are left out so the sentence never reads "0 个已完整移动".
+    if (total > 0 && deleted === total) lines.push(`${total} 个文件已全部移动到项目。`);
+    else if (unverified > 0) {
+      const groups = [];
+      if (deleted > 0) groups.push(`${deleted} 个已完整移动`);
+      if (retained > 0) groups.push(`${retained} 个已复制到项目`);
+      groups.push(`${unverified} 个复制状态待核实`);
+      lines.push(`${total} 个文件有 ${groups.join('、')}。`);
+    } else if (published === total) lines.push(`${total} 个文件已复制到项目${deleted > 0 ? `（其中 ${deleted} 个原文件已删除）` : ''}。`);
+    else lines.push(`${published}/${total} 个文件已复制到项目${deleted > 0 ? `（其中 ${deleted} 个原文件已删除）` : ''}，其余未能复制。`);
+  } else {
+    lines.push('文件未能复制到项目，原文件没有改动。');
+  }
+  if (unverified > 0) {
+    const label = unverifiedNames.length ? joinNames(unverifiedNames) : (unverifiedLabel || `${unverified} 个`);
+    lines.push(`复制状态待核实：${label}；请不要删除它们的原文件，先在项目里核对。`);
+  }
+  if (causeText) {
+    // Nothing arrived, so there is no leftover to explain: report the system
+    // reason without implying the original was touched.
+    lines.push(arrived ? `系统提示：${causeText}` : `系统提示：${name ? `${name}${location ? `（${location}）` : ''}：` : ''}${causeText}`);
+  }
+  // A retained recovery copy already supersedes manual cleanup advice, and only
+  // the confirmed originals may be named: an unverified one may never have
+  // arrived, so deleting it would destroy the only copy.
+  if (!recoveryRequired && retained > 0) {
+    if (!cleanupNames.length && name) cleanupNames.push(location ? `${name}（${location}）` : name);
+    lines.push(cleanupNames.length
+      ? `可直接清理的原文件（${retained} 个）：${joinNames(cleanupNames)}。`
+      : `可直接清理的原文件（${retained} 个），通常是它们正被其他程序打开或占用。`);
+  }
+  return lines.join('');
+};
+
 const normalizeNativePublicationError = async (error, source, target, strategy = 'native-move-no-replace', nativeService = null, reconciliationHook = null, ownershipToken = '') => {
   if (!error?.published && !error?.outcomeUnknown) return error;
   const resolvedTarget = path.resolve(target);
@@ -1003,8 +1093,66 @@ const movePlannedFilesFast = async (plan, options = {}) => {
         copyConcurrencyTuner.observe(tuningKey, parallelism, batch.length, performance.now() - batchStarted);
         await acceptCompleted(batch, results);
       } catch (error) {
-        if (Array.isArray(error.completed) && error.completed.length) await acceptCompleted(batch, error.completed);
-        error.message = `${error.message || String(error)}；已安全移动 ${filesMoved}/${files.length} 个文件`;
+        const accepted = Array.isArray(error.completed) ? error.completed : [];
+        if (accepted.length) await acceptCompleted(batch, accepted);
+        // The failing entry is not always the batch head: a later file can be the
+        // one whose original is locked. Prefer the item the native layer named so
+        // the message points at the file the user actually has to clean up.
+        const named = String(error?.sourcePath || '');
+        const reported = batch.find(entry => named && physicalPathKey(entry.source) === physicalPathKey(named))
+          || batch[error?.failedIndex ?? 0]
+          || batch[0]
+          || {};
+        // The native layer publishes the target and only then removes the
+        // original, and it names the phase that failed. Only a confirmed
+        // `source-cleanup` failure proves the target was published *and*
+        // verified, so only then can that original be called a redundant
+        // leftover, counted, and offered for removal. A failed target validation
+        // leaves a published but unconfirmed target, and a failure before
+        // publication leaves nothing: neither may be counted as an arrival.
+        //
+        // The parallel copy can return several failures in one batch, so every
+        // entry is classified on its own stage and the counts are summed. A
+        // single fixed "+1" would under-report a batch where two targets were
+        // both published and both originals kept, which the native layer allows
+        // when two workers are running at once.
+        //
+        // In a cut the adapter reports a successful item only once its original
+        // is deleted, so `accepted` (already folded into `filesMoved` here)
+        // leaves nothing behind. Every other entry of the batch either failed or
+        // was never reached because the halt stopped it, and an entry the native
+        // layer never touched definitely did not arrive.
+        const failures = Array.isArray(error?.failures) && error.failures.length
+          ? error.failures
+          : [{ index: error?.failedIndex ?? 0, stage: error?.stage, published: error?.published }];
+        const classify = failure => {
+          if (failure?.stage === SOURCE_CLEANUP_STAGE) return 'retained';
+          if (failure?.published === true) return 'unverified';
+          return failure?.stage === 'pre-publication' ? 'absent' : 'unverified';
+        };
+        const entryFor = failure => batch[failure?.index]
+          || batch.find(entry => failure?.sourcePath && physicalPathKey(entry.source) === physicalPathKey(failure.sourcePath))
+          || null;
+        const retained = failures.filter(failure => classify(failure) === 'retained').map(entryFor).filter(Boolean);
+        const unverified = failures.filter(failure => classify(failure) === 'unverified').map(entryFor).filter(Boolean);
+        // The tip is built from named lists so the operator can act on it without
+        // guessing: `cleanupFiles` is exactly what may be deleted, and every other
+        // published entry has already had its original removed.
+        error.message = sourceCleanupFailureMessage({
+          entryName: reported.source ? path.basename(reported.source) : '',
+          entryPath: reported.source || named,
+          filesMoved,
+          publishedCount: filesMoved + retained.length,
+          cleanupFiles: retained.map(entry => entry.source),
+          unverifiedFiles: unverified.map(entry => entry.source),
+          affectedFiles: failures.map(entryFor).filter(Boolean).map(entry => entry.source),
+          totalFiles: files.length,
+          stage: error?.stage,
+          cause: error?.nativeError || error?.cause?.message || '',
+          recoveryRequired: error?.recoveryRequired === true,
+        });
+        error.sourcePath ||= reported.source || '';
+        error.destinationPath ||= reported.destination || '';
         throw error;
       }
       offset += batch.length;
@@ -2038,6 +2186,7 @@ module.exports = {
   CANCELLED_CODE,
   PUBLISH_PARTIAL_CODE,
   SOURCE_CLEANUP_INCOMPLETE_CODE,
+  sourceCleanupFailureMessage,
   DEFAULT_SMALL_FILE_CONCURRENCY,
   DEFAULT_SMALL_FILE_THRESHOLD,
   assertDiskSpace,

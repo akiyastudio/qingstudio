@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import type { AppConfig, MediaMetadataField, MediaVersion, MediaVersionBundle, ProjectFileEntry, TrackedPhoto, WorkspaceProject } from '../types';
 import { useAppDialog } from './AppDialogProvider';
+import { useVersionChanges } from '../features/versioning/public';
 import { useEscapeLayer } from './LayerProvider';
 import { RECYCLE_BIN_FAILURE_DIALOG } from '../utils/recycleBinFailure';
 import { VideoPlayer } from './AdvancedVideoPlayer';
@@ -670,6 +671,7 @@ export const VersionManager = ({ active = true, entry, workspacePath, project, c
     };
   }, [entry.path, entry.updatedAt, workspacePath, project.status, project.name, initialCompareKey, progressId, progressVersionKey]);
 
+  useVersionChanges(active, busy, workspacePath, project.name, project.id, () => load(pageGenerationRef.current));
   const branchPhotoPagination = useMemo(() => paginateMainBranchPhotos(branchPhotos, branchPhotoPage), [branchPhotos, branchPhotoPage]);
 
   const selected = bundle.versions.find(version => version.id === selectedId);

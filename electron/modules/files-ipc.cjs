@@ -1013,7 +1013,7 @@ const registerFileOperationsIpc = context => {
             const missingCutSources = clipboardSnapshot.sources.filter((_source, index) => !sourcePresence[index]);
             if (missingCutSources.length) throw new Error(`剪切源已被其他粘贴任务移动或删除，请重新剪切后再试：${path.basename(missingCutSources[0])}`);
           }
-          const requestedItems = await mapBounded(uniqueSources.filter(source => clipboardSnapshot.operation !== 'cut' || pathKey(path.dirname(source)) !== pathKey(destinationDir)), 8, async source => {
+          const selectedItems = await mapBounded(uniqueSources.filter(source => clipboardSnapshot.operation !== 'cut' || pathKey(path.dirname(source)) !== pathKey(destinationDir)), 8, async source => {
             throwIfCancelled?.(() => job.cancelled);
             const sourceStat = await fs.promises.lstat(source, { bigint: true });
             if (!sourceStat.isFile() && !sourceStat.isDirectory()) throw new Error(`不支持粘贴此文件类型：${path.basename(source)}`);
@@ -1024,8 +1024,70 @@ const registerFileOperationsIpc = context => {
               if (error.code === 'ENOENT') return null;
               throw error;
             });
-            return { source, sourceStat, sourceIdentity: identityFromStat(source, sourceStat), desiredDestination, sameSource, conflict: Boolean(conflictIdentity), conflictIdentity };
+            const mergeableDirectory = conflictIdentity && (await fs.promises.lstat(desiredDestination)).isDirectory();
+            return { source, sourceStat, sourceIdentity: identityFromStat(source, sourceStat), desiredDestination, sameSource, conflict: Boolean(conflictIdentity), conflictIdentity, mergeableDirectory };
           });
+          // Explorer merges folders with the same name. Expand only those folders
+          // into their children, so the existing publication and undo paths can
+          // still handle each new file or folder as an owned target.
+          let hasMergedDirectories = false;
+          const mergedDirectories = [];
+          const registeredProgressFolders = selectedItems.some(item => item.sourceStat.isDirectory() && item.mergeableDirectory)
+            && versionService?.listProgress && !isInspirationVirtualProject(projectName)
+            ? await versionService.listProgress(ensureWorkspace(workspacePath), projectName, true).then(result => {
+                if (!result?.success) throw new Error(result?.error || '无法读取版本进度登记');
+                return (result.progressFolders || []).filter(folder => folder.nodeRole === 'progress' && folder.folderPath);
+              })
+            : [];
+          const expandMergedFolder = async item => {
+            if (!item.sourceStat.isDirectory() || !item.mergeableDirectory || item.sameSource) return [item];
+            if ((!context.isOrdinaryProjectRoot?.(root) && isProtectedProjectFolderPath({ fs, path, projectRoot: root, candidate: item.desiredDestination }))
+                || registeredProgressFolders.some(folder => physicalPathContains(item.desiredDestination, folder.folderPath)
+                  || physicalPathContains(folder.folderPath, item.desiredDestination))) return [item];
+            hasMergedDirectories = true;
+            mergedDirectories.push({ path: item.desiredDestination, source: item.source, identity: item.conflictIdentity });
+            const children = await fs.promises.readdir(item.source);
+            const expanded = [];
+            for (const name of children) {
+              throwIfCancelled?.(() => job.cancelled);
+              const source = path.join(item.source, name);
+              const sourceStat = await fs.promises.lstat(source, { bigint: true });
+              if (!sourceStat.isFile() && !sourceStat.isDirectory()) throw new Error(`不支持粘贴此文件类型：${name}`);
+              const desiredDestination = path.join(item.desiredDestination, name);
+              const destinationStat = await fs.promises.lstat(desiredDestination).catch(error => {
+                if (error.code === 'ENOENT') return null;
+                throw error;
+              });
+              const conflictIdentity = destinationStat ? await captureDecisionIdentity(desiredDestination) : null;
+              expanded.push(...await expandMergedFolder({
+                source, sourceStat, sourceIdentity: identityFromStat(source, sourceStat),
+                desiredDestination, sameSource: false, conflict: Boolean(conflictIdentity), mergeableDirectory: Boolean(destinationStat?.isDirectory()), conflictIdentity:
+                  destinationStat?.isDirectory() ? conflictIdentity : conflictIdentity && { ...conflictIdentity, directory: false },
+              }));
+            }
+            return expanded;
+          };
+          const requestedItems = [];
+          for (const item of selectedItems) requestedItems.push(...await expandMergedFolder(item));
+          const assertMergedDirectoriesUnchanged = async () => {
+            for (const item of mergedDirectories) {
+              if (!await decisionIdentityMatches(item.path, item.identity)) throw new Error(`同名文件夹“${path.basename(item.path)}”在粘贴期间发生变化，请重新粘贴`);
+            }
+          };
+          const removeMergedCutSourceDirectories = async () => {
+            if (clipboardSnapshot.operation !== 'cut') return { removed: [], warning: undefined };
+            const removed = [];
+            const failures = [];
+            for (const item of [...mergedDirectories].sort((a, b) => b.source.length - a.source.length)) {
+              try {
+                await fs.promises.rmdir(item.source);
+                removed.push(item.source);
+              } catch (error) {
+                if (error.code !== 'ENOENT') failures.push(path.basename(item.source));
+              }
+            }
+            return { removed, warning: failures.length ? `已移动文件，但无法移除空的源文件夹：${failures.join('、')}` : undefined };
+          };
           if (clipboardSnapshot.operation === 'cut') {
             await assertNoRegisteredProgressRootMutation(
               workspacePath,
@@ -1127,9 +1189,10 @@ const registerFileOperationsIpc = context => {
               replacedDestinations.add(desiredKey);
               replacementIdentities.set(desiredKey, item.conflictIdentity);
             } else {
-              destination = allocateDestination
+              const targetParent = path.dirname(item.desiredDestination);
+              destination = allocateDestination && pathKey(targetParent) === pathKey(destinationDir)
                 ? allocateDestination(path.basename(item.source), item.sourceStat.isDirectory())
-                : uniqueDestination(destinationDir, path.basename(item.source), reservedTargets, item.sourceStat.isDirectory());
+                : uniqueDestination(targetParent, path.basename(item.source), reservedTargets, item.sourceStat.isDirectory());
               reservedTargets.add(pathKey(destination));
             }
             topLevelTargets.push({ source: item.source, destination, isDirectory: item.sourceStat.isDirectory() });
@@ -1178,7 +1241,7 @@ const registerFileOperationsIpc = context => {
             for (const subPlan of subPlans) for (const entry of subPlan) plan.push(entry);
             await scanCopyPipeline?.close();
             await assertDiskSpace(destinationDir, Math.max(0, plan.reduce((sum, entry) => sum + entry.size, 0) - preCopiedBytes));
-            if (clipboardSnapshot.operation === 'copy' && !replaceConflicts) {
+            if (clipboardSnapshot.operation === 'copy' && !replaceConflicts && !hasMergedDirectories) {
               pasteResumeCheckpoint = {
                 version: 1,
                 kind: 'paste-copy-v1',
@@ -1243,6 +1306,7 @@ const registerFileOperationsIpc = context => {
             ? uniqueSources.map(source => ({ physicalPath: source, virtualPath: virtualPathFor(root, source) }))
             : [];
           if (sameVolumeCut) {
+            await assertMergedDirectoriesUnchanged();
             await stageReplacements();
             const moved = [];
             publish({ phase: 'moving', progress: 0, currentName: '', bytesCopied: 0, totalBytes: 0, filesCopied: 0, totalFiles: topLevelTargets.length });
@@ -1274,14 +1338,15 @@ const registerFileOperationsIpc = context => {
             }
             task.setPausable(false);
             job.finishing = true;
+            const mergedSourceCleanup = await removeMergedCutSourceDirectories();
             fileOperationState.projectFileClipboard = null;
             await clearClipboardIfSnapshotCurrent(clipboardSnapshot);
             const count = topLevelTargets.length;
             const replacements = await finalizeReplacements();
-            if (count) await pushUndoOperation(replacements.items.length ? { kind: 'paste-replace', mode: 'cut', moves: topLevelTargets, items: replacements.items, backupRoot: replacementRoot } : { kind: 'move', moves: topLevelTargets }).catch(error => {
+            if (count || mergedSourceCleanup.removed.length) await pushUndoOperation(replacements.items.length ? { kind: 'paste-replace', mode: 'cut', moves: topLevelTargets, items: replacements.items, backupRoot: replacementRoot, sourceDirectories: mergedSourceCleanup.removed } : { kind: 'move', moves: topLevelTargets, sourceDirectories: mergedSourceCleanup.removed }).catch(error => {
               writeLog('warn', 'Unable to record paste undo history', error);
             });
-            const warning = undefined;
+            const warning = mergedSourceCleanup.warning;
             publish({ phase: 'complete', progress: 100, currentName: '', bytesCopied: 0, totalBytes: 0, filesCopied: count, totalFiles: count, count });
             task.complete('文件移动完成');
             recordCommittedMediaChanges(topLevelTargets, { removeSources: true });
@@ -1311,6 +1376,7 @@ const registerFileOperationsIpc = context => {
             if (topLevelTargetPaths.has(destination) && !createdTargets.includes(destination)) createdTargets.push(destination);
           };
           if (nativeFastCut) {
+            await assertMergedDirectoriesUnchanged();
             await stageReplacements();
             // This path removes each source as it commits. Cancellation may
             // stop subsequent files, but must never delete completed targets.
@@ -1339,12 +1405,13 @@ const registerFileOperationsIpc = context => {
             });
             job.finishing = true;
             task.setPausable(false);
+            const mergedSourceCleanup = await removeMergedCutSourceDirectories();
             fileOperationState.projectFileClipboard = null;
             if (process.platform === 'win32') await clearClipboardIfSnapshotCurrent(clipboardSnapshot);
             const count = topLevelTargets.length;
             const replacements = await finalizeReplacements();
-            if (count) await pushUndoOperation(replacements.items.length ? { kind: 'paste-replace', mode: 'cut', moves: topLevelTargets, items: replacements.items, backupRoot: replacementRoot } : { kind: 'move', moves: topLevelTargets }).catch(error => writeLog('warn', 'Unable to record native fast paste undo history', error));
-            const warning = undefined;
+            if (count || mergedSourceCleanup.removed.length) await pushUndoOperation(replacements.items.length ? { kind: 'paste-replace', mode: 'cut', moves: topLevelTargets, items: replacements.items, backupRoot: replacementRoot, sourceDirectories: mergedSourceCleanup.removed } : { kind: 'move', moves: topLevelTargets, sourceDirectories: mergedSourceCleanup.removed }).catch(error => writeLog('warn', 'Unable to record native fast paste undo history', error));
+            const warning = mergedSourceCleanup.warning;
             publish({ phase: 'complete', progress: 100, currentName: '', bytesCopied, totalBytes, filesCopied, totalFiles, count });
             task.complete('文件移动完成');
             recordCommittedMediaChanges(topLevelTargets, { removeSources: true });
@@ -1386,6 +1453,7 @@ const registerFileOperationsIpc = context => {
           throwIfCancelled(() => job.cancelled);
           if (pasteResumeCheckpoint) task.saveCheckpoint({ ...pasteResumeCheckpoint, phase: 'finalizing' }, 99, '正在完成粘贴');
           task.setPausable(false);
+          await assertMergedDirectoriesUnchanged();
           await stageReplacements();
           try {
             const targetsByDestination = new Map(topLevelTargets.map(item => [item.destination, item]));
@@ -1413,20 +1481,21 @@ const registerFileOperationsIpc = context => {
               ownershipToken: operationId,
               onCleanupProgress: ({ processed, total }) => publish({ phase: 'finishing', progress: 99, currentName: `正在移除源文件 ${processed}/${total}`, bytesCopied, totalBytes, filesCopied, totalFiles }),
             });
+            sourceCleanupOutcome.mergedDirectories = await removeMergedCutSourceDirectories();
             fileOperationState.projectFileClipboard = null;
             if (process.platform === 'win32') await clearClipboardIfSnapshotCurrent(clipboardSnapshot);
           }
           const count = topLevelTargets.length;
           const replacements = await finalizeReplacements();
-          if (count) await pushUndoOperation(replacements.items.length
-            ? { kind: 'paste-replace', mode: clipboardSnapshot.operation, moves: topLevelTargets, items: replacements.items, backupRoot: replacementRoot }
+          if (count || sourceCleanupOutcome?.mergedDirectories?.removed.length) await pushUndoOperation(replacements.items.length
+            ? { kind: 'paste-replace', mode: clipboardSnapshot.operation, moves: topLevelTargets, items: replacements.items, backupRoot: replacementRoot, sourceDirectories: sourceCleanupOutcome?.mergedDirectories?.removed }
             : clipboardSnapshot.operation === 'cut'
-              ? { kind: 'move', moves: topLevelTargets }
+              ? { kind: 'move', moves: topLevelTargets, sourceDirectories: sourceCleanupOutcome?.mergedDirectories?.removed }
               : { kind: 'remove-created', paths: topLevelTargets.map(item => item.destination), label: '粘贴' }).catch(error => {
                 writeLog('warn', 'Unable to record paste undo history', error);
               });
           const watcherWarning = undefined;
-          const warning = [sourceCleanupOutcome?.cleanupWarning ? `文件已移动，但源清理返回提示：${sourceCleanupOutcome.cleanupWarning}` : '', watcherWarning].filter(Boolean).join('；') || undefined;
+          const warning = [sourceCleanupOutcome?.cleanupWarning ? `文件已移动，但源清理返回提示：${sourceCleanupOutcome.cleanupWarning}` : '', sourceCleanupOutcome?.mergedDirectories?.warning, watcherWarning].filter(Boolean).join('；') || undefined;
           publish({ phase: 'complete', progress: 100, currentName: '', bytesCopied, totalBytes, filesCopied, totalFiles, count });
           task.complete('文件粘贴完成');
           recordCommittedMediaChanges(topLevelTargets, { removeSources: clipboardSnapshot.operation === 'cut' });

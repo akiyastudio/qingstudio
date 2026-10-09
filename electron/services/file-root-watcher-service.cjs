@@ -86,7 +86,7 @@ const createFileRootWatcherService = ({ getMainWindow, getThumbnailService, getM
     publish(state, changes);
   };
   const scheduleFlush = state => {
-    if (state.timer) clearTimeout(state.timer);
+    if (state.timer) return;
     state.timer = setTimeout(() => flush(state), 200);
   };
   const failState = (state, error) => {

@@ -1965,6 +1965,7 @@ const registerWorkspaceIpc = context => {
             else await recycleBinService.restore({ recyclePidl: item.recyclePidl, originalPath: item.original });
           }
           if (operation.mode === 'cut') {
+            for (const directory of operation.sourceDirectories || []) await fs.promises.mkdir(directory, { recursive: true });
             for (const item of partial.stagedNewItems || []) if (fs.existsSync(item.temporary)) await movePathAtomic(item.temporary, item.source);
           } else {
             for (const item of partial.stagedNewItems || []) if (fs.existsSync(item.temporary)) await fs.promises.rm(item.temporary, { recursive: true, force: true });
@@ -1978,6 +1979,9 @@ const registerWorkspaceIpc = context => {
         const destinationKeys = new Set(moves.map(move => path.resolve(move.destination).toLocaleLowerCase()));
         if (operation.mode === 'cut' && moves.some(move => fs.existsSync(move.source) && !destinationKeys.has(path.resolve(move.source).toLocaleLowerCase()))) {
           throw new Error('剪切源位置已被占用，无法安全撤销此次粘贴');
+        }
+        if (operation.mode === 'cut') {
+          for (const directory of operation.sourceDirectories || []) await fs.promises.mkdir(directory, { recursive: true });
         }
         for (const item of replacementItems) {
           if (item.backup) {
@@ -2085,6 +2089,7 @@ const registerWorkspaceIpc = context => {
         if (moves.some(move => fs.existsSync(move.destination) && !normalizedSources.has(path.resolve(move.destination).toLocaleLowerCase()))) {
           throw new Error('原名称已被占用，无法撤销');
         }
+        for (const directory of operation.sourceDirectories || []) await fs.promises.mkdir(directory, { recursive: true });
         const staged = [];
         try {
           for (const move of moves) {
@@ -2202,6 +2207,25 @@ const registerWorkspaceIpc = context => {
     } catch (error) {
       writeLog('error', 'Unable to finalize SD imported folders', error);
       return { success: false, error: error.message || String(error), projects: [], movedProjects: [], unchangedProjects: [], failures: [] };
+    }
+  });
+
+  ipcMain.handle('workspace-remove-project-reference', async (_event, workspacePath, status, projectName, projectId) => {
+    try {
+      const root = ensureWorkspace(workspacePath);
+      // Resolve the registration, not the physical directory: disconnected or
+      // externally deleted references must remain removable.
+      const catalog = await refreshWorkspaceCatalog(root);
+      const row = catalog.byName.get(String(projectName).toLocaleLowerCase());
+      if (!projectId || !row || row.id !== projectId || row.status !== status) throw new Error('项目登记已发生变化，请刷新后重试');
+      if (JSON.parse(row.extra_json || '{}').importMode !== 'reference') throw new Error('只有引用原位置的外链项目可以移除登记');
+      cancelMediaTrackingScan(root, row.name);
+      await workspaceRepository.removeProjectReference(root, { name: row.name, status, projectId });
+      const refreshed = await refreshAfterRepositoryCommit(root);
+      notifyProjectsChanged(root, 'project-reference-removed');
+      return { success: true, catalogRefreshPending: refreshed.catalogRefreshPending, warning: refreshed.warning };
+    } catch (error) {
+      return { success: false, error: error.message || String(error) };
     }
   });
 

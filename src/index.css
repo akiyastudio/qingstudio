@@ -27,8 +27,9 @@ html.dark .workspace-panel-menu-action:hover:not(:disabled) { background:#1e293b
   height: auto;
 }
 
-/* Media viewing is the one immersive surface that also covers the titlebar. */
-.fixed.inset-0.media-preview-fullscreen {
+/* Full-screen media previews also cover the titlebar. */
+.fixed.inset-0.media-preview-fullscreen,
+.fixed.inset-0.version-preview-fullscreen {
   top: 0;
   height: 100vh;
 }

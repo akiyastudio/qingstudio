@@ -11,7 +11,7 @@ const { parsePreviewDecoders } = require('./contracts/component-preview-decoder-
 
 const COMPONENT_HOST_CONTRACT_VERSION = 2;
 const COMPONENT_SERVICE_PROTOCOL_VERSION = 1;
-const CONTRIBUTION_TYPES = new Set(['workspace.toolbarAction', 'component.fullPage', 'application.settingsPage', 'application.settingsForm', 'component.sidePanel', 'media.contextAction', 'project.contextAction', 'project.importProvider', 'project.exportProvider', 'application.command']);
+const CONTRIBUTION_TYPES = new Set(['workspace.toolbarAction', 'component.fullPage', 'application.settingsPage', 'application.settingsForm', 'component.sidePanel', 'media.contextAction', 'project.contextAction', 'project.importProvider', 'project.exportProvider', 'application.command', 'application.homeCard']);
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]{0,79}$/i;
 const COMPONENT_ID = /^[a-z0-9][a-z0-9._-]{0,79}$/;
 const VERSIONED_METHOD = /^[a-z][a-z0-9.-]{0,119}\.v[1-9][0-9]*$/;
@@ -280,7 +280,7 @@ const parseComponentHostManifest = (manifest, componentRoot, developmentFiles = 
   }
   if (settingsPages.length + settingsForms.length > 16) throw new Error('Component settings contributions must be bounded');
   if (!decoderOnly && !settingsOnly && pages.size < 1 || pages.size > 16 || actions.length > 1) throw new Error('Component Host requires 1-16 full pages and at most one toolbar action');
-  if (!decoderOnly && !settingsOnly && !actions.length && !hostContributions.some(contribution => contribution.type === 'component.sidePanel')) throw new Error('Component Host requires a toolbar action or side panel contribution');
+  if (!decoderOnly && !settingsOnly && !actions.length && !hostContributions.some(contribution => ['component.sidePanel', 'application.homeCard'].includes(contribution.type))) throw new Error('Component Host requires a toolbar action, side panel or home card contribution');
   if (actions[0] && !pages.has(actions[0].pageId)) throw new Error(`Component toolbar action references an unknown page: ${actions[0].pageId}`);
   const page = actions[0] ? pages.get(actions[0].pageId) : null;
   for (const contribution of hostContributions) if (!pages.has(contribution.pageId)) throw new Error(`${contribution.type} references an unknown page: ${contribution.pageId}`);
@@ -454,6 +454,8 @@ const parseComponentHostManifest = (manifest, componentRoot, developmentFiles = 
   }
   return Object.freeze({
     componentId,
+    displayName: (typeof manifest.displayName === 'string' && manifest.displayName.trim()
+      ? manifest.displayName : typeof manifest.name === 'string' && manifest.name.trim() ? manifest.name : componentId).replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, 160),
     componentRoot: path.resolve(componentRoot),
     componentVersion: requiredText(manifest.version, 'component version', 80),
     contractVersion,

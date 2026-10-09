@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -39,6 +40,9 @@ JPG_CONVERSION_EXTENSIONS = (
 def is_internal_transient_media_path(value: str) -> bool:
     for segment in Path(value).parts:
         normalized = segment.lower()
+        # Match Encoder Studio staging files and image-sequence directories.
+        if re.fullmatch(r"\.studio-[0-9a-f]{32}(?:\.[^.]*)?", normalized):
+            return True
         if ".photoflow-part" in normalized:
             return True
         if normalized in (".photoflow-workspace-id", "_photoflow_safety_temp"):
@@ -297,6 +301,8 @@ class ThumbnailDatabase:
         records = []
         with self.connection:
             for entry in os.scandir(directory):
+                if is_internal_transient_media_path(entry.path):
+                    continue
                 if not entry.is_file(follow_symlinks=False):
                     continue
                 kind = MEDIA_EXTENSIONS.get(Path(entry.name).suffix.lower())

@@ -36,7 +36,7 @@ const normalizeOpenScope = request => {
 };
 const componentPageKey = ({ componentId, pageId, workspacePath, projectId }) => ['project', componentId, String(pageId || '').trim(), normalizeIdentity(workspacePath), String(projectId || '').trim()].join(PAGE_KEY_SEPARATOR);
 const componentSettingsPageKey = ({ componentId, pageId }) => ['application.settings', componentId, String(pageId || '').trim()].join(PAGE_KEY_SEPARATOR);
-const componentContributionKey = ({ componentId, contributionId, workspacePath, projectId, sourcePageId }, surface) => surface === 'application.command'
+const componentContributionKey = ({ componentId, contributionId, workspacePath, projectId, sourcePageId }, surface) => ['application.command', 'application.homeCard'].includes(surface)
   ? [surface, componentId, contributionId].join(PAGE_KEY_SEPARATOR)
   : [surface, componentId, contributionId, normalizeIdentity(workspacePath), String(projectId || ''), surface === 'component.sidePanel' ? String(sourcePageId || '').trim() : ''].join(PAGE_KEY_SEPARATOR);
 const validBounds = value => value && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(value[key]))
@@ -123,8 +123,10 @@ class ComponentViewManager {
     this.instances.set(nextKey, instance);
     this.onViewStackChanged();
   }
-  closeHost(host) { host.closed = true; for (const instance of [...this.instances.values()]) if (instance.host === host) this.close(instance.instanceId); this.notificationService?.forgetHost?.(host); }
-  constructor({ WebContentsView, mainWindow, screen = null, updatePlaybackBounds = null, refreshPlaybackBounds = null, setPlaybackPaused = null, registry, preloadPath, ipcMain, serviceManager = null, lifecycleCoordinator = null, capabilityBroker = null, inputGrantService = null, notificationService = null, clearComponentCapabilityState = null, clearComponentViewState = clearComponentCapabilityState, partitionSessionProvider = null, mediaProtocolHandler = null, resolveOpenContext = request => request, writeLog = () => undefined, onViewStackChanged = () => undefined, settingsCloseGraceMs = 750, readConfig = null, mutateConfig = null }) {
+  closeHost(host) { host.closed = true; for (const instance of [...this.instances.values()]) if (instance.host === host || instance.host.sourceHost === host) this.close(instance.instanceId); this.notificationService?.forgetHost?.(host); }
+  constructor({ BrowserWindow = null, nativeImage = null, WebContentsView, mainWindow, screen = null, updatePlaybackBounds = null, refreshPlaybackBounds = null, setPlaybackPaused = null, registry, preloadPath, ipcMain, serviceManager = null, lifecycleCoordinator = null, capabilityBroker = null, inputGrantService = null, notificationService = null, clearComponentCapabilityState = null, clearComponentViewState = clearComponentCapabilityState, partitionSessionProvider = null, mediaProtocolHandler = null, resolveOpenContext = request => request, writeLog = () => undefined, onViewStackChanged = () => undefined, settingsCloseGraceMs = 750, readConfig = null, mutateConfig = null }) {
+    this.BrowserWindow = BrowserWindow;
+    this.nativeImage = nativeImage;
     this.WebContentsView = WebContentsView;
     this.screen = screen;
     this.setPlaybackPaused = setPlaybackPaused;this.updatePlaybackBounds = updatePlaybackBounds;this.refreshPlaybackBounds = refreshPlaybackBounds;
@@ -151,6 +153,7 @@ class ComponentViewManager {
     this.settingsCloseGraceMs = Math.max(0, Number(settingsCloseGraceMs) || 0);
     this.instances = new Map();
     this.instancesById = new Map();
+    this.panelWindows = new Map();
     this.senderBindings = new Map();
     this.rpcMethods = new Map();
     this.resolvedTheme = 'light';
@@ -205,6 +208,11 @@ class ComponentViewManager {
       const instance = this.senderBindings.get(event.sender.id);
       if (!instance || instance.view.webContents !== event.sender || event.senderFrame && event.senderFrame !== event.sender.mainFrame) throw new Error('Unauthorized component sender');
       return this.capabilityBroker.invoke(instance.descriptor, 'component.panel', payload, instance.context);
+    });
+    this.ipcMain.handle('component-sdk:open-panel-window', event => {
+      const instance = this.senderBindings.get(event.sender.id);
+      if (!instance || instance.view.webContents !== event.sender || event.senderFrame !== event.sender.mainFrame) throw new Error('Unauthorized component sender');
+      return this.openPanelWindow(instance);
     });
     this.ipcMain.handle('component-sdk:preview', (event, payload) => {
       const instance = this.senderBindings.get(event.sender.id);
@@ -358,6 +366,95 @@ class ComponentViewManager {
   }
   async openContribution(request) { const descriptor = this.registry.resolve(request.componentId); const contribution = descriptor?.contributions?.find(item => item.id === request.contributionId && item.type === request.type); if (!contribution) throw new Error('Unknown component contribution'); const surface = contribution.type === 'application.command' ? 'application.command' : contribution.type; return this.openSurface({ ...request, pageId: contribution.pageId, contribution }, surface); }
 
+  async openPanelWindow(source) {
+    if (!this.BrowserWindow || !source?.contribution || source.context.surface !== 'component.sidePanel'
+      || this.instancesById.get(source.instanceId) !== source || source.view.webContents.isDestroyed()) throw new Error('Only an active component side panel can open a panel window');
+    const context = source.context;
+    return this.openContributionWindow(source.host.sourceHost || source.host, source.descriptor, source.contribution, {
+      componentId: context.componentId, contributionId: source.contribution.id, type: 'component.sidePanel',
+      workspacePath: context.workspacePath, projectId: context.projectId,
+      projectName: context.projectName, projectStatus: context.projectStatus,
+      contentKind: context.contentKind, scopeRelativePath: context.scopeRelativePath,
+      selectedRelativePaths: [...context.selectedRelativePaths], sourcePageId: context.sourcePageId,
+    });
+  }
+
+  async openHomeContributionWindow(sourceHost, request) {
+    if (!sourceHost || sourceHost.closed || sourceHost.isDestroyed?.()) throw new Error('Component source page is closed');
+    const descriptor = this.registry.resolve(request.componentId);
+    const contribution = descriptor?.contributions?.find(item => item.id === request.contributionId && item.type === 'application.homeCard');
+    if (!contribution) throw new Error('Unknown component home card');
+    return this.openContributionWindow(sourceHost, descriptor, contribution, {
+      componentId: descriptor.componentId, contributionId: contribution.id, type: 'application.homeCard',
+    });
+  }
+
+  async openContributionWindow(sourceHost, descriptor, contribution, request) {
+    if (!this.BrowserWindow) throw new Error('Component windows are unavailable');
+    if (this.panelWindows.size >= 8) throw new Error('Too many component windows are open');
+    if (sourceHost.closed || sourceHost.isDestroyed?.()) throw new Error('Component source page is closed');
+    let icon;
+    try {
+      const declaredIcon = descriptor.icon;
+      if (declaredIcon) {
+        const stat = require('node:fs').lstatSync(declaredIcon.entry);
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 1024 * 1024) throw new Error('Component icon is missing or unsafe');
+      }
+      if (declaredIcon?.mimeType === 'image/png') {
+        icon = this.nativeImage?.createFromPath(declaredIcon.entry) || declaredIcon.entry;
+        if (icon?.isEmpty?.()) throw new Error('Component icon could not be decoded');
+      }
+      else if (declaredIcon?.mimeType === 'image/svg+xml' && this.nativeImage) {
+        const svg = require('node:fs').readFileSync(declaredIcon.entry);
+        const png = new (require('@resvg/resvg-js').Resvg)(svg, { fitTo: { mode: 'width', value: 64 } }).render().asPng();
+        icon = this.nativeImage.createFromBuffer(png);
+        if (icon.isEmpty?.()) throw new Error('Component icon could not be decoded');
+      }
+    } catch (error) { this.writeLog('warn', 'Unable to load component window icon', { componentId: descriptor.componentId, error: error?.message || String(error) }); throw error; }
+    const nativeWindow = new this.BrowserWindow({
+      width: 900, height: 620, minWidth: 360, minHeight: 240, show: false, frame: true,
+      title: descriptor.displayName || contribution.title, ...(icon ? { icon } : {}), autoHideMenuBar: true,
+      backgroundColor: this.resolvedTheme === 'dark' ? '#0b1220' : '#ffffff',
+      webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, webviewTag: false },
+    });
+    const contents = nativeWindow.webContents;
+    contents.setWindowOpenHandler?.(() => ({ action: 'deny' }));
+    contents.on?.('will-navigate', event => event.preventDefault());
+    contents.on?.('will-attach-webview', event => event.preventDefault());
+    const host = {
+      id: `component-panel-window-${nativeWindow.id}`, nativeWindow, contentView: nativeWindow.contentView,
+      webContents: sourceHost.webContents, sourceHost, closed: false,
+      isDestroyed: () => nativeWindow.isDestroyed() || sourceHost.isDestroyed?.(),
+    };
+    const layout = () => {
+      const child = this.panelWindows.get(nativeWindow.id);
+      if (!child || nativeWindow.isDestroyed()) return;
+      const [width, height] = nativeWindow.getContentSize();
+      withApplicationHost(host, () => this.setBounds(child.instanceId, { x: 0, y: 0, width, height }));
+    };
+    nativeWindow.on('resize', layout);
+    nativeWindow.on('closed', () => {
+      this.panelWindows.delete(nativeWindow.id);
+      this.closeHost(host);
+    });
+    this.panelWindows.set(nativeWindow.id, null);
+    try {
+      const page = await withApplicationHost(host, () => this.openContribution(request));
+      if (nativeWindow.isDestroyed() || sourceHost.closed || sourceHost.isDestroyed?.()) throw new Error('Component source page is closed');
+      const child = this.instancesById.get(page.instanceId);
+      child.panelWindow = nativeWindow;
+      if (request.type === 'component.sidePanel') child.view.setBorderRadius?.(0);
+      this.panelWindows.set(nativeWindow.id, child);
+      layout();
+      nativeWindow.show();
+      nativeWindow.focus();
+      return { windowId: nativeWindow.id };
+    } catch (error) {
+      if (!nativeWindow.isDestroyed()) nativeWindow.close();
+      throw error;
+    }
+  }
+
   releaseSettings(request) {
     const leaseId = String(request?.leaseId || '');
     const key = this.hostKey(componentSettingsPageKey(request || {}));
@@ -385,7 +482,7 @@ class ComponentViewManager {
     const retainedLifecycleLease = !ownsLifecycleLease ? lifecycleLease?.retain?.() : null;
     try {
     const activationGeneration = ++this.activationGeneration;
-    const applicationLevel = surface === 'application.settings' || surface === 'application.command';
+    const applicationLevel = surface === 'application.settings' || surface === 'application.command' || surface === 'application.homeCard';
     const request = applicationLevel ? rawRequest : this.resolveOpenContext(rawRequest, surface);
     const settingsKey = surface === 'application.settings' ? this.hostKey(componentSettingsPageKey(request)) : '';
     const leaseId = surface === 'application.settings' ? String(request.leaseId || '') : '';
@@ -620,7 +717,7 @@ class ComponentViewManager {
 
   publicContext(instance) {
     const { playbackOwner: _privatePlaybackOwner, playbackViewport: _privatePlaybackViewport, workspacePath: _privateWorkspacePath, contentRootPath: _privateContentRootPath, previewOwnerId: _previewOwnerId, updatePanelInfo: _updatePanelInfo, eventSender: _privateEventSender, emitComponentEvent: _privateEmit, grantMediaUrl: _privateMediaGrant, ...publicContext } = instance.context;
-    const applicationSettings = instance.context.surface === 'application.settings'; const applicationCommand = instance.context.surface === 'application.command'; const applicationSurface = applicationSettings || applicationCommand;
+    const applicationSettings = instance.context.surface === 'application.settings'; const applicationCommand = ['application.command', 'application.homeCard'].includes(instance.context.surface); const applicationSurface = applicationSettings || applicationCommand;
     const permissions = applicationSurface
       ? (instance.descriptor.service?.permissions || []).filter(permission => ['component.settings', 'component.secrets', 'network.fetch', 'component.lifecycle.read', 'component.lifecycle.manage', 'dialogs', 'notifications'].includes(permission))
       : instance.descriptor.service?.permissions || [];
@@ -663,6 +760,7 @@ class ComponentViewManager {
     const resolvedTheme = normalizeResolvedTheme(value);
     if (this.resolvedTheme === resolvedTheme) return false;
     this.resolvedTheme = resolvedTheme;
+    for (const instance of this.panelWindows.values()) if (instance?.panelWindow && !instance.panelWindow.isDestroyed()) instance.panelWindow.setBackgroundColor?.(resolvedTheme === 'dark' ? '#0b1220' : '#ffffff');
     for (const instance of this.instances.values()) if (!instance.view.webContents.isDestroyed()) { instance.view.webContents.send('component-sdk:theme-changed', { contractVersion: 1, resolvedTheme }); void this.applySurfaceStyle(instance); }
     return true;
   }
@@ -753,12 +851,13 @@ class ComponentViewManager {
     this.senderBindings.delete(instance.view.webContents.id);
     try { instance.host.contentView.removeChildView(instance.view); } catch { /* already detached */ }
     if (!instance.view.webContents.isDestroyed()) instance.view.webContents.close({ waitForBeforeUnload: false });
+    if (instance.panelWindow && !instance.panelWindow.isDestroyed()) instance.panelWindow.close();
     return true;
   }
 
   closeProject(workspacePath, projectId) {
     const normalizedWorkspace = normalizeIdentity(workspacePath);
-    const ids = [...this.instances.values()].filter(instance => this.owns(instance) && normalizeIdentity(instance.context.workspacePath) === normalizedWorkspace && instance.context.projectId === String(projectId)).map(instance => instance.instanceId);
+    const ids = [...this.instances.values()].filter(instance => (this.owns(instance) || instance.host.sourceHost === this.mainWindow) && normalizeIdentity(instance.context.workspacePath) === normalizedWorkspace && instance.context.projectId === String(projectId)).map(instance => instance.instanceId);
     ids.forEach(id => this.close(id));
     return ids.length;
   }

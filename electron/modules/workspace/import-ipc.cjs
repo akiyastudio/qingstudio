@@ -175,10 +175,12 @@ const registerWorkspaceImportIpc = dependencies => {
           if (!receipt || receipt.importSessionId !== entry.name) {
             failures.push({
               stage: 'read-receipt', importSessionId: entry.name, receiptPath: location.receiptPath,
-              code: inspected.status === 'io-error' ? (inspected.error?.code || 'IMPORT_RECEIPT_IO_ERROR') : `IMPORT_RECEIPT_${String(inspected.status).toUpperCase()}`,
+              code: receipt ? 'IMPORT_RECEIPT_SESSION_MISMATCH'
+                : inspected.status === 'io-error' ? (inspected.error?.code || 'IMPORT_RECEIPT_IO_ERROR') : `IMPORT_RECEIPT_${String(inspected.status).toUpperCase()}`,
               error: inspected.status === 'corrupt' ? '导入回执已损坏，无法安全自动恢复。'
                 : inspected.status === 'absent' ? '导入暂存目录缺少回执，无法确认文件归属。'
-                  : inspected.error?.message || '导入回执不可读取。',
+                  : receipt ? '导入回执与暂存目录的会话不一致，无法安全自动恢复。'
+                    : inspected.error?.message || '导入回执不可读取。',
               recoveryRequired: true,
               recovery: '所有暂存文件均已保留；请修复磁盘或权限问题后重试，或联系支持人员检查回执。',
             });
@@ -197,8 +199,10 @@ const registerWorkspaceImportIpc = dependencies => {
           }
         }
       }
+      if (failures.length) writeLog('warn', 'Media workflow import recovery needs attention', { workspaceRoot, failures });
       return { success: failures.length === 0, recovered, failures };
     } catch (error) {
+      writeLog('warn', 'Unable to scan media workflow import recovery records', { error: error.message || String(error) });
       return { success: false, recovered: [], failures: [], error: error.message || String(error) };
     }
   });
@@ -804,7 +808,7 @@ const registerWorkspaceImportIpc = dependencies => {
         ? (await versionService.listProgress(workspaceRoot, projectName)).progressFolders?.find(progress => progress.id === appendProgressId)
         : null;
       if (appendProgressId && (!appendProgress || appendProgress.folderMissing)) throw new Error('要追加的进度文件夹不存在');
-      if (appendProgress && (appendProgress.nodeRole !== 'progress' || !appendProgress.parentProgressId || appendProgress.relationKind !== 'main')) throw new Error('只能向已连接有效父版本的普通进度追加文件');
+      if (appendProgress && (appendProgress.nodeRole !== 'progress' || appendProgress.parentProgressId && appendProgress.relationKind !== 'main')) throw new Error('只能向主分支普通进度追加文件');
       if (appendProgress && (appendProgress.mediaKind !== mediaKind || appendProgress.versionKey !== String(options.versionKey || ''))) {
         throw new Error('追加目标与所选进度类型或版本号不一致');
       }

@@ -1,15 +1,14 @@
-const registerSelectionIpc = ({ ipcMain, path, fs, selectionService, workspaceCatalogs }) => {
+const registerSelectionIpc = ({ ipcMain, path, fs, selectionService, workspaceCatalogs, getProjectPath }) => {
   const resolveRegisteredProject = requestedProjectPath => {
     const requested = path.resolve(String(requestedProjectPath || ''));
     for (const [workspaceRoot, catalog] of workspaceCatalogs) {
       for (const project of catalog.projects || []) {
-        const projectRoot = path.resolve(workspaceRoot, project.relative_path);
-        if (projectRoot.toLocaleLowerCase() !== requested.toLocaleLowerCase()) continue;
+        const registeredPath = path.resolve(workspaceRoot, project.relative_path);
+        if (registeredPath.toLocaleLowerCase() !== requested.toLocaleLowerCase()) continue;
+        // Use the same authorization as other project tools, including registered
+        // references and archive links whose real directories are outside the workspace.
+        const projectRoot = getProjectPath(workspaceRoot, project.status, project.name);
         if (!fs.existsSync(projectRoot) || !fs.statSync(projectRoot).isDirectory()) throw new Error('项目文件夹不存在');
-        const workspaceReal = fs.realpathSync.native(workspaceRoot);
-        const projectReal = fs.realpathSync.native(projectRoot);
-        const relative = path.relative(workspaceReal, projectReal);
-        if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('项目路径超出已注册工作区');
         return { workspaceRoot, projectName: project.name, projectRoot };
       }
     }

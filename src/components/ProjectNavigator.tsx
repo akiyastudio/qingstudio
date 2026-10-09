@@ -615,6 +615,36 @@ export const ProjectNavigator = ({ workspacePath, workspacePaths, backupEnabled,
       setPendingProjectAction(null);
     }
   };
+  const removeProjectReference = async (project: WorkspaceProject) => {
+    if (pendingProjectActionRef.current) { setError('另一个项目操作正在处理中'); return; }
+    if (!await appDialog.confirm({
+      title: localizedMessage('project.removeReference.title'),
+      message: localizedMessage('project.removeReference.confirm', { name: project.name }),
+      confirmLabel: localizedMessage('project.removeReference.action'),
+    })) return;
+    // Another action may have started while the confirmation was open.
+    if (pendingProjectActionRef.current) { setError('另一个项目操作正在处理中'); return; }
+    const pendingAction = { path: project.path, kind: 'delete' as const, project };
+    pendingProjectActionRef.current = pendingAction;
+    setPendingProjectAction(pendingAction);
+    try {
+      const result = await window.electronAPI.removeWorkspaceProjectReference(workspaceFor(project), project.status, project.name, project.id);
+      if (!result.success) {
+        setError(result.error || t('project.removeReference.failed'));
+        return;
+      }
+      onProjectDeleted(project);
+      toast.show(result.warning || t('project.removeReference.removed', { name: project.name }), {
+        tone: result.warning ? 'warning' : 'success', dedupeKey: `project-reference-removed:${project.id}`,
+      });
+      await refresh();
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : t('project.removeReference.failed'));
+    } finally {
+      pendingProjectActionRef.current = null;
+      setPendingProjectAction(null);
+    }
+  };
   const openProject = async (project: WorkspaceProject) => {
     if (project.availability === 'missing') {
       setError('项目文件夹不可用，记录已保留；恢复后会自动重新连接。');
@@ -663,7 +693,7 @@ export const ProjectNavigator = ({ workspacePath, workspacePaths, backupEnabled,
       {normalizedProjectSearchQuery && !visibleStatuses.length && <p className="px-2 py-8 text-center text-xs text-slate-400">{t("ui.no.matching.projects.0529b9")}</p>}
       {error && <p className="mt-2 px-2 text-xs text-red-500"><LocalizedText value={error}/></p>}
     </nav>
-    {menu && (backupEnabled || menu.project.availability !== 'missing' || menu.project.archived) && (() => { const hasProjectBackup = backupStatus.snapshots.some(snapshot => snapshot.projectItems?.some(project => project.name === menu.project.name)); return <div className="fixed z-[300] w-52 rounded-lg border border-slate-200 bg-white p-1 shadow-xl" style={{ left: Math.min(menu.x, window.innerWidth - 221), top: Math.min(menu.y, window.innerHeight - 350) }} onClick={event => event.stopPropagation()}>{menu.project.availability !== 'missing' && <><button className="project-menu-item" onClick={() => { openRenameProject(menu.project); setMenu(null); }}>{t("ui.rename.0d0cba")}</button>{menu.project.archived && <button className="project-menu-item" onClick={() => { const project = menu.project; setMenu(null); void moveBack(project); }}>{t("ui.move.back.to.workspace.drive.d6cc91")}</button>}{backupEnabled && <div className="my-1 border-t border-slate-100"/>}</>}{backupEnabled && <><button className="project-menu-item" onClick={() => { const project = menu.project; setMenu(null); onOpenBackup(project); }}>{t("ui.view.project.backups.5e8689")}</button>{menu.project.availability === 'missing' && <button disabled={!hasProjectBackup} title={hasProjectBackup ? t("ui.choose.a.project.snapshot.to.restore.8eafc2") : t("ui.no.project.snapshots.available.to.restore.c2fc3f")} className="project-menu-item disabled:cursor-not-allowed disabled:text-slate-300" onClick={() => { if (!hasProjectBackup) return; const project = menu.project; setMenu(null); onOpenBackup(project); }}>{t("ui.restore.this.project.from.backup.51c989")}</button>}</>}{!backupEnabled && menu.project.archived && menu.project.availability === 'missing' && <button className="project-menu-item" onClick={() => { setMenu(null); onOpenBackup(); }}>{t("ui.view.archive.settings.ef1faa")}</button>}{menu.project.availability !== 'missing' && <><div className="my-1 border-t border-slate-100"/><p className="px-2 py-1 text-[11px] font-bold text-slate-400">{t("ui.change.status.1362de")}</p>{statuses.filter(status => status !== '未分类').map(status => { const isCurrentStatus = status === menu.project.status; return <button key={status} aria-current={isCurrentStatus ? 'true' : undefined} className={`project-menu-item ${isCurrentStatus ? 'bg-blue-50 font-bold text-blue-700' : ''}`} onClick={() => { move(menu.project, status); setMenu(null); }}>{projectStatusLabel(status)}{isCurrentStatus ? t("ui.current.58d8cd") : ''}</button>; })}<div className="my-1 border-t border-slate-100"/>{menu.project.archived ? <p className="px-2 py-1 text-[11px] leading-4 text-amber-600">{t("ui.move.back.to.the.workspace.drive.e6d2fd")}</p> : <button className="project-menu-item text-red-500 hover:bg-red-50" onClick={() => { trash(menu.project); setMenu(null); }}>{t("ui.delete.project.f6dc6a")}</button>}</>}</div>; })()}
+    {menu && (backupEnabled || menu.project.availability !== 'missing' || menu.project.archived || menu.project.importMode === 'reference') && (() => { const hasProjectBackup = backupStatus.snapshots.some(snapshot => snapshot.projectItems?.some(project => project.name === menu.project.name)); return <div className="fixed z-[300] w-52 rounded-lg border border-slate-200 bg-white p-1 shadow-xl" style={{ left: Math.min(menu.x, window.innerWidth - 221), top: Math.min(menu.y, window.innerHeight - 350) }} onClick={event => event.stopPropagation()}>{menu.project.importMode === 'reference' && <><button type="button" className="project-menu-item" onClick={() => { const project = menu.project; setMenu(null); void removeProjectReference(project); }}>{t('project.removeReference.action')}</button>{(backupEnabled || menu.project.availability !== 'missing' || menu.project.archived) && <div className="my-1 border-t border-slate-100"/>}</>}{menu.project.availability !== 'missing' && <><button className="project-menu-item" onClick={() => { openRenameProject(menu.project); setMenu(null); }}>{t("ui.rename.0d0cba")}</button>{menu.project.archived && <button className="project-menu-item" onClick={() => { const project = menu.project; setMenu(null); void moveBack(project); }}>{t("ui.move.back.to.workspace.drive.d6cc91")}</button>}{backupEnabled && <div className="my-1 border-t border-slate-100"/>}</>}{backupEnabled && <><button className="project-menu-item" onClick={() => { const project = menu.project; setMenu(null); onOpenBackup(project); }}>{t("ui.view.project.backups.5e8689")}</button>{menu.project.availability === 'missing' && <button disabled={!hasProjectBackup} title={hasProjectBackup ? t("ui.choose.a.project.snapshot.to.restore.8eafc2") : t("ui.no.project.snapshots.available.to.restore.c2fc3f")} className="project-menu-item disabled:cursor-not-allowed disabled:text-slate-300" onClick={() => { if (!hasProjectBackup) return; const project = menu.project; setMenu(null); onOpenBackup(project); }}>{t("ui.restore.this.project.from.backup.51c989")}</button>}</>}{!backupEnabled && menu.project.archived && menu.project.availability === 'missing' && <button className="project-menu-item" onClick={() => { setMenu(null); onOpenBackup(); }}>{t("ui.view.archive.settings.ef1faa")}</button>}{menu.project.availability !== 'missing' && <><div className="my-1 border-t border-slate-100"/><p className="px-2 py-1 text-[11px] font-bold text-slate-400">{t("ui.change.status.1362de")}</p>{statuses.filter(status => status !== '未分类').map(status => { const isCurrentStatus = status === menu.project.status; return <button key={status} aria-current={isCurrentStatus ? 'true' : undefined} className={`project-menu-item ${isCurrentStatus ? 'bg-blue-50 font-bold text-blue-700' : ''}`} onClick={() => { move(menu.project, status); setMenu(null); }}>{projectStatusLabel(status)}{isCurrentStatus ? t("ui.current.58d8cd") : ''}</button>; })}<div className="my-1 border-t border-slate-100"/>{menu.project.archived ? <p className="px-2 py-1 text-[11px] leading-4 text-amber-600">{t("ui.move.back.to.the.workspace.drive.e6d2fd")}</p> : <button className="project-menu-item text-red-500 hover:bg-red-50" onClick={() => { trash(menu.project); setMenu(null); }}>{t("ui.delete.project.f6dc6a")}</button>}</>}</div>; })()}
     {(showNew || renameProject) && <ProjectDialog title={renameProject ? t("ui.rename.project.84ba75") : t("ui.new.project.0e1a70")} onClose={closeProjectEditor}>
       <form autoComplete="off" onSubmit={event => { event.preventDefault(); if (!isCreating && nextProjectDisplayName) void (renameProject ? rename() : createProject()); }}>
         <p className="text-xs text-slate-500">{t("ui.enter.a.full.date.for.automatic.ca2652")}</p>

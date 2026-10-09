@@ -49,7 +49,7 @@ const registerVersionIpc = context => {
   const isValidProgressParent = (folder, mediaKind) => Boolean(folder && !folder.folderMissing
     && folder.mediaKind === mediaKind
     && (folder.nodeRole === 'original' && !folder.artifactKind
-      || folder.nodeRole === 'progress' && folder.parentProgressId && folder.relationKind === 'main'));
+      || folder.nodeRole === 'progress' && (!folder.parentProgressId || folder.relationKind === 'main')));
   const isInside = (root, candidate) => {
     const relative = path.relative(path.resolve(root), path.resolve(candidate));
     return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
@@ -290,8 +290,9 @@ const registerVersionIpc = context => {
       const listed = await versionService.listProgress(workspaceRoot, projectName, true);
       const existing = progressId ? (listed.progressFolders || []).find(folder => folder.id === progressId) : null;
       const parent = (listed.progressFolders || []).find(folder => folder.id === parentProgressId);
-      if (!['image', 'video'].includes(mediaKind) || !parentProgressId || !isValidProgressParent(parent, mediaKind)) {
-        throw new Error('progress_parent_required: 版本进度必须选择同媒体类型的原始素材或进度父节点');
+      if (!['image', 'video'].includes(mediaKind) || parentProgressId && !isValidProgressParent(parent, mediaKind)
+        || !parentProgressId && (request.renameFromParent || request.copyMissingFromParent)) {
+        throw new Error('progress_parent_invalid: 根版本不能使用父版本策略');
       }
       if (progressId && (!existing || existing.nodeRole !== 'progress')) {
         throw new Error('progress_target_invalid: 只能更新普通版本进度');
@@ -321,7 +322,7 @@ const registerVersionIpc = context => {
         trackingEnabled: Boolean(request.trackingEnabled),
         trackingState: request.trackingState,
         nodeRole: 'progress',
-        relationKind: 'main',
+        relationKind: parentProgressId ? 'main' : null,
         renameFromParent: Boolean(request.renameFromParent),
         copyMissingFromParent: Boolean(request.copyMissingFromParent),
         progressId: progressId || undefined,
@@ -394,7 +395,8 @@ const registerVersionIpc = context => {
         const parent = (listed.progressFolders || []).find(folder => folder.id === parentProgressId);
         if (existing && existing.nodeRole !== 'progress') throw new Error('progress_graph_target_invalid: 只能更新普通版本进度');
         if (!validProgressFolderName(displayName) || !['image', 'video'].includes(mediaKind) || !versionKey
-          || !parentProgressId || !isValidProgressParent(parent, mediaKind)) {
+          || parentProgressId && !isValidProgressParent(parent, mediaKind)
+          || !parentProgressId && (progress.renameFromParent || progress.copyMissingFromParent)) {
           throw new Error('progress_graph_payload_invalid: 新进度字段无效');
         }
         let folderResolution = progress.relativePath !== undefined
@@ -425,7 +427,7 @@ const registerVersionIpc = context => {
           progressId: progressId || undefined,
           mediaKind, versionKey, displayName, folderPath,
           parentProgressId,
-          relationKind: 'main',
+          relationKind: parentProgressId ? 'main' : null,
           trackingEnabled: Boolean(progress.trackingEnabled),
           trackingState: progress.trackingState || undefined,
           renameFromParent: Boolean(progress.renameFromParent),
@@ -696,9 +698,8 @@ const registerVersionIpc = context => {
       const versionKey = String(request.versionKey || '').trim();
       if (!/^\d+(?:_\d+)*$/.test(versionKey)) throw new Error('无效的版本编号');
       const requestedParentId = String(request.parentProgressId || '').trim();
-      if (!requestedParentId) throw new Error('progress_parent_required: 版本进度必须保留有效父节点');
       const requestedParent = requestedParentId ? progressFolders.find(progress => progress.id === requestedParentId) : null;
-      if (!isValidProgressParent(requestedParent, current.mediaKind)) throw new Error('父版本进度不存在');
+      if (requestedParentId && !isValidProgressParent(requestedParent, current.mediaKind)) throw new Error('父版本进度不存在');
       const updated = await versionService.updateProgressTree(workspaceRoot, {
         projectName,
         mutationToken,

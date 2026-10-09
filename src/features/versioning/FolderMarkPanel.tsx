@@ -104,26 +104,7 @@ export const FolderMarkPanel = ({ draft, folders, state = 'ready', taskProgress,
 
   let progressPanel: React.ReactNode = null;
   if (draft.purpose === 'progress') {
-    const mediaKind = draft.progress.mediaKind === 'video' ? 'video' : 'image';
-    const validParents = selectableVersionParents(folders, { mediaKind, relationKind: 'main' });
-    if (!validParents.length) {
-      progressPanel = <div className="space-y-4">
-        <FolderSummary draft={draft}/>
-        <section className="rounded-xl border border-slate-200 bg-white p-4">
-          <MediaKindControl
-            value={mediaKind}
-            disabled={busy}
-            onChange={nextMediaKind => onChange(createFolderMarkDraft(cleanFolderMarkCommon(draft), 'progress', folders, nextMediaKind))}
-          />
-        </section>
-        <section className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
-          <b className="text-sm">{t("ui.mark.original.media.first.f55977")}</b>
-          <p className="mt-1 text-xs leading-5 opacity-80">{t("ui.no.source.is.available.for.this.f425b8")}</p>
-        </section>
-        <div className="flex justify-end border-t border-slate-200 pt-4"><button type="button" disabled={busy} onClick={onClose} className="dialog-secondary">{t("common.cancel")}</button></div>
-      </div>;
-    } else {
-      progressPanel = <VersionProgressPanel
+    progressPanel = <VersionProgressPanel
         draft={draft.progress}
         folders={folders}
         state={state}
@@ -135,7 +116,7 @@ export const FolderMarkPanel = ({ draft, folders, state = 'ready', taskProgress,
           const nextMediaKind = nextProgress.mediaKind === 'video' ? 'video' : 'image';
           const nextParentValid = selectableVersionParents(folders, { mediaKind: nextMediaKind, relationKind: 'main' })
             .some(folder => folder.id === nextProgress.parentProgressId);
-          if (!nextParentValid) {
+          if (nextProgress.parentProgressId && !nextParentValid) {
             onChange(createFolderMarkDraft(cleanFolderMarkCommon(draft), 'progress', folders, nextMediaKind));
             return;
           }
@@ -144,7 +125,6 @@ export const FolderMarkPanel = ({ draft, folders, state = 'ready', taskProgress,
         onSubmit={() => onSubmit(draft)}
         onClose={onClose}
       />;
-    }
   }
 
   return <div className="space-y-4">

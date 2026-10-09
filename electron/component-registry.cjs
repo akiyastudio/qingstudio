@@ -92,10 +92,11 @@ const manifestCompatibilityError = (manifest, platform, arch) => {
     const settingsPageCount = contributions.filter(item => item?.type === 'application.settingsPage').length;
     const settingsFormCount = contributions.filter(item => item?.type === 'application.settingsForm').length;
     const sidePanelCount = contributions.filter(item => item?.type === 'component.sidePanel').length;
-    const hostContributionCount = contributions.filter(item => ['component.sidePanel', 'media.contextAction', 'project.contextAction', 'project.importProvider', 'project.exportProvider', 'application.command'].includes(item?.type)).length;
+    const hostContributionCount = contributions.filter(item => ['component.sidePanel', 'media.contextAction', 'project.contextAction', 'project.importProvider', 'project.exportProvider', 'application.command', 'application.homeCard'].includes(item?.type)).length;
+    const homeCardCount = contributions.filter(item => item?.type === 'application.homeCard').length;
     const decoderOnly = Array.isArray(host.service?.previewDecoders) && host.service.previewDecoders.length > 0 && Array.isArray(host.contributions) && host.contributions.length === 0;
     if (!Array.isArray(host.contributions) || contributions.length > 32 || settingsPageCount + settingsFormCount > 16) return '组件贡献和设置页数量超出限制';
-    if (!decoderOnly && !isSettingsOnlyHost(host) && (toolbarCount > 1 || toolbarCount + sidePanelCount < 1 || pageCount < 1 || pageCount > 16 || contributions.length !== toolbarCount + pageCount + settingsPageCount + settingsFormCount + hostContributionCount)) return '页面组件必须贡献 toolbarAction 或 sidePanel、1-16 个 fullPage，并可选贡献设置页、声明式设置表单或其他 Host API 入口';
+    if (!decoderOnly && !isSettingsOnlyHost(host) && (toolbarCount > 1 || toolbarCount + sidePanelCount + homeCardCount < 1 || pageCount < 1 || pageCount > 16 || contributions.length !== toolbarCount + pageCount + settingsPageCount + settingsFormCount + hostContributionCount)) return '页面组件必须贡献 toolbarAction、sidePanel 或 homeCard、1-16 个 fullPage，并可选贡献设置页、声明式设置表单或其他 Host API 入口';
   }
   const entrypoints = manifest.entrypoints || {};
   const relativeEntry = entrypoints[`${platform}-${arch}`] || entrypoints[platform] || entrypoints.default;

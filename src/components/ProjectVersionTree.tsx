@@ -806,7 +806,7 @@ export const ProjectVersionTree = ({ active, progressFolders, graphEdges = EMPTY
         const canBeParent = Boolean(item.folder && !item.folder.folderMissing
           && (item.folder.nodeRole === 'original' && !item.folder.artifactKind
             || ['selection', 'workflow'].includes(item.folder.nodeRole)
-            || item.folder.nodeRole === 'progress' && item.folder.parentProgressId && item.folder.relationKind === 'main'));
+          || item.folder.nodeRole === 'progress' && (!item.folder.parentProgressId || item.folder.relationKind === 'main')));
         const hasInputRelation = Boolean(item.folder && incomingEdgesByChild.has(item.folder.id));
         const canAcceptInput = Boolean(item.folder && (['progress', 'selection', 'artifact', 'workflow'].includes(item.folder.nodeRole)
           || item.folder.nodeRole === 'original' && item.folder.artifactKind));

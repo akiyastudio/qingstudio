@@ -119,6 +119,11 @@ export const createProjectProgressWorkflow = ({
           trackingState: policy.trackingEnabled ? 'pending_compare' : 'disabled',
         }, draft.workflowInputProgressIds);
         if (!registered.success || !registered.progressFolder || !registered.folder) throw new Error(registered.error || '无法原子创建进度和版本 V2 关系');
+        let rootBaselineError = '';
+        if (policy.trackingEnabled && !draft.parentProgressId) {
+          const baseline = await projectWorkspaceClient.registerVersionBaseline(workspacePath, project.status, project.name, registered.folder.relativePath);
+          if (!baseline.success) rootBaselineError = baseline.error || '未知错误';
+        }
         setProgressSetup(null);
         setProgressFolders(current => current.some(folder => folder.id === registered.progressFolder!.id) ? current.map(folder => folder.id === registered.progressFolder!.id ? registered.progressFolder! : folder) : [...current, registered.progressFolder!]);
         directoryEntriesCacheRef.current.delete('');
@@ -126,7 +131,9 @@ export const createProjectProgressWorkflow = ({
           const folderEntry: ProjectFileEntry = { ...registered.folder, kind: 'folder', extension: '', size: 0, createdAt: registered.folder.updatedAt };
           setFileEntries(current => current.some(entry => entry.relativePath === folderEntry.relativePath) ? current : [...current, folderEntry]);
         }
-        onNotice(`已创建${draft.mediaKind === 'image' ? '图片' : '视频'}进度“${generatedName}”（版本 V${draft.versionKey}）`);
+        onNotice(rootBaselineError
+          ? `根版本“${generatedName}”已创建，但跟踪基线建立失败；可从刷新版本跟踪重试：${rootBaselineError}`
+          : `已创建${draft.mediaKind === 'image' ? '图片' : '视频'}进度“${generatedName}”（版本 V${draft.versionKey}）`, rootBaselineError ? 8000 : undefined);
         void loadProgressFolders();
         void refresh('');
         return;
@@ -194,6 +201,10 @@ export const createProjectProgressWorkflow = ({
           safeStorageSet(`photoflow:tracking-session:${workspacePath}:${project.name}:${updated.progressFolder.id}`, started.sessionId);
           setTrackingConfirmationProgressId(updated.progressFolder.id);
           if (started.sessionStatus === 'pending_confirm' || started.sessionStatus === 'committing' || started.sessionStatus === 'failed') setTrackingConfirmationSessionId(started.sessionId);
+        } else if (policy.trackingEnabled && !draft.parentProgressId && policyChanged) {
+          const baseline = await projectWorkspaceClient.registerVersionBaseline(workspacePath, project.status, project.name, relativePath);
+          if (!baseline.success) onNotice(`进度修改已保存，但首版跟踪启动失败：${baseline.error || '可从刷新版本跟踪重试'}`, 8000);
+          else onNotice(`已更新根版本“${updated.progressFolder.displayName}”的跟踪基线。`);
         } else {
           onNotice(`已修改进度“${updated.progressFolder.displayName}”。`);
         }
@@ -270,7 +281,13 @@ export const createProjectProgressWorkflow = ({
         if (!parentFolder) {
           setWorkspaceActivityMessage('正在建立首个版本的跟踪记录…');
           const baseline = await projectWorkspaceClient.registerVersionBaseline(workspacePath, project.status, project.name, targetRelativePath);
-          if (!baseline.success) throw new Error(baseline.error || '无法建立首版跟踪');
+          if (!baseline.success) {
+            await loadProgressFolders();
+            setWorkspaceActivityMessage('');
+            onNotice(`根版本“${progressFolder.displayName}”已登记，但跟踪基线建立失败；可从刷新版本跟踪重试：${baseline.error || '未知错误'}`, 8000);
+            openCreatedProgressEditor();
+            return;
+          }
           await loadProgressFolders();
           setWorkspaceActivityMessage('');
           onNotice(`已标记并建立首版跟踪：${progressFolder.displayName}`);
@@ -385,7 +402,12 @@ export const createProjectProgressWorkflow = ({
       if (!parentFolder) {
         setWorkspaceActivityMessage(appendTarget ? '正在把本次追加文件写入首版跟踪记录…' : '正在建立首个版本的跟踪记录…');
         const baseline = await projectWorkspaceClient.registerVersionBaseline(workspacePath, project.status, project.name, imported.folder.relativePath);
-        if (!baseline.success) throw new Error(baseline.error || '无法建立首版跟踪');
+        if (!baseline.success) {
+          await loadProgressFolders();
+          setWorkspaceActivityMessage('');
+          setProgressImportCompletion(`文件已导入且根版本“${progressFolder.displayName}”已登记，但跟踪基线建立失败；可从刷新版本跟踪重试：${baseline.error || '未知错误'}`);
+          return;
+        }
         await loadProgressFolders();
         setWorkspaceActivityMessage('');
         setProgressImportCompletion(appendTarget
@@ -440,7 +462,7 @@ export const createProjectProgressWorkflow = ({
   const unregisterLegacyOrphanProgress = async (progressFolder: ProgressFolder) => {
     if (progressFolder.nodeRole !== 'progress' || progressFolder.parentProgressId) return;
     const confirmed = await appDialog.confirm({
-      title: '取消旧版游离进度登记？',
+      title: '取消根版本登记？',
       message: `“${progressFolder.displayName}”会恢复为普通文件夹；只移除版本元数据，不会删除或移动文件。`,
       confirmLabel: '取消版本登记',
       tone: 'danger',
@@ -449,7 +471,7 @@ export const createProjectProgressWorkflow = ({
     const result = await projectWorkspaceClient.unregisterProgressFolder(workspacePath, project.name, progressFolder.id);
     if (!result.success) { onNotice(`取消版本登记失败：${result.error || '未知错误'}`, 7000); return; }
     await loadProgressFolders();
-    onNotice(`已保留“${progressFolder.displayName}”的物理文件夹并移除旧版游离进度元数据。`);
+    onNotice(`已保留“${progressFolder.displayName}”的物理文件夹并移除根版本元数据。`);
   };
   const submitFolderMarkSetup = async (draft: FolderMarkDraft) => {
     if (progressSubmittingRef.current) return;
@@ -457,8 +479,8 @@ export const createProjectProgressWorkflow = ({
       const panelDraft = draft.progress;
       const parent = selectableVersionParents(progressFolders, { mediaKind: panelDraft.mediaKind, relationKind: 'main' })
         .find(folder => folder.id === panelDraft.parentProgressId);
-      if (!parent || !isUserVersionKey(panelDraft.versionKey || '')) {
-        onNotice('请先选择同媒体类型的原始素材或有效进度父节点。');
+      if (panelDraft.parentProgressId && !parent || !isUserVersionKey(panelDraft.versionKey || '')) {
+        onNotice('请选择有效的版本序号和父版本。');
         return;
       }
       const policy = normalizeTrackingPolicy('main', panelDraft);
@@ -467,7 +489,7 @@ export const createProjectProgressWorkflow = ({
         mediaKind: panelDraft.mediaKind,
         relation: (panelDraft.versionKind || versionKindForParent(panelDraft.versionKey, parent)) === 'branch' ? 'branch' : 'root',
         relationKind: 'main',
-        parentProgressId: parent.id,
+        parentProgressId: parent?.id || '',
         versionKey: panelDraft.versionKey || '',
         progressName: panelDraft.displayName,
         trackingEnabled: policy.trackingEnabled,
@@ -476,7 +498,7 @@ export const createProjectProgressWorkflow = ({
         sourcePaths: [],
         renameSources: policy.renameFromParent,
         copyMissingFromParent: policy.copyMissingFromParent,
-        workflowInputProgressIds: defaultWorkflowInputIds(progressFolders, versionGraphEdges, parent.id),
+        workflowInputProgressIds: parent ? defaultWorkflowInputIds(progressFolders, versionGraphEdges, parent.id) : [],
         targetRelativePath: draft.relativePath,
         preserveFolderName: Boolean(panelDraft.targetFolderLocked),
       };

@@ -6,6 +6,7 @@ import type { AppConfig, ProjectFileEntry } from '../types';
 import { projectWorkspaceClient } from '../platform/project-workspace-client';
 import { VideoHoverThumbnail } from './VideoHoverThumbnail';
 import {
+  PROJECT_THUMBNAIL_RECHECK_EVENT,
   deleteMediaThumbnailPreview,
   findCachedMediaThumbnailPreview,
   forgetMediaThumbnailPreviews,
@@ -37,6 +38,18 @@ export const MediaThumbnail = ({ entry, cacheConfig, requestedSize, queueOrder, 
   const previewSourceRef = useRef({ path: entry.path, updatedAt: entry.updatedAt });
   const thumbnailRequestRef = useRef<{ key: string; promoted: boolean; promise: ReturnType<typeof projectWorkspaceClient.getMediaThumbnail> }>();
   const failedPreviewLoadCountRef = useRef(0);
+  useEffect(() => {
+    const recheck = () => {
+      failedPreviewLoadCountRef.current = 0;
+      thumbnailRequestRef.current = undefined;
+      // The source may have changed while filesystem notifications were lost.
+      // Keep the painted image until a visible tile has checked the source.
+      setPreview(current => ({ ...current, size: 0 }));
+      setSourceRevision(version => version + 1);
+    };
+    window.addEventListener(PROJECT_THUMBNAIL_RECHECK_EVENT, recheck);
+    return () => window.removeEventListener(PROJECT_THUMBNAIL_RECHECK_EVENT, recheck);
+  }, []);
   useEffect(() => {
     failedPreviewLoadCountRef.current = 0;
     const previousSource = previewSourceRef.current;

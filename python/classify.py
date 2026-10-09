@@ -2424,6 +2424,8 @@ def split_broll_video(input_path, keep_original=False):
 
 
 def stage_import_and_organize(sd_path, dest_path, split_threshold_hours=2.0, should_split=None, generate_video_preview=False, split_large_files=False, project_routes=None, direct_project=False, video_preview_quality='medium', direct_source=False, source_paths=None, delete_source=False, generate_jpg_from_raw=False, import_session='', date_filter='all', split_import_videos=False, transcode_import_videos=False, transcode_settings=None):
+    if transcode_import_videos and (transcode_settings or {}).get('colorMode') == 'dolby-vision':
+        split_large_files = split_import_videos = False
     # 记录原始文件列表，用于最后的清理
     original_sd_files = []
     success_imported_count = 0
@@ -2874,6 +2876,8 @@ def stage_import_and_organize(sd_path, dest_path, split_threshold_hours=2.0, sho
 
 def stage_import_broll(sd_path, dest_path, project_routes=None, direct_source=False, source_paths=None, delete_source=False, split_large_files=False, import_session='', date_filter='all', split_import_videos=False, transcode_import_videos=False, transcode_settings=None):
     """Promote staged media into each selected project's B-roll folder."""
+    if transcode_import_videos and (transcode_settings or {}).get('colorMode') == 'dolby-vision':
+        split_large_files = split_import_videos = False
     created_files = []
     created_broll_folders = []
     moved_staged_files = {}

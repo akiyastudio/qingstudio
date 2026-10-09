@@ -782,7 +782,14 @@ def images_are_strong_duplicates(first, second):
         with Image.open(first) as left, Image.open(second) as right:
             if left.size != right.size:
                 return False
-            return np.array_equal(np.asarray(left.convert("RGB")), np.asarray(right.convert("RGB")))
+            # Video frames can show the same scene while differing slightly from
+            # encoding noise. Keep visible edits and motion by requiring both a
+            # small average error and very few substantially changed pixels.
+            preview_size = (256, 256)
+            left_preview = np.asarray(left.convert("RGB").resize(preview_size, Image.Resampling.LANCZOS), dtype=np.int16)
+            right_preview = np.asarray(right.convert("RGB").resize(preview_size, Image.Resampling.LANCZOS), dtype=np.int16)
+            difference = np.abs(left_preview - right_preview)
+            return float(difference.mean()) <= 6.0 and float((difference.max(axis=2) > 32).mean()) <= 0.002
     except Exception:
         return False
 
@@ -792,21 +799,20 @@ def process_images_deduplication(generated_files):
     result = {"duplicateCount": 0, "recycledCount": 0, "failedCount": 0}
     if not files:
         return result
-    hashes = {}
+    candidates = []
     for path in files:
         image_hash = calculate_image_hash(path)
         if image_hash:
-            hashes.setdefault(image_hash, []).append(path)
+            candidates.append((path, int(image_hash, 16)))
     duplicates = []
-    for paths in hashes.values():
-        if len(paths) > 1:
-            paths.sort(key=lambda path: path.stat().st_size, reverse=True)
-            keepers = []
-            for path in paths:
-                if any(images_are_strong_duplicates(path, keeper) for keeper in keepers):
-                    duplicates.append(path)
-                else:
-                    keepers.append(path)
+    candidates.sort(key=lambda item: item[0].stat().st_size, reverse=True)
+    keepers = []
+    for path, image_hash in candidates:
+        if any((image_hash ^ keeper_hash).bit_count() <= 6 and images_are_strong_duplicates(path, keeper)
+               for keeper, keeper_hash in keepers):
+            duplicates.append(path)
+        else:
+            keepers.append((path, image_hash))
     result["duplicateCount"] = len(duplicates)
     for path in duplicates:
         try:

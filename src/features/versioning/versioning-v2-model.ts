@@ -235,7 +235,7 @@ export const versionTreeNodeBadgeLabel = (folder: Pick<ProgressFolder, 'nodeRole
 };
 
 export const progressTrackingAction = (folder: ProgressFolder): 'refresh' | 'resume' | 'repair' | null => {
-  if (folder.folderMissing || folder.nodeRole !== 'progress' || folder.relationKind !== 'main' || !folder.parentProgressId) return null;
+  if (folder.folderMissing || folder.nodeRole !== 'progress' || folder.parentProgressId && folder.relationKind !== 'main') return null;
   if (folder.trackingState === 'needs_repair') return 'repair';
   if (!folder.trackingEnabled || folder.trackingState === 'disabled') return null;
   if (folder.trackingState === 'pending_compare' || folder.trackingState === 'pending_confirm' || folder.trackingState === 'committing') return 'resume';
@@ -260,7 +260,7 @@ export const planProgressRootMove = (relativePath: string) => {
 export const isStructuralMainParent = (folder: ProgressFolder) => !folder.folderMissing
   && versionSourceMetadata(folder).parentCapability === 'structural'
   && folder.relationKind !== 'auxiliary'
-  && (folder.nodeRole === 'progress' && Boolean(folder.parentProgressId) && folder.relationKind === 'main'
+  && (folder.nodeRole === 'progress' && (!folder.parentProgressId || folder.relationKind === 'main')
     || folder.nodeRole === 'original' && folder.artifactKind !== 'companion' && folder.artifactKind !== 'preview');
 
 export const selectableVersionParents = (folders: ProgressFolder[], draft: { mediaKind: ProgressFolder['mediaKind']; relationKind: VersionRelationKind; existingProgressId?: string }) => {

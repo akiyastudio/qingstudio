@@ -59,7 +59,7 @@ export const createProjectProgressSetup = ({
   const progressVersionIsValid = (draft: ProgressSetupDraft) => {
     if (progressRelationInspection.needsRepair) return false;
     if (!isUserVersionKey(draft.versionKey)) return false;
-    if (!draft.parentProgressId) return false;
+    if (!draft.parentProgressId) return draft.relation !== 'branch' && versionKeyMatchesParentKind(draft.versionKey, undefined, 'main');
     const parent = selectableVersionParents(progressFolders, draft).find(folder => folder.id === draft.parentProgressId);
     return Boolean(parent && !progressSubtreeIds(draft.existingProgressId).has(parent.id)
       && versionKeyMatchesParentKind(draft.versionKey, parent, draft.relation === 'branch' ? 'branch' : 'main'));
@@ -99,8 +99,8 @@ export const createProjectProgressSetup = ({
     const parentId = selectedParent?.id || '';
     const versionKey = selectedParent
       ? relation === 'branch' ? nextVersionKeys(sourceFolders, mediaKind, selectedParent).branch : nextVersionKeys(sourceFolders, mediaKind, selectedParent).main
-      : '';
-    return { mode, mediaKind, relation: actualRelation, relationKind: 'main', parentProgressId: parentId, versionKey, progressName: '', trackingEnabled: Boolean(parentId) && mode !== 'create', deleteSourceAfterImport: importDefaults.deleteSourceAfterImport, sourcePaths: [], renameSources: false, copyMissingFromParent: false, workflowInputProgressIds: parentId ? defaultWorkflowInputIds(sourceFolders, versionGraphEdges, parentId) : [] };
+      : nextVersionKeys(sourceFolders, mediaKind, undefined).main;
+    return { mode, mediaKind, relation: actualRelation, relationKind: 'main', parentProgressId: parentId, versionKey, progressName: '', trackingEnabled: mode !== 'create', deleteSourceAfterImport: importDefaults.deleteSourceAfterImport, sourcePaths: [], renameSources: false, copyMissingFromParent: false, workflowInputProgressIds: parentId ? defaultWorkflowInputIds(sourceFolders, versionGraphEdges, parentId) : [] };
   };
   const openProgressSetup = (mode: 'create' | 'import', sourcePaths: string[] = []) => {
     setShowCreateMenu(false);

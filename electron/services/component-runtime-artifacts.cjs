@@ -24,7 +24,7 @@ const registerRuntimeFolderArtifacts = async ({ result, policy, inputs, scope, c
       progressFolders = listed.progressFolders || [];
     }
     const parent = progressFolders.find(item => item.folderPath && comparable(item.folderPath) === comparable(sourceFolder)
-      && !item.folderMissing && item.mediaKind === policy.mediaKind && (item.nodeRole === 'original' && !item.artifactKind || item.nodeRole === 'progress' && item.parentProgressId && item.relationKind === 'main'));
+      && !item.folderMissing && item.mediaKind === policy.mediaKind && (item.nodeRole === 'original' && !item.artifactKind || item.nodeRole === 'progress' && (!item.parentProgressId || item.relationKind === 'main')));
     if (!parent) { skipped.push({ index, reason: 'source-not-registered' }); continue; }
     const outputKey = comparable(outputFolder);
     if (seen.has(outputKey)) throw hostError(CODES.INVALID_REQUEST, 'Runtime output folder was mapped more than once');

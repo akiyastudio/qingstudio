@@ -52,8 +52,8 @@ const estimateBrollDiskRequirements = ({ sources, preserveOriginal, splitLargeFi
   // false ENOSPC failures merely because a high bitrate was selected.
   const transcodeMultiplier = explicitBitrate > 0 ? 1.5 : 1.25;
   const transcodeInputBytes = sources.reduce((sum, item) => sum + (transcodeVideos && BROLL_VIDEO_EXTENSIONS.has(item.extension) ? item.stat.size : 0), 0);
-  // Include one input-sized fallback because private staging prefers a
-  // hardlink but must safely fall back to a real copy.
+  // Transcoding uses an independent staging copy so linking/unlinking cannot
+  // change the imported original's ctime and invalidate rollback ownership.
   const transcodeBytes = Math.ceil(transcodeInputBytes * (transcodeMultiplier + 1));
   const rawTotalBytes = copyBytes + moveBytes + splitBytes + transcodeBytes;
   return {
@@ -364,6 +364,7 @@ const runJsonLineWorker = ({ getRunConfig, processSupervisor, prefix, script, ar
   let stderr = '';
   let stdoutBytes = 0;
   let reportedError = '';
+  const warningDetails = [];
   let success = false;
   let settled = false;
   let terminating = false;
@@ -396,6 +397,10 @@ const runJsonLineWorker = ({ getRunConfig, processSupervisor, prefix, script, ar
       throw Object.assign(new Error(`${label} 返回了无效 JSON 消息`), { code: 'BROLL_WORKER_PROTOCOL' });
     }
     if (payload.type === 'error') reportedError = payload.message || `${label}失败`;
+    if (payload.type === 'warning' && typeof payload.message === 'string') {
+      warningDetails.push(payload.message.slice(0, 2000));
+      if (warningDetails.length > 3) warningDetails.shift();
+    }
     if (payload.type === 'success') success = true;
     onMessage?.(payload);
   };
@@ -416,7 +421,10 @@ const runJsonLineWorker = ({ getRunConfig, processSupervisor, prefix, script, ar
     void (async () => {
       if (buffer.trim()) consumeLine(buffer);
       if (cancelRequested || isCancelled?.()) throw cancelledError();
-      if (code !== 0 || reportedError) throw new Error(reportedError || stderr.trim() || `${label}进程退出，代码 ${code}`);
+      if (code !== 0 || reportedError) {
+        const summary = reportedError || stderr.trim() || `${label}进程退出，代码 ${code}`;
+        throw new Error([summary, ...new Set(warningDetails.filter(detail => !summary.includes(detail)))].join('\n'));
+      }
       if (!success) throw new Error(`${label}未返回成功消息`);
       return { code };
     })().then(value => finish(resolve, value), fail);
@@ -461,17 +469,8 @@ const runSplitter = async ({ getRunConfig, processSupervisor, source, outputDire
   } finally { await fs.promises.rm(stagingDirectory, { recursive: true, force: true }).catch(() => undefined); }
 };
 
-const runTranscoder = async ({ getRunConfig, processSupervisor, source, outputDirectory = path.dirname(source), settings, onProgress, isCancelled, workerOptions = {} }) => {
-  const stagingDirectory = await fs.promises.mkdtemp(path.join(outputDirectory, '.photoflow-broll-transcode-'));
-  const stagedSource = path.join(stagingDirectory, path.basename(source));
-  let published = null;
-  try {
-    throwIfCancelled(isCancelled);
-    try { await fs.promises.link(source, stagedSource); }
-    catch { await fs.promises.copyFile(source, stagedSource, fs.constants.COPYFILE_EXCL); }
-    const before = await snapshotDirectory(stagingDirectory);
-    const args = [
-    stagedSource,
+const brollTranscodeArgs = (sources, settings) => [
+    ...sources,
     '--container', settings?.container || 'mp4',
     '--video-mode', settings?.videoMode || 'h264',
     '--quality', settings?.quality || 'balanced',
@@ -491,6 +490,19 @@ const runTranscoder = async ({ getRunConfig, processSupervisor, source, outputDi
     ...(Number(settings?.videoBitrateMbps) > 0 ? ['--video-bitrate-mbps', String(settings.videoBitrateMbps)] : []),
     '--output-mode', 'new',
     ];
+
+const runTranscoder = async ({ getRunConfig, processSupervisor, source, outputDirectory = path.dirname(source), settings, onProgress, isCancelled, workerOptions = {} }) => {
+  const stagingDirectory = await fs.promises.mkdtemp(path.join(outputDirectory, '.photoflow-broll-transcode-'));
+  const stagedSource = path.join(stagingDirectory, path.basename(source));
+  let published = null;
+  try {
+    throwIfCancelled(isCancelled);
+    // Hardlinks change the original's ctime on creation/removal, invalidating
+    // the identity captured by the enclosing import transaction.
+    await fs.promises.copyFile(source, stagedSource, fs.constants.COPYFILE_EXCL);
+    throwIfCancelled(isCancelled);
+    const before = await snapshotDirectory(stagingDirectory);
+    const args = brollTranscodeArgs([stagedSource], settings);
     let output = '';
     await runJsonLineWorker({
       getRunConfig, processSupervisor, prefix: 'broll-transcode', script: 'ffmpeg_transcode.py', args,
@@ -509,6 +521,38 @@ const runTranscoder = async ({ getRunConfig, processSupervisor, source, outputDi
     if (published) await removeOwnedFile(published);
     throw error;
   } finally { await fs.promises.rm(stagingDirectory, { recursive: true, force: true }).catch(() => undefined); }
+};
+
+// Probe original paths before any import mutation. Explicit color output and
+// stream-copy settings already express the user's intent and need no prompt.
+const inspectBrollDolbyVision = async ({ sources, settings, getRunConfig, processSupervisor, isCancelled, onProgress }) => {
+  if (settings.videoMode === 'copy' || (settings.colorMode && !['auto', 'dolby-vision'].includes(settings.colorMode))) return { conflicts: [], canPreserve: false };
+  const videos = sources.filter(item => BROLL_VIDEO_EXTENSIONS.has(item.extension));
+  const conflicts = [];
+  let canPreserve = videos.length > 0;
+  for (let index = 0; index < videos.length; index += 20) {
+    throwIfCancelled(isCancelled);
+    const batch = videos.slice(index, index + 20);
+    let mediaInfo;
+    await runJsonLineWorker({
+      getRunConfig, processSupervisor, prefix: 'broll-inspect', script: 'ffmpeg_transcode.py',
+      args: [...brollTranscodeArgs(batch.map(item => item.path), settings), '--inspect-only', ...(settings.colorMode === 'dolby-vision' ? [] : ['--skip-capability-probe'])],
+      label: '花絮视频检查', isCancelled, deadlineMs: 120000,
+      onMessage: payload => {
+        if (payload.type === 'success') mediaInfo = payload.mediaInfo;
+        if (payload.type === 'progress') onProgress?.(payload.message);
+      },
+    });
+    if (!Array.isArray(mediaInfo) || mediaInfo.length !== batch.length
+      || batch.some(item => !mediaInfo.some(info => typeof info?.path === 'string' && pathKey(info.path) === pathKey(item.path)))) {
+      throw new Error('花絮视频检查未返回完整结果，请重试');
+    }
+    for (const info of mediaInfo) if (settings.colorMode !== 'dolby-vision' && info.dynamicHdr === 'Dolby Vision') conflicts.push(info.path);
+    canPreserve &&= mediaInfo.every(info => info.codec === 'hevc' && info.pixelFormat === 'yuv420p10le'
+      && info.dolbyVision?.profile === 8 && info.dolbyVision?.compatibilityId === 4
+      && info.dolbyVision?.rpu === 1 && info.dolbyVision?.el === 0 && info.dolbyVision?.bl === 1);
+  }
+  return { conflicts, canPreserve };
 };
 
 const registerBrollImportIpc = ({
@@ -554,9 +598,10 @@ const registerBrollImportIpc = ({
     try {
       const deleteSourceAfterImport = options?.deleteSourceAfterImport === true;
       const preserveOriginal = !deleteSourceAfterImport;
-      const splitLargeFiles = Boolean(options?.splitVideosOnImport ?? options?.splitLargeFiles);
-      const transcodeVideos = Boolean(options?.transcodeVideosOnImport);
-      const transcodeSettings = options?.transcodeSettings || {};
+      let splitLargeFiles = Boolean(options?.splitVideosOnImport ?? options?.splitLargeFiles);
+      let transcodeVideos = Boolean(options?.transcodeVideosOnImport);
+      let transcodeSettings = options?.transcodeSettings || {};
+      if (transcodeVideos && transcodeSettings.colorMode === 'dolby-vision') splitLargeFiles = false;
       const projectPath = path.resolve(getProjectPath(workspacePath, status, projectName));
       let sourcePaths = Array.isArray(options?.sourcePaths) ? options.sourcePaths.map(source => String(source)) : [];
       if (!sourcePaths.length) {
@@ -571,7 +616,6 @@ const registerBrollImportIpc = ({
       if (sourcePaths.length > 500) throw new Error('一次最多导入 500 个花絮文件或文件夹');
 
       const destinationDir = assertInside(projectPath, path.join(projectPath, '花絮'), '花絮目录');
-      await fs.promises.mkdir(destinationDir, { recursive: true });
 
       task = createProjectFileTask({
         backgroundTasks, event, operationId, operation: 'import-broll', title: `导入花絮 · ${projectName}`,
@@ -601,8 +645,55 @@ const registerBrollImportIpc = ({
         const identity = identityKey(await fs.promises.lstat(info.path, { bigint: true }), await fs.promises.realpath(info.path));
         if (sourceIdentities.has(identity)) continue;
         sourceIdentities.add(identity);
-        sources.push({ ...info, extension });
+        sources.push({ ...info, extension, inspectedIdentity: identity });
       }
+      if (transcodeVideos) {
+        task.setPausable(false);
+        const { conflicts, canPreserve } = await inspectBrollDolbyVision({
+          sources, settings: transcodeSettings, getRunConfig, processSupervisor,
+          isCancelled: () => job.cancelled,
+          onProgress: message => publish({ phase: 'scanning', progress: 0, currentName: message }),
+        });
+        throwIfCancelled(() => job.cancelled);
+        if (conflicts.length) {
+          const choice = await dialog.showMessageBox(getMainWindow(), {
+            type: 'question', title: translateNative('broll.dolby.title'),
+            message: translateNative('broll.dolby.message', { count: conflicts.length }),
+            detail: translateNative('broll.dolby.detail', { files: conflicts.slice(0, 5).map(file => path.basename(file)).join('\n') }),
+            buttons: ['broll.dolby.sdr', 'broll.dolby.original', 'broll.dolby.settings', 'broll.dolby.cancel', ...(canPreserve ? ['video.dolby.preserve'] : [])].map(key => translateNative(key)),
+            defaultId: 0, cancelId: 3, noLink: true,
+          });
+          throwIfCancelled(() => job.cancelled);
+          if (choice.response === 0) {
+            transcodeSettings = { ...transcodeSettings, container: 'mp4', videoMode: 'h264', colorMode: 'sdr', bitDepth: '8' };
+          } else if (choice.response === 1) {
+            transcodeVideos = false;
+            splitLargeFiles = false;
+          } else if (choice.response === 4 && canPreserve) {
+            transcodeSettings = { ...transcodeSettings, container: 'mp4', videoMode: 'h265', colorMode: 'dolby-vision', bitDepth: '10',
+              resolution: 'original', frameRate: 'original', frameRateMode: 'preserve', rotation: 'auto', aspectMode: 'preserve',
+              subtitleMode: 'copy', videoBitrateMbps: Number(transcodeSettings.videoBitrateMbps) || 20 };
+            splitLargeFiles = false;
+            await inspectBrollDolbyVision({ sources, settings: transcodeSettings, getRunConfig, processSupervisor,
+              isCancelled: () => job.cancelled });
+          } else {
+            task.cancelled();
+            return {
+              success: true, cancelled: true, operationId, taskNotificationOwned,
+              requiresTranscodeSettings: choice.response === 2,
+            };
+          }
+        }
+        task.setPausable(true);
+      }
+      throwIfCancelled(() => job.cancelled);
+      // A settings dialog can stay open while another program replaces inputs.
+      // Revalidate the entire batch before moving even the first file.
+      for (const item of sources) {
+        const current = identityKey(await fs.promises.lstat(item.path, { bigint: true }), await fs.promises.realpath(item.path));
+        if (current !== item.inspectedIdentity) throw new Error(`花絮源文件在检查后已变化，请重新导入：${path.basename(item.path)}`);
+      }
+      await fs.promises.mkdir(destinationDir, { recursive: true });
       const totalBytes = sources.reduce((sum, item) => sum + item.stat.size, 0);
       const destinationStat = await fs.promises.stat(destinationDir);
       const diskRequirements = estimateBrollDiskRequirements({
@@ -862,6 +953,7 @@ module.exports = {
     splitFamilyExists,
     uniqueSplitDestination,
     runJsonLineWorker,
+    inspectBrollDolbyVision,
     runSplitter,
     runTranscoder,
     snapshotDirectory,

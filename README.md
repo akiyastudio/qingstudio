@@ -45,6 +45,7 @@ npm run electron:dev
 
 ```powershell
 npm test
+npm run test:database
 npm run test:preview
 npm run test:host-player
 npm run build

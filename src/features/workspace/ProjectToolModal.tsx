@@ -49,7 +49,7 @@ const TOOL_MODAL_DETAILS: Record<string, { description: string; icon: React.Reac
 
 export const ToolModal = ({ title, ownerPageId, panelKind, open, busy = false, useBackgroundTaskBusyFallback = true, onClose, children }: { title: string; ownerPageId: string; panelKind: string; open: boolean; busy?: boolean; useBackgroundTaskBusyFallback?: boolean; onClose: () => void; children: React.ReactNode }) => {
   useLocale();
-  const { backgroundTasks, panelTasks, reportPanelTask, dismissPanelTask } = useTaskCenter();
+  const { backgroundTasks, panelTasks, reportPanelTask, withdrawPanelTask } = useTaskCenter();
   const backdropRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const taskKey = panelTaskSessionKey(ownerPageId, panelKind);
@@ -112,9 +112,11 @@ export const ToolModal = ({ title, ownerPageId, panelKind, open, busy = false, u
       if (task?.state !== 'running') reportPanelTask({ key: taskKey, ownerPageId, panelKind, title }, { state: 'running', progress: task?.progress || 0, message: task?.message || '任务正在运行…', logs: task?.logs || [] });
     } else if (manualBusyRef.current) {
       manualBusyRef.current = false;
-      dismissPanelTask(taskKey);
+      // The owner is ending its busy mirror; guarded user dismissal would
+      // refuse this snapshot because its last reported state is still running.
+      withdrawPanelTask(taskKey);
     }
-  }, [busy, dismissPanelTask, ownerPageId, panelKind, reportBusyAsPanelTask, reportPanelTask, task, taskKey, title]);
+  }, [busy, ownerPageId, panelKind, reportBusyAsPanelTask, reportPanelTask, task, taskKey, title, withdrawPanelTask]);
 
   const detail = TOOL_MODAL_DETAILS[panelKind];
   return createPortal(<div ref={backdropRef} aria-hidden={!open} className={open ? 'tool-panel-backdrop fixed inset-x-0 bottom-0 top-10 z-[360] flex cursor-default items-center justify-center p-4' : 'hidden'}><PanelTaskScope ownerPageId={ownerPageId} panelKind={panelKind} title={title}><section ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} className="tool-panel-window flex max-h-[90vh] w-full max-w-[960px] flex-col overflow-hidden border bg-white"><header className="tool-panel-header flex shrink-0 items-center gap-3 border-b border-slate-200 px-5"><span className="tool-panel-title-icon flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-blue-50 text-blue-600">{detail?.icon}</span><div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-bold text-slate-800">{title}</h3>{detail?.description && <p className="mt-0.5 truncate text-[10px] text-slate-400">{detail.description}</p>}</div><button type="button" onClick={onClose} aria-label={effectiveBusy ? t("ui.minimize.to.background.a466fe") : t("common.close")} title={effectiveBusy ? t("ui.minimize.to.background.the.task.keeps.8f7ffd") : t("common.close")} className={`rounded-md text-slate-500 hover:bg-slate-100 ${effectiveBusy ? 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold' : 'p-1.5'}`}>{effectiveBusy ? <><Minimize2 size={15}/>{t("ui.minimize.to.background.a466fe")}</> : <X size={18}/>}</button></header><div className="tool-panel-body min-h-0 flex-1 overflow-y-auto p-[22px]">{children}</div></section></PanelTaskScope></div>, document.body);

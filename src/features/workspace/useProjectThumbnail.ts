@@ -3,6 +3,7 @@ import type { ThumbnailState } from '../../types';
 import { projectWorkspaceClient } from '../../platform/project-workspace-client';
 
 export const requestThumbnail = <T,>(task: () => Promise<T>) => task();
+export const PROJECT_THUMBNAIL_RECHECK_EVENT = 'photoflow-project-thumbnail-recheck';
 const thumbnailSizeLabel = (requestedSize: number) => requestedSize <= 320 ? 'small' : requestedSize <= 640 ? 'medium' : 'large';
 const mediaThumbnailPreviewCache = new Map<string, string>();
 type ThumbnailSubscriber = (update: { state: ThumbnailState; previewUrls?: Partial<Record<'small' | 'medium' | 'large', string>> }) => void;

@@ -27,6 +27,7 @@ const createWorkspaceRepository = (client, operationsRepository = null) => {
   archiveProject: (root, payload) => client.call(root, 'archive_project', payload),
   unarchiveProject: (root, payload) => client.call(root, 'unarchive_project', payload),
   softDeleteProject: (root, payload) => client.call(root, 'delete', payload),
+  removeProjectReference: (root, payload) => client.call(root, 'delete', { ...payload, referenceOnly: true }),
   restoreProject: (root, payload) => client.call(root, 'restore_project', payload),
   listDeletedProjects: async root => client.call(root, 'deleted_projects_list', operationsRepository
     ? { undoRecords: (await operationsRepository.listUndoRecords(root)).records }

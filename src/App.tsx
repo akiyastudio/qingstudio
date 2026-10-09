@@ -13,6 +13,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ChevronRight, Lightbulb, Search } from 'lucide-react';
 import { useAppDialog } from './components/AppDialogProvider';
 import { ProjectNavigator } from './components/ProjectNavigator';
+import { ComponentIcon } from './components/ComponentIcon';
 import { SidebarSettingsButton } from './components/SidebarSettingsButton';
 import { AppErrorBoundary } from './features/app/AppErrorBoundary';
 import { BackupHomeCard, StartupWindowFrame, UpdateModal } from './features/app/AppChrome';
@@ -40,8 +41,9 @@ import type { BuiltInSettingsSection, SettingsSection } from './features/setting
 import { useStartupConfig } from './features/settings/startup-config';
 import { DashboardView, MatchView, VideoSplitView, type ImportCompletion } from './features/tools/ToolViews';
 import { useStartupSdAutoImport } from './features/tools/use-startup-sd-auto-import';
+import { importRecoveryNotice } from './features/tools/import-recovery-notice';
 import type { GlobalSearchSource } from './features/search/SearchAllPage';
-import type { AppConfig, AppUpdateInfo, BackupStatus, ComponentHostAction, ComponentPageOpenScope, ComponentSettingsPageContribution, HomeCardId, ToolType, WorkspaceProject } from './types';
+import type { AppConfig, AppUpdateInfo, BackupStatus, ComponentContribution, ComponentHostAction, ComponentPageOpenScope, ComponentSettingsPageContribution, HomeCardId, ToolType, WorkspaceProject } from './types';
 import { ColumnResizeHandle } from './features/app/AppShellLayout';
 import { BACKGROUND_TASK_DRAWER_DEFAULT_WIDTH, BACKGROUND_TASK_DRAWER_MAX_WIDTH, BACKGROUND_TASK_DRAWER_MIN_WIDTH, BACKGROUND_TASK_DRAWER_STORAGE_KEY, clampNumber, readStoredNumber } from './features/app/app-shell-layout-model';
 import { DEFAULT_CONFIG, DEFAULT_HOME_ORDER, localDateKey } from './features/app/app-config';
@@ -91,6 +93,7 @@ const App: React.FC = () => {
   const nativeWindow = useWorkspaceWindow(showNotice, Boolean(configLoaded && config && privacyStateLoaded));
   const autoBackedUpImportTasksRef = useRef(new Set<string>()); const cacheCleanupCheckedRef = useRef(false);
   const [homeOrder, setHomeOrder] = useState<HomeCardId[]>(DEFAULT_HOME_ORDER); const [draggedHomeCard, setDraggedHomeCard] = useState<HomeCardId | null>(null);
+  const openingHomeCards = useRef(new Set<string>());
   const [sidebarWidth, setSidebarWidth] = useState(() => readStoredNumber('photoflow:sidebar-width', 256));
   const { sidebarCollapsed, toggleSidebar } = useWindowSidebarState(nativeWindow);
   const [backgroundTaskDrawerOpen, setBackgroundTaskDrawerOpen] = useState(false);
@@ -268,7 +271,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!configLoaded || !config?.workspacePath) return;
-    void window.electronAPI.recoverMediaWorkflowImports(config.workspacePath).then(result => { if (result.failures.length) showNotice('媒体已导入，部分关系将在下次启动时重试恢复。'); }).catch(() => undefined); void refreshBackupStatus();
+    void window.electronAPI.recoverMediaWorkflowImports(config.workspacePath).then(result => {
+      const notice = importRecoveryNotice(result);
+      if (notice) showNotice(notice, 'warning');
+    }).catch(() => undefined);
+    void refreshBackupStatus();
     if ((!nativeTabsEnabled || initialWindow?.root) && config.backup.enabled && config.backup.automaticDaily) void window.electronAPI.runBackupIfDue(config.workspacePath);
   }, [configLoaded, config?.workspacePath, config?.backup.enabled, config?.backup.automaticDaily, config?.backup.targetPath, refreshBackupStatus, showNotice]);
 
@@ -514,6 +521,16 @@ const App: React.FC = () => {
     else { setSelectedProject(project); setProjectDestination(project.path); }
     setActiveTab('component');
     if (!await componentHost.open(action, project, workspacePath, insertAfterTabId, scope)) setActiveTab(scope?.contentKind === 'inspiration' ? 'inspiration' : 'project');
+  };
+  const openComponentHomeCard = async (contribution: ComponentContribution) => {
+    const key = `${contribution.componentId}:${contribution.contributionId}`;
+    if (openingHomeCards.current.has(key)) return;
+    openingHomeCards.current.add(key);
+    try {
+      const result = await window.electronAPI.openComponentHomeWindow({ componentId: contribution.componentId, contributionId: contribution.contributionId });
+      if (!result.success) showNotice(result.error || '无法打开插件窗口', 'error');
+    } catch (error) { showNotice(error instanceof Error ? error.message : '无法打开插件窗口', 'error'); }
+    finally { openingHomeCards.current.delete(key); }
   };
   const closeComponentPageTab = (page: typeof componentPages[number]) => componentHost.close(page);
   const disposeProjectComponentPages = componentHost.disposeProject;
@@ -782,6 +799,11 @@ const App: React.FC = () => {
                     <span className="min-w-0 flex-1"><span className="block text-base font-bold text-slate-800">{t("ui.global.search.f1c10d")}</span><span className="mt-1 block truncate text-xs text-slate-500">{t("ui.search.workspace.and.inspiration.library.files.f10750")}</span></span>
                     <ChevronRight size={19} className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-500"/>
                   </button>
+                  {componentContributions.filter(item => item.type === 'application.homeCard').map(item => <button key={`${item.componentId}:${item.contributionId}`} type="button" onClick={() => void openComponentHomeCard(item)} className="group flex min-w-0 items-center gap-4 rounded-xl border border-slate-200 bg-white px-5 py-5 text-left transition hover:border-blue-400 hover:bg-blue-50 hover:shadow-sm">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><ComponentIcon src={item.iconUrl} size={22}/></span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-base font-bold text-slate-800">{item.label}</span>{item.description && <span className="mt-1 block truncate text-xs text-slate-500">{item.description}</span>}</span>
+                    <ChevronRight size={19} className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-500"/>
+                  </button>)}
                 </div>;
           return <div key={card} className={draggedHomeCard === card ? 'opacity-40' : undefined}>{content}</div>;
         })}</div>

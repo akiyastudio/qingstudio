@@ -21,6 +21,7 @@ export const PROJECT_BACKGROUND_LOAD_DELAYS_MS = Object.freeze({
 
 export const PROJECT_WATCH_RECONCILE_COOLDOWN_MS = 30_000;
 export const PROJECT_WATCH_FALLBACK_REFRESH_MS = 60_000;
+export const PROJECT_BACKGROUND_RECHECK_MS = 30_000;
 
 export const shouldReconcileProjectWatch = (
   lastReconciledAt: number,

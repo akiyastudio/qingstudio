@@ -11,7 +11,7 @@ const COMPONENT_NOTIFICATION_DEDUPE_KEY = /^[a-z0-9][a-z0-9._:-]{0,79}$/i;
 const normalizeComponentNotificationRendererEvent = value => {
   if (!value || typeof value !== 'object' || typeof value.componentId !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,79}$/i.test(value.componentId)) return null;
   if (value.type === 'purge') return Object.keys(value).every(key => ['type', 'componentId'].includes(key)) ? Object.freeze({ type: 'purge', componentId: value.componentId }) : null;
-  if (value.type !== 'notification' || typeof value.id !== 'string' || !['project', 'application.settings', 'component.sidePanel', 'media.contextAction', 'project.contextAction', 'project.importProvider', 'project.exportProvider', 'application.command'].includes(value.surface)) return null;
+  if (value.type !== 'notification' || typeof value.id !== 'string' || !['project', 'application.settings', 'component.sidePanel', 'media.contextAction', 'project.contextAction', 'project.importProvider', 'project.exportProvider', 'application.command', 'application.homeCard'].includes(value.surface)) return null;
   if (!Object.keys(value).every(key => ['type', 'id', 'componentId', 'surface', 'notification'].includes(key))) return null;
   const notification = value.notification;
   if (!notification || Object.keys(notification).some(key => !['tone', 'message', 'dedupeKey'].includes(key)) || !COMPONENT_NOTIFICATION_TONES.has(notification.tone) || typeof notification.message !== 'string' || notification.message !== notification.message.trim() || notification.message.length < 1 || notification.message.length > 360 || (notification.dedupeKey !== undefined && (typeof notification.dedupeKey !== 'string' || !COMPONENT_NOTIFICATION_DEDUPE_KEY.test(notification.dedupeKey)))) return null;
@@ -161,6 +161,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openComponentPage: request => invokeFeature('component_open', 'component-host-open', request),
   openComponentSettingsPage: request => ipcRenderer.invoke('component-host-settings-open', request),
   openComponentContribution: request => invokeFeature('component_action', 'component-host-contribution-open', request),
+  openComponentHomeWindow: request => invokeFeature('component_action', 'component-host-home-window-open', request),
   onComponentPanelCloseRequested: callback => {
     if (typeof callback !== 'function') throw new TypeError('Component panel close callback must be a function');
     const listener = (_event, instanceId) => callback(String(instanceId || ''));
@@ -247,6 +248,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     importedPathsByProject: options?.importedPathsByProject && typeof options.importedPathsByProject === 'object' ? options.importedPathsByProject : {},
   }),
   trashWorkspaceProject: (workspacePath, status, name) => ipcRenderer.invoke('workspace-trash-project', workspacePath, status, name),
+  removeWorkspaceProjectReference: (workspacePath, status, name, projectId) => ipcRenderer.invoke('workspace-remove-project-reference', workspacePath, status, name, projectId),
   cleanupDeletedWorkspaceProjects: (workspacePath) => ipcRenderer.invoke('workspace-cleanup-deleted-projects', workspacePath),
   getProjectContents: (workspacePath, status, name) => ipcRenderer.invoke('workspace-project-contents', workspacePath, status, name),
   watchFileRoot: (workspacePath, status, name, options) => ipcRenderer.invoke('workspace-watch-file-root', workspacePath, status, name, options),

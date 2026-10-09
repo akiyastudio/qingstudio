@@ -864,20 +864,23 @@ const registerSystemIpc = context => {
         maximized: targetWindow.isMaximized(),
       });
       if (process.platform === 'win32') {
-        // A frameless maximized window can remain below the always-on-top
-        // Windows taskbar. Kiosk plus the screen-saver z-order guarantees the
-        // media surface covers the complete display until preview full-screen exits.
+        // Enter native full-screen before kiosk mode. A frameless maximized
+        // window alone can remain inside the work area or below the taskbar.
+        targetWindow.setFullScreen(true);
         targetWindow.setAlwaysOnTop(true, 'screen-saver', 1);
         targetWindow.setKiosk(true);
         targetWindow.show();
         targetWindow.focus();
         targetWindow.moveTop();
-        return targetWindow.isKiosk() && targetWindow.isAlwaysOnTop();
+        return targetWindow.isFullScreen() && targetWindow.isKiosk() && targetWindow.isAlwaysOnTop();
       }
       targetWindow.setFullScreen(true);
-      return targetWindow.isFullScreen();
+      // macOS enters full-screen asynchronously, so isFullScreen() can still
+      // report the previous state immediately after this call.
+      return true;
     }
     const restore = fullscreenRestoreState.get(targetWindow);
+    if (!restore) return false;
     targetWindow.setKiosk(restore?.kiosk ?? false);
     targetWindow.setFullScreen(restore?.fullScreen ?? false);
     targetWindow.setAlwaysOnTop(restore?.alwaysOnTop ?? false);

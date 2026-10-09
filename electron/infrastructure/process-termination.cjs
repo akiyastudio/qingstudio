@@ -1,6 +1,11 @@
 const { execFile } = require('child_process');
 
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, Math.max(0, milliseconds)));
+// The Job launcher can spend up to five seconds draining its terminal control
+// frame after reporting ActiveProcesses=0. Give its close a separate fence so
+// the database is not quarantined just because the shorter tree-stop deadline
+// elapsed while the helper was finishing after the Job became empty.
+const WINDOWS_JOB_HELPER_CLOSE_GRACE_MS = 6500;
 const childHasExited = child => !child || child.exitCode != null || child.signalCode != null;
 const childStreamsClosed = child => {
   const streams = [child?.stdout, child?.stderr].filter(Boolean);
@@ -40,7 +45,7 @@ const terminateWindowsProcessTree = (pid, deadlineAt, execFileImpl = execFile) =
   execFileImpl('taskkill.exe', ['/pid', String(pid), '/t', '/f'], { windowsHide: true, timeout }, error => error ? reject(error) : resolve());
 });
 
-const terminateAndWait = async (child, deadlineAt, { rollbackSettleMs = 25, platform = process.platform, execFileImpl = execFile } = {}) => {
+const terminateAndWait = async (child, deadlineAt, { rollbackSettleMs = 25, platform = process.platform, execFileImpl = execFile, jobHelperCloseGraceMs = WINDOWS_JOB_HELPER_CLOSE_GRACE_MS } = {}) => {
   if (!child) return { exited: true, forced: false };
   if (platform === 'test' && child.killed) return { exited: true, forced: true };
   const terminationDeadline = Number.isFinite(deadlineAt) ? deadlineAt : Date.now() + 2000;
@@ -52,7 +57,8 @@ const terminateAndWait = async (child, deadlineAt, { rollbackSettleMs = 25, plat
       error.code = 'PROCESS_TREE_TERMINATION_UNCONFIRMED'; error.pid = child.pid || null;
       throw error;
     }
-    const helperClosed = await waitForChildExit(child, terminationDeadline, { requireClose: true });
+    const helperCloseDeadline = Math.max(terminationDeadline, Date.now() + Math.max(0, jobHelperCloseGraceMs));
+    const helperClosed = await waitForChildExit(child, helperCloseDeadline, { requireClose: true });
     if (!helperClosed) {
       child.__photoFlowTreeTerminationUnconfirmed = true;
       const error = new Error('Windows Job reached ActiveProcesses=0 but its control helper did not close before the deadline');

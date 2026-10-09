@@ -428,7 +428,12 @@ export const MediaPreviewPane = ({ previewContext, decoder: availableDecoder, pa
     if (!fullscreen) return;
     setFullscreenControlsVisible(true);
     fullscreenControlsTimerRef.current = window.setTimeout(() => setFullscreenControlsVisible(false), FULLSCREEN_CONTROLS_HIDE_DELAY_MS);
-    void projectWorkspaceClient.setWindowFullscreen(true);
+    void projectWorkspaceClient.setWindowFullscreen(true).then(entered => {
+      if (!entered) setFullscreen(false);
+    }).catch(error => {
+      console.warn('Could not enter window fullscreen', error);
+      setFullscreen(false);
+    });
     return () => {
       window.clearTimeout(fullscreenControlsTimerRef.current);
       void projectWorkspaceClient.setWindowFullscreen(false);

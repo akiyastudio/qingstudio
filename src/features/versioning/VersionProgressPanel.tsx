@@ -66,6 +66,7 @@ export const VersionProgressPanel = ({ draft, folders, state = 'ready', progress
   const policy = normalizeTrackingPolicy(draft.relationKind, draft);
   const parents = selectableVersionParents(folders, { ...draft, relationKind: 'main' });
   const parent = parents.find(folder => folder.id === draft.parentProgressId);
+  const rootChoiceDisabled = Boolean(folders.find(folder => folder.id === draft.existingProgressId)?.parentProgressId);
   const movePlan = planProgressRootMove(draft.sourceRelativePath);
   const requiresMove = draft.mode !== 'create' && draft.mode !== 'modify' && movePlan.requiresMove;
   const busy = state === 'processing';
@@ -108,7 +109,9 @@ export const VersionProgressPanel = ({ draft, folders, state = 'ready', progress
     const nextSuggestions = nextVersionKeys(folders, draft.mediaKind, nextParent, draft.existingProgressId);
     update({
       parentProgressId,
-      versionKey: versionKind === 'branch' ? nextSuggestions.branch : nextSuggestions.main,
+      versionKind: nextParent ? versionKind : 'main',
+      versionKey: nextParent && versionKind === 'branch' ? nextSuggestions.branch : nextSuggestions.main,
+      ...(!nextParent ? { renameFromParent: false, copyMissingFromParent: false } : {}),
     });
   };
   const setMediaKind = (mediaKind: VersionProgressDraft['mediaKind']) => {
@@ -121,15 +124,14 @@ export const VersionProgressPanel = ({ draft, folders, state = 'ready', progress
       mediaKind,
       parentProgressId: nextParent?.id || '',
       versionKind: nextParent ? versionKind : 'main',
-      versionKey: nextParent ? versionKind === 'branch' ? nextSuggestions.branch : nextSuggestions.main : '',
+      versionKey: nextParent && versionKind === 'branch' ? nextSuggestions.branch : nextSuggestions.main,
     });
   };
-  const noAvailableParents = parents.length === 0;
-  const parentSelectionRequired = !parent;
+  const parentSelectionRequired = Boolean(draft.parentProgressId && !parent);
   const resolvedVersionKey = versionStructureValid ? normalizedVersionKey : '';
   const resolvedVersionLabel = `V${resolvedVersionKey || '—'}`;
   const parentVersionLabel = parent?.nodeRole === 'original' ? '原始素材' : parent ? `V${parent.versionKey}` : '';
-  const parentLabel = parent ? `${parent.nodeRole === 'original' ? '原始素材' : `V${parent.versionKey}`} · ${parent.displayName}` : '请选择父版本';
+  const parentLabel = parent ? `${parent.nodeRole === 'original' ? '原始素材' : `V${parent.versionKey}`} · ${parent.displayName}` : t('ui.independent.root.version');
   const outputFolderName = draft.targetFolderLocked ? targetName : generatedFolderName({ ...draft, versionKey: resolvedVersionKey });
   const locationLabel = draft.targetFolderLocked
     ? `使用现有文件夹“${targetName}”`
@@ -147,9 +149,7 @@ export const VersionProgressPanel = ({ draft, folders, state = 'ready', progress
         <b className="block text-sm">{t("ui.create.sub.branch.682821")}</b><span className="mt-1 block text-xs font-semibold tabular-nums">{parentVersionLabel} → V{suggestions.branch}</span>
       </button>
     </div>
-  </fieldset> : <Callout tone="warning" title={noAvailableParents ? t("ui.mark.original.media.first.f55977") : t("ui.choose.parent.version.cb7144")}>{noAvailableParents
-    ? t("ui.no.source.is.available.for.this.bf5b1a")
-    : t("ui.choose.original.media.or.existing.progress.f968a5")}</Callout>;
+  </fieldset> : <Callout title={t('ui.independent.root.version')}>{t('ui.independent.root.version.description')}</Callout>;
 
   if (state !== 'ready') {
     const totalCount = progress?.totalCount && progress.totalCount > 0 ? progress.totalCount : 0;
@@ -198,7 +198,7 @@ export const VersionProgressPanel = ({ draft, folders, state = 'ready', progress
       <div className="space-y-4">
         <div>
           <p className="text-xs font-semibold text-slate-600">{t("ui.parent.version.faaa7d")}</p>
-          {draft.contextLocked ? <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"><b className="block text-sm text-slate-800">{parentLabel}</b><span className="mt-1 block text-xs text-slate-400">{t("ui.started.from.the.version.tree.media.0485b9")}</span></div> : <select aria-label={t("ui.parent.version.faaa7d")} className={fieldClass} value={draft.parentProgressId} onChange={event => setParent(event.target.value)}><option value="" disabled>{noAvailableParents ? t("ui.no.parent.version.available.803d1d") : t("ui.choose.parent.version.cb7144")}</option>{parents.map(folder => <option key={folder.id} value={folder.id}>{folder.nodeRole === 'original' ? t("ui.original.media.value0.6fdbc4", { value0: folder.displayName }) : `V${folder.versionKey} · ${folder.displayName}`}</option>)}</select>}
+          {draft.contextLocked ? <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"><b className="block text-sm text-slate-800">{parentLabel}</b><span className="mt-1 block text-xs text-slate-400">{t("ui.started.from.the.version.tree.media.0485b9")}</span></div> : <select aria-label={t("ui.parent.version.faaa7d")} className={fieldClass} value={draft.parentProgressId} onChange={event => setParent(event.target.value)}><option value="" disabled={rootChoiceDisabled}>{t('ui.independent.root.version.option')}</option>{parents.map(folder => <option key={folder.id} value={folder.id}>{folder.nodeRole === 'original' ? t("ui.original.media.value0.6fdbc4", { value0: folder.displayName }) : `V${folder.versionKey} · ${folder.displayName}`}</option>)}</select>}
         </div>
         {!draft.contextLocked && draft.mode !== 'modify' && <fieldset><legend className="text-xs font-semibold text-slate-600">{t("ui.media.type.296225")}</legend><div className="mt-2 grid grid-cols-2 gap-2"><button type="button" aria-pressed={draft.mediaKind === 'image'} onClick={() => setMediaKind('image')} className={`h-10 rounded-lg border text-sm font-semibold ${draft.mediaKind === 'image' ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>{t("ui.image.d24c10")}</button><button type="button" aria-pressed={draft.mediaKind === 'video'} onClick={() => setMediaKind('video')} className={`h-10 rounded-lg border text-sm font-semibold ${draft.mediaKind === 'video' ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>{t("ui.video.c20f76")}</button></div></fieldset>}
         {versionKindControl}
@@ -207,14 +207,14 @@ export const VersionProgressPanel = ({ draft, folders, state = 'ready', progress
         </label>
         <label className="block text-xs font-semibold text-slate-600">{t("ui.folder.name.bacf70")}<input aria-label={t("ui.folder.name.bacf70")} className={fieldClass} value={draft.displayName} placeholder={t("ui.for.example.retouched.71a3f7")} onChange={event => update({ displayName: event.target.value, targetFolderLocked: false })}/>{namePresets.length > 0 && <span className="mt-2 flex flex-wrap gap-2">{namePresets.map(name => <button key={name} type="button" onClick={() => update({ displayName: name, targetFolderLocked: false })} className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 transition hover:border-blue-400 hover:bg-blue-100">{name}</button>)}</span>}</label>
         <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold text-blue-600">{draft.mode === 'modify' ? t("ui.after.change.8d6d51") : draft.targetFolderLocked ? t("ui.current.folder.9112e7") : t("ui.will.create.5cb828")}</p><p className="mt-1 text-base font-bold text-slate-900">{resolvedVersionLabel} · {outputFolderName}</p></div><span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 shadow-sm">{versionKind === 'branch' ? t("ui.sub.branch.c516a5") : parent?.nodeRole === 'original' ? t("ui.main.version.5b2599") : parent ? t("ui.continue.current.branch.cbcbb0") : t("ui.waiting.for.parent.version.2a1d48")}</span></div>
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold text-blue-600">{draft.mode === 'modify' ? t("ui.after.change.8d6d51") : draft.targetFolderLocked ? t("ui.current.folder.9112e7") : t("ui.will.create.5cb828")}</p><p className="mt-1 text-base font-bold text-slate-900">{resolvedVersionLabel} · {outputFolderName}</p></div><span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 shadow-sm">{versionKind === 'branch' ? t("ui.sub.branch.c516a5") : parent?.nodeRole === 'original' ? t("ui.main.version.5b2599") : parent ? t("ui.continue.current.branch.cbcbb0") : t('ui.independent.root.version')}</span></div>
           <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><div><dt className="text-slate-400">{t("ui.parent.version.faaa7d")}</dt><dd className="mt-0.5 font-semibold text-slate-700">{parentLabel}</dd></div><div><dt className="text-slate-400">{t("ui.location.1fb4d5")}</dt><dd className="mt-0.5 font-semibold text-slate-700">{locationLabel}</dd></div></dl>
         </div>
       </div>
     </Card>
     <Card title={t("ui.version.tracking.c4c7df")}>
       <label className={`flex gap-3 ${restrictedNode ? 'opacity-50' : ''}`}><input type="checkbox" className="mt-0.5" checked={policy.trackingEnabled} disabled={restrictedNode} onChange={event => updatePolicy({ trackingEnabled: event.target.checked })}/><span><b className="block text-sm text-slate-700">{t("ui.enable.version.tracking.270154")}</b><small className="mt-0.5 block text-xs leading-5 text-slate-400">{t("ui.detect.media.changes.in.this.folder.fd2319")}</small></span></label>
-      <div className={`mt-3 border-t border-slate-100 pt-3 ${!policy.trackingEnabled || restrictedNode ? 'opacity-50' : ''}`}><div>{([['renameFromParent', t("ui.inherit.previous.version.file.names.90c3c9"), t("ui.recheck.existing.matches.and.use.parent.9bf240")], ['copyMissingFromParent', t("ui.fill.missing.media.eae8e4"), t("ui.this.version.becomes.needs.refresh.when.72450b")]] as const).map(([key, title, help], index) => <label key={key} className={`flex gap-3 py-3 first:pt-0 last:pb-0 ${index ? 'border-t border-slate-100' : ''}`}><input type="checkbox" className="mt-0.5" checked={policy[key]} disabled={!policy.trackingEnabled || restrictedNode} onChange={event => updatePolicy({ [key]: event.target.checked })}/><span><b className="block text-sm text-slate-700">{title}</b><small className="mt-0.5 block text-xs leading-5 text-slate-400">{help}</small></span></label>)}</div></div>
+      <div className={`mt-3 border-t border-slate-100 pt-3 ${!policy.trackingEnabled || restrictedNode || !parent ? 'opacity-50' : ''}`}><div>{([['renameFromParent', t("ui.inherit.previous.version.file.names.90c3c9"), t("ui.recheck.existing.matches.and.use.parent.9bf240")], ['copyMissingFromParent', t("ui.fill.missing.media.eae8e4"), t("ui.this.version.becomes.needs.refresh.when.72450b")]] as const).map(([key, title, help], index) => <label key={key} className={`flex gap-3 py-3 first:pt-0 last:pb-0 ${index ? 'border-t border-slate-100' : ''}`}><input type="checkbox" className="mt-0.5" checked={policy[key]} disabled={!policy.trackingEnabled || restrictedNode || !parent} onChange={event => updatePolicy({ [key]: event.target.checked })}/><span><b className="block text-sm text-slate-700">{title}</b><small className="mt-0.5 block text-xs leading-5 text-slate-400">{help}</small></span></label>)}</div></div>
     </Card>
     </div>
     <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4"><span className="mr-auto max-w-xl text-xs leading-5 text-slate-400">{t("ui.the.parent.and.creation.mode.determine.654a52")}</span><button type="button" disabled={busy} onClick={onClose} className="dialog-secondary">{t("common.cancel")}</button><button type="button" disabled={busy || Boolean(versionError) || !resolvedVersionKey || parentSelectionRequired || (draft.mode === 'import' && !draft.sourcePaths?.length)} onClick={onSubmit} className="dialog-primary inline-flex items-center gap-2">{busy && <Loader2 size={15} className="animate-spin"/>}{requiresMove ? t("ui.continue.and.check.move.9ff6e9") : `${modeAction} ${resolvedVersionLabel}`}</button></div>

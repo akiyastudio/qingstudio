@@ -14,6 +14,23 @@ PhotoFlow 只提供唯一、无版本协商的当前 Host API。组件必须声�
 
 渲染桥接 `window.photoFlowComponent.contractVersion` 仍为 `1`；这是独立的小型 preload ABI，不是 Host API 版本，也不参与协商。Host 上下文不包含 Host API 版本字段。
 
+`component.sidePanel` 页面可调用 `await window.photoFlowComponent.openPanelWindow()`，在独立原生窗口打开同一 contribution 的第二个实例。窗口左上角显示插件图标和名称，右上角保留系统的最小化、最大化、关闭按钮；正文仅显示插件面板，不加载主程序界面。原面板继续保留；新实例继承当前项目、目录和安全选择的上下文，并沿用组件沙箱和 RPC allowlist。返回 `{windowId}`。同时最多保留 8 个插件面板窗口。关闭窗口、来源应用页面或卸载组件时，宿主销毁对应实例。
+
+插件可在 `componentHost.contributions` 中声明首页卡片入口，显示在“灵感库／设置备份／全局搜索”卡片旁：
+
+```json
+{
+  "type": "application.homeCard",
+  "id": "open-studio",
+  "label": "插件名称",
+  "description": "卡片中的简短说明",
+  "pageId": "studio-page",
+  "rpcMethods": ["studio.open.v1"]
+}
+```
+
+`pageId` 指向同一清单中的 `component.fullPage`；在清单顶层声明 `icon` 和 `displayName`，分别显示为卡片与窗口的插件图标、窗口标题。点击卡片会在独立原生窗口打开该页面，每次创建一个独立实例；窗口仅显示插件页面及系统标题栏。首页入口使用 `application.homeCard` 上下文，没有项目或文件选择，RPC 仍受该入口的 `rpcMethods` 限制，Host 能力按应用级命令权限限制。卸载、禁用或关闭来源应用页面时，宿主会关闭窗口。首页卡片和面板窗口合计最多 8 个。仅声明首页卡片和 fullPage 的组件也有效。
+
 ## 清单与权限
 
 带 UI 或组件服务的清单使用 Component Host contractVersion 2，并声明贡献项、服务协议/运行时/入口、版本化组件 RPC 白名单、无版本 Host 能力白名单和权限白名单；不声明 Host API compatibility。无事件时也要显式写空数组。能力需要匹配权限：
@@ -112,7 +129,7 @@ Host API 的项目只读扩展按 capability 与 permission 授权。`project.fi
 
 `network.fetch` 要求 canonical `origin` 与 URL origin 完全相同并属于 manifest `networkOrigins`。headers/secrets 必须为 plain object，mode、timeout、body 类型严格校验，GET/HEAD 禁止 body，base64 必须为 canonical 编码。单一总 deadline 与卸载 controller 从 secret 解析前开始，覆盖秘密锁/磁盘等待、DNS、连接、redirect 与响应；每跳过滤非 global 地址，并把验证地址直接交给 `agent:false` TLS transport lookup，原 hostname 用于 SNI、Host 和证书。跨 origin redirect 剥离 authorization/cookie/proxy header；301/302/303 转 GET 并清 body。secret 只能通过 `secretBindings` 注入固定 header。卸载经 capability barrier abort 活动请求，计数只在 finally 释放；普通 view 关闭不修改网络并发状态。
 
-Host API contribution 为 `component.sidePanel`、`media.contextAction`、`project.contextAction`、`project.importProvider`、`project.exportProvider`、`application.command`。每项声明 `id`、`label`、`pageId` 和独立 `rpcMethods` allowlist；pageId 必须引用包内 fullPage，RPC 必须属于 service。普通工具组件必须声明一个 `workspace.toolbarAction` 或至少一个 `component.sidePanel`（纯设置表单及纯解码器可使用各自文档说明的例外）；因此仅面板组件不需要创建新的组件标签页。项目入口绑定触发时的 scope 与 selection；跨目录选择以共同祖先为 scope，workspace toolbar 收到 Host 的完整安全选择并由插件自行过滤类型。灵感库文件页也提供这些入口，并在组件 context 中标记 `contentKind: "inspiration"`；宿主会忽略渲染进程传入的路径身份，重新绑定当前配置的灵感库根目录，且不开放版本树和项目进度能力。`component.sidePanel` 和 `project.contextAction` 可声明 `placement:"workspace.videoTools"`、`"workspace.imageTools"` 或 `"workspace.officeTools"`，进入项目文件页和灵感库工具栏／文件选择右键菜单的对应分组（视频工具、图片工具、Office 文档）。三个工具栏入口不随选择状态消失，Office 即使只有一个工具也保留下拉菜单；灵感库固定显示三个入口。任意 ID 的面板均支持挂载；project action 有同组件、同 pageId 的 toolbar action 时打开完整页面，否则走标准 contribution 打开流程。挂载入口不再重复显示在独立工具栏、Dock、右键根菜单或空白区域菜单，点击时传入完整安全 selection 和 contentKind。其他 contribution type 使用这些 placement 会被拒绝。sidePanel 还按 sourcePageId 隔离实例，并使用文件页统一工具面板外框。application command 使用无项目 application context，且只有实际含命令的全局 Dock 注册 `Ctrl/Cmd+Shift+P`。宿主 UI 分别在项目与灵感库工具栏/统一工具面板、媒体与目录右键菜单、导入/导出菜单及可搜索命令入口发现并打开这些 contribution。所有 surface 使用同一 sandbox preload，禁止导航、新窗口和 Node 集成；组件卸载、升级、项目、灵感库或所属文件页关闭会关闭对应 view。
+Host API contribution 为 `component.sidePanel`、`media.contextAction`、`project.contextAction`、`project.importProvider`、`project.exportProvider`、`application.command`、`application.homeCard`。每项声明 `id`、`label`、`pageId` 和独立 `rpcMethods` allowlist；pageId 必须引用包内 fullPage，RPC 必须属于 service。普通工具组件必须声明一个 `workspace.toolbarAction`、`component.sidePanel` 或 `application.homeCard`（纯设置表单及纯解码器可使用各自文档说明的例外）；因此仅面板组件不需要创建新的组件标签页。项目入口绑定触发时的 scope 与 selection；跨目录选择以共同祖先为 scope，workspace toolbar 收到 Host 的完整安全选择并由插件自行过滤类型。灵感库文件页也提供这些入口，并在组件 context 中标记 `contentKind: "inspiration"`；宿主会忽略渲染进程传入的路径身份，重新绑定当前配置的灵感库根目录，且不开放版本树和项目进度能力。`component.sidePanel` 和 `project.contextAction` 可声明 `placement:"workspace.videoTools"`、`"workspace.imageTools"` 或 `"workspace.officeTools"`，进入项目文件页和灵感库工具栏／文件选择右键菜单的对应分组（视频工具、图片工具、Office 文档）。三个工具栏入口不随选择状态消失，Office 即使只有一个工具也保留下拉菜单；灵感库固定显示三个入口。任意 ID 的面板均支持挂载；project action 有同组件、同 pageId 的 toolbar action 时打开完整页面，否则走标准 contribution 打开流程。挂载入口不再重复显示在独立工具栏、Dock、右键根菜单或空白区域菜单，点击时传入完整安全 selection 和 contentKind。其他 contribution type 使用这些 placement 会被拒绝。sidePanel 还按 sourcePageId 隔离实例，并使用文件页统一工具面板外框。application command 使用无项目 application context，且只有实际含命令的全局 Dock 注册 `Ctrl/Cmd+Shift+P`。宿主 UI 分别在项目与灵感库工具栏/统一工具面板、媒体与目录右键菜单、导入/导出菜单及可搜索命令入口发现并打开这些 contribution。所有 surface 使用同一 sandbox preload，禁止导航、新窗口和 Node 集成；组件卸载、升级、项目、灵感库或所属文件页关闭会关闭对应 view。
 
 无 UI 的运行时组件可在顶层 `runtimeContributions` 声明
 `media.playbackBackend`，当前协议版本为 1。声明包含组件内唯一的

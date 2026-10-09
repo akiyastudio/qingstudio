@@ -30,6 +30,7 @@ export type VideoTranscodeMediaInfo = {
   hdr: boolean;
   hdrKind: string;
   dynamicHdr?: string;
+  dolbyVision?: { profile?: number; compatibilityId?: number; rpu?: number; el?: number; bl?: number };
   audioTracks: number;
   subtitleTracks: number;
 };
@@ -44,6 +45,7 @@ export type VideoTranscodeCapabilities = {
   subtitleBurn: boolean;
   av1Hardware: boolean;
   hevc10Bit: boolean;
+  dolbyVision?: boolean;
 };
 
 export const DEFAULT_VIDEO_TRANSCODE_SETTINGS: VideoTranscodeSettings = {
@@ -59,7 +61,7 @@ export const normalizeVideoTranscodeSettings = (value?: Partial<VideoTranscodeSe
   const oneOf = <T extends string | number>(candidate: unknown, allowed: readonly T[], fallback: T): T => allowed.includes(candidate as T) ? candidate as T : fallback;
   const videoMode = oneOf(input.videoMode, ['h264', 'h265', 'av1', 'prores', 'copy'] as const, DEFAULT_VIDEO_TRANSCODE_SETTINGS.videoMode);
   const migratedColorMode = input.colorMode === 'hdr-to-sdr' ? 'sdr' : input.colorMode;
-  const colorMode = oneOf(migratedColorMode, ['auto', 'sdr', 'hdr10', 'hlg'] as const, DEFAULT_VIDEO_TRANSCODE_SETTINGS.colorMode);
+  const colorMode = oneOf(migratedColorMode, ['auto', 'sdr', 'hdr10', 'hlg', 'dolby-vision'] as const, DEFAULT_VIDEO_TRANSCODE_SETTINGS.colorMode);
   const frameRateMode = oneOf(input.frameRateMode, ['preserve', 'cfr', 'vfr'] as const, DEFAULT_VIDEO_TRANSCODE_SETTINGS.frameRateMode);
   const bitrate = Number(input.videoBitrateMbps);
   const normalized: VideoTranscodeSettings = {
@@ -96,7 +98,7 @@ export const normalizeVideoTranscodeSettings = (value?: Partial<VideoTranscodeSe
     normalized.bitDepth = 'auto';
     if (normalized.subtitleMode === 'burn') normalized.subtitleMode = 'copy';
   } else if (frameRateMode !== 'cfr') normalized.frameRate = 'original';
-  if (normalized.colorMode === 'hdr10' || normalized.colorMode === 'hlg') normalized.bitDepth = '10';
+  if (['hdr10', 'hlg', 'dolby-vision'].includes(normalized.colorMode)) normalized.bitDepth = '10';
   if (normalized.audioMode === 'remove') normalized.audioTrack = 'all';
   return normalized;
 };
@@ -108,6 +110,7 @@ const preset = (id: string, name: string, settings: Partial<VideoTranscodeSettin
 export const BUILTIN_VIDEO_TRANSCODE_PRESETS: VideoTranscodePreset[] = [
   preset('h264-compatible', 'H.264 通用兼容', { videoMode: 'h264', colorMode: 'sdr', bitDepth: '8', container: 'mp4' }),
   preset('hevc-main10', 'HEVC Main10 · 跟随来源', { videoMode: 'h265', colorMode: 'auto', bitDepth: '10', container: 'mp4', quality: 'high' }),
+  preset('dolby-vision-phone', 'Dolby Vision 手机原画压缩', { videoMode: 'h265', colorMode: 'dolby-vision', bitDepth: '10', container: 'mp4', videoBitrateMbps: 20, audioMode: 'copy' }),
   preset('hdr-to-sdr', 'Rec.709 SDR 输出', { videoMode: 'h265', colorMode: 'sdr', bitDepth: '8', container: 'mp4' }),
   preset('av1-hardware', 'AV1 硬件高效', { videoMode: 'av1', colorMode: 'auto', bitDepth: '10', container: 'mp4' }),
   preset('prores-master', 'ProRes 422 HQ 母版', { videoMode: 'prores', colorMode: 'auto', bitDepth: '10', container: 'mov', quality: 'high', audioMode: 'copy' }),
@@ -147,6 +150,13 @@ export const videoTranscodeBlockingErrors = (
   const errors: string[] = [];
   const hasHdrSource = mediaInfo.some(item => item.hdr);
   const dynamicHdrSources = mediaInfo.filter(item => item.dynamicHdr);
+  if (settings.colorMode === 'dolby-vision') {
+    if (settings.videoMode !== 'h265' || settings.container !== 'mp4' || settings.bitDepth !== '10'
+      || settings.resolution !== 'original' || settings.frameRate !== 'original' || settings.frameRateMode !== 'preserve'
+      || settings.rotation !== 'auto' || settings.aspectMode !== 'preserve' || settings.subtitleMode === 'burn') errors.push('保留 Dolby Vision 需要 HEVC 10-bit、MP4、原尺寸和原帧率，不能旋转画面或烧录字幕。');
+    if (capabilities && !capabilities.dolbyVision) errors.push('当前运行库不支持 Dolby Vision 编码，请更新视频组件。');
+    if (mediaInfo.some(item => item.codec !== 'hevc' || item.pixelFormat !== 'yuv420p10le' || item.dolbyVision?.profile !== 8 || item.dolbyVision?.compatibilityId !== 4 || item.dolbyVision?.el !== 0 || item.dolbyVision?.rpu !== 1)) errors.push('当前仅支持手机常见的 Dolby Vision Profile 8.4（HLG）素材。');
+  }
   if (dynamicHdrSources.length && settings.videoMode !== 'copy' && settings.colorMode === 'auto') errors.push(`队列中有 ${dynamicHdrSources.length} 个动态 HDR 来源；跟随来源无法安全保留动态元数据，请复制视频流或明确指定 SDR/HDR10/HLG 输出。`);
   if (settings.videoMode === 'h264' && ['hdr10', 'hlg'].includes(settings.colorMode)) errors.push('H.264 不支持此 HDR 输出设置；请选择 HEVC、AV1 或 ProRes。');
   if (settings.videoMode === 'h264' && settings.bitDepth === '10') errors.push('H.264 10-bit 兼容性过低；请选择 HEVC、AV1 或 ProRes。');

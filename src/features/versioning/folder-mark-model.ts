@@ -56,7 +56,7 @@ const createProgressDraft = (
     mediaKind,
     relationKind: 'main',
     parentProgressId: parent?.id || '',
-    versionKey: parent ? nextVersionKeys(folders, mediaKind, parent).main : '',
+    versionKey: nextVersionKeys(folders, mediaKind, parent).main,
     versionKind: 'main',
     trackingEnabled: false,
     renameFromParent: false,

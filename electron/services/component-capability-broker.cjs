@@ -67,7 +67,7 @@ class ComponentCapabilityBroker {
     const normalized = String(method || '');
     const componentId = String(descriptor?.componentId || '');
     if (this.blockedComponents.has(componentId)) throw new Error(`Component capabilities are quiesced: ${componentId}`);
-    const applicationAllowlist = boundContext?.surface === 'application.settings' ? APPLICATION_SETTINGS_CAPABILITIES : boundContext?.surface === 'application.command' ? APPLICATION_COMMAND_CAPABILITIES : null;
+    const applicationAllowlist = boundContext?.surface === 'application.settings' ? APPLICATION_SETTINGS_CAPABILITIES : ['application.command', 'application.homeCard'].includes(boundContext?.surface) ? APPLICATION_COMMAND_CAPABILITIES : null;
     if (applicationAllowlist && !applicationAllowlist.has(normalized)) {
       throw new Error(`Component capability is not available on the ${boundContext.surface} surface: ${normalized}`);
     }

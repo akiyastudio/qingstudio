@@ -34,7 +34,7 @@ export const allowedVersionTreeRelationKinds = (source: VersionTreeRelationNode,
   if (source.folderMissing || target.folderMissing || source.id === target.id || source.projectId !== target.projectId || source.mediaKind !== target.mediaKind) return [];
   const result: VersionTreeEdgeKind[] = [];
   const sourceIsMain = source.nodeRole === 'original' && !source.artifactKind
-    || source.nodeRole === 'progress' && source.relationKind === 'main' && Boolean(source.parentProgressId);
+    || source.nodeRole === 'progress' && (!source.parentProgressId || source.relationKind === 'main');
   const targetIsMainProgress = target.nodeRole === 'progress' && target.relationKind === 'main' && Boolean(target.parentProgressId);
   if (target.nodeRole === 'progress' && target.relationKind !== 'auxiliary' && sourceIsMain) result.push('main');
   if (target.nodeRole === 'selection' && sourceIsMain) result.push('auxiliary');

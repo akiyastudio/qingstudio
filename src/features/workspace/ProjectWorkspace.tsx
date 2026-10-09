@@ -13,6 +13,7 @@ import { FolderInput, FolderPlus, Folder, Image as ImageIcon, GalleryVerticalEnd
 import { VersionManager } from '../../components/VersionManager';
 import { MediaThumbnail } from '../../components/MediaThumbnail';
 import { ComponentFileThumbnail } from './ComponentFileThumbnail';
+import { RatedMediaThumbnail } from './RatedMediaThumbnail';
 import { ImportSourceControls, type ImportMaterialKind } from '../../components/ImportSourceControls';
 import { mergeSourcePaths } from '../../components/source-path-picker-model';
 import type { CropRectangle } from '../../components/InteractiveCropEditor';
@@ -20,7 +21,7 @@ import { ProjectVersionTree, type VersionTreeCanvasController } from '../../comp
 import { useAppDialog } from '../../components/AppDialogProvider';
 import { useVersionChanges } from '../versioning/public';
 import { useEscapeLayer } from '../../components/LayerProvider';
-import { ConverterView, ImportCard, MatchView, ResearchView, ScreenshotMainImageView, type ImportCompletion } from '../tools/ToolViews';
+import { ConverterView, ImportCard, MatchView, ResearchView, ScreenshotMainImageView, VideoTranscodeView, type ImportCompletion } from '../tools/ToolViews';
 import { resolveInspectedToolSources } from '../tools/tool-source-selection-model';
 import { PROJECT_FILE_BROWSER_CONTEXT } from '../file-browser/browser-context';
 import type { FileBrowserContext } from '../file-browser/browser-context';
@@ -40,7 +41,8 @@ import { isPanelTaskRestoreForPage, panelTaskSessionKey, type PanelTaskRestoreDe
 import { FILE_GRID_GAP, FILE_LIST_HEADER_HEIGHT, FILE_LIST_ROW_HEIGHT, FILE_SURFACE_HORIZONTAL_PADDING, FILE_SURFACE_PADDING, calculateFileGridGeometry, fileSurfaceContentWidth, finiteLogicalCanvasSize, hitMarqueeIndices, mergeMarqueeSelection, normalizeMarqueeRect, rectanglesIntersect, viewportPointToContentPoint, type MarqueeRect } from './marquee-selection-model';
 import { advanceMarqueeAutoScroll, marqueeAutoScrollDelta } from './marquee-auto-scroll';
 import { converterTriggerAction } from './project-panel-lifecycle';
-import { PROJECT_BACKGROUND_LOAD_DELAYS_MS, PROJECT_WATCH_FALLBACK_REFRESH_MS, isForegroundDirectoryRefresh, resolveProjectWorkspaceLifecycle, shouldReconcileProjectWatch, type ProjectWorkspaceLifecycleIdentity } from './project-workspace-lifecycle';
+import { PROJECT_BACKGROUND_LOAD_DELAYS_MS, PROJECT_BACKGROUND_RECHECK_MS, PROJECT_WATCH_FALLBACK_REFRESH_MS, isForegroundDirectoryRefresh, resolveProjectWorkspaceLifecycle, shouldReconcileProjectWatch, type ProjectWorkspaceLifecycleIdentity } from './project-workspace-lifecycle';
+import { createDirectoryRefreshQueue } from './directory-refresh-queue';
 import { applyShortcutPreviewState } from './shortcut-preview-state-model';
 import { directoryEntryToRevealOnReturn, fileEntryClickIntent, fileEntryDragPaths, fileEntryPointerModifiers, mediaRatingCacheKey, mergeRefreshedEntryMetadata, mergeRefreshedRecursiveDirectoryEntries, mutatedEntryCanBeRevealed, mutatedEntryFiltersNeedReset, ratingMutationPreviewIsCurrent, remapEntryAfterProgressFolderMove, renamedEntryDestinationPath, retainStableGroupOrder, type ProgressFolderEntryLocation } from './file-entry-interaction-model';
 import { nativeFileDragDecisionDetails, nativeFileDragOwnerIdentity, nativeFileDragSessionMustReset, nativeFileDragTargetFromElement, tryStartNativeFileDrag } from './native-file-drag-session-model';
@@ -70,7 +72,7 @@ import { WorkspaceDockLayout } from './WorkspaceDockLayout';
 import { useFilePanelStatusRight, useWorkspacePanelLayout, readWorkspacePanelWidths, usePersistWorkspacePanelWidths } from './useWorkspacePanelLayout';
 import { useWorkspacePanelControls } from './useWorkspacePanelControls';
 import { fitPanelWidths, resizePanelBoundary, type WorkspacePanelId } from './workspace-panel-model';
-import { forgetMediaThumbnailPreviews } from './useProjectThumbnail';
+import { PROJECT_THUMBNAIL_RECHECK_EVENT, forgetMediaThumbnailPreviews } from './useProjectThumbnail';
 import { isOfficeOpenXmlEntry, isPhotoshopOpenEntry, isScreenshotMainImageEntry, requestCaptureDateTime } from './project-workspace-media-metadata';
 import { FILE_LIST_COLUMN_STORAGE_KEYS, FILE_LIST_COLUMNS_CUSTOMIZED_STORAGE_KEY, DEFAULT_FILE_LIST_COLUMN_WIDTHS, FILE_LIST_COLUMN_KEYS, FILE_LIST_GRID_CHROME_WIDTH, clampNumber, fitFileListColumnWidths, groupedResultsAreInitiallyLoading, readStoredBoolean, readStoredNumber, resizeFileListColumnBoundary, scheduleAfterProjectPaint, type FileListColumnBoundary, type FileListColumnWidths } from './project-workspace-layout-model';
 import { PhotoshopIcon } from './PhotoshopIcon';
@@ -273,10 +275,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const exportCandidateChangedAtRef = useRef(new Map<string, number>());
   const offeredExportFoldersRef = useRef(new Set<string>());
   const progressRelationInspection = useMemo(() => inspectProgressRelations(progressFolders), [progressFolders]);
-  const orphanedProgressFolders = useMemo(() => progressFolders.filter(folder => folder.nodeRole === 'progress'
-    && !folder.parentProgressId && !folder.folderMissing), [progressFolders]);
   const progressRelationNoticeRef = useRef('');
-  const orphanedProgressNoticeRef = useRef('');
   useEffect(() => {
     const signature = progressRelationInspection.cycleNodeIds.slice().sort().join(',');
     if (!signature) {
@@ -288,13 +287,6 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     console.error('Version relation cycle detected', { projectName: project.name, nodeIds: progressRelationInspection.cycleNodeIds });
     onNotice(`版本关系需要修复：检测到循环节点 ${progressRelationInspection.cycleNodeIds.join('、')}`, 10000);
   }, [onNotice, progressRelationInspection, project.name]);
-  useEffect(() => {
-    const signature = orphanedProgressFolders.map(folder => folder.id).sort().join(',');
-    if (!signature) { orphanedProgressNoticeRef.current = ''; return; }
-    if (orphanedProgressNoticeRef.current === signature) return;
-    orphanedProgressNoticeRef.current = signature;
-    onNotice(`检测到 ${orphanedProgressFolders.length} 个旧版游离进度；已保留数据且不会自动删除。请修改进度并选择有效父版本，或显式取消版本登记。`, 12000);
-  }, [onNotice, orphanedProgressFolders]);
   const [fileEntries, setFileEntries] = useState<ProjectFileEntry[]>([]);
   const fileEntriesRef = useRef(fileEntries);
   fileEntriesRef.current = fileEntries;
@@ -375,6 +367,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   activeRef.current = active;
   const skipNextPathRefreshRef = useRef(false);
   const refreshSequenceRef = useRef(0);
+  const directoryRefreshEpochRef = useRef(0);
+  const directoryRefreshQueueRef = useRef(createDirectoryRefreshQueue<boolean>());
   const currentRelativePathRef = useRef('');
   const onDirectoryChangeRef = useRef(onDirectoryChange);
   onDirectoryChangeRef.current = onDirectoryChange;
@@ -382,6 +376,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   projectPathRef.current = project.path;
   const projectLifecycleRef = useRef<ProjectWorkspaceLifecycleIdentity>();
   const watchReconcileStateRef = useRef({ identity: '', externalWatchRevision: -1, lastReconciledAt: 0 });
+  const backgroundedAtRef = useRef<number | null>(null);
   const fileRootSubscriptionRef = useRef('');
   const directoryEntriesCacheRef = useRef(new Map<string, ProjectFileEntry[]>());
   const optimisticDirectoryEntriesCacheRef = useRef(new Map<string, ProjectFileEntry[]>());
@@ -419,6 +414,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const directoryRefreshTimerRef = useRef(0);
   const pendingDirectoryRefreshesRef = useRef(new Set<string>());
   useEffect(() => () => {
+    directoryRefreshEpochRef.current += 1;
+    refreshSequenceRef.current += 1;
     window.clearTimeout(directoryRefreshTimerRef.current);
     directoryRefreshTimerRef.current = 0;
     pendingDirectoryRefreshesRef.current.clear();
@@ -546,6 +543,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const [mountedPanels, setMountedPanels] = usePageState<Set<MountedProjectPanel>>(pageId, "mountedPanels", () => new Set(initialPanel ? [initialPanel] : []));
   const [negativeSourcePaths, setNegativeSourcePaths] = usePageState<string[]>(pageId, "negativeSourcePaths", []);
   const [brollSourcePaths, setBrollSourcePaths] = usePageState<string[]>(pageId, "brollSourcePaths", []);
+  const [brollTranscodeSettings, setBrollTranscodeSettings] = usePageState<AppConfig['videoTools']['transcode'] | null>(pageId, 'brollTranscodeSettings', null);
+  const [showBrollTranscodeSettings, setShowBrollTranscodeSettings] = usePageState(pageId, 'showBrollTranscodeSettings', false);
   const [deleteBrollSources, setDeleteBrollSources] = usePageState(pageId, "deleteBrollSources", importDefaults.deleteSourceAfterImport);
   const [deleteFileSources, setDeleteFileSources] = usePageState(pageId, "deleteFileSources", importDefaults.deleteSourceAfterImport);
   const [fileImportTarget, setFileImportTarget] = usePageState(pageId, "fileImportTarget", '');
@@ -1060,6 +1059,15 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     selectionAnchorPathRef.current = reconcile([selectionAnchorPathRef.current])[0] || '';
   }, [setSelectedPaths, setPreviewPath, setPreviewMediaPath, setPreviewHighlightPath]);
   const refresh = async (relativePath?: string, options: { includeProjectContents?: boolean } = {}): Promise<boolean> => {
+    const requestedPath = normalizeProjectRelativePath(typeof relativePath === 'string' ? relativePath : currentRelativePathRef.current);
+    if (!isForegroundDirectoryRefresh(requestedPath, currentRelativePathRef.current, project.path, projectPathRef.current)) return false;
+    const key = JSON.stringify([workspacePath, project.status, project.name, project.path, requestedPath]);
+    const epoch = directoryRefreshEpochRef.current;
+    return directoryRefreshQueueRef.current(key, options.includeProjectContents !== false,
+      includeProjectContents => epoch === directoryRefreshEpochRef.current
+        ? readDirectory(requestedPath, { includeProjectContents }) : Promise.resolve(false));
+  };
+  const readDirectory = async (relativePath?: string, options: { includeProjectContents?: boolean } = {}): Promise<boolean> => {
     const safeRelativePath = typeof relativePath === 'string' ? relativePath : currentRelativePathRef.current;
     const requestedPath = safeRelativePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     const requestedProjectPath = project.path;
@@ -1308,6 +1316,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     projectLifecycleRef.current = nextIdentity;
     projectPathRef.current = project.path;
     if (lifecycle.kind === 'none') return;
+    directoryRefreshEpochRef.current += 1;
     refreshSequenceRef.current += 1;
     setForegroundDirectoryReady(false);
     if (lifecycle.kind !== 'refresh') renderedDirectoryRef.current = { path: lifecycle.relativePath, ready: false };
@@ -1440,6 +1449,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     const interval = window.setInterval(() => {
       const subscriptionId = fileRootSubscriptionRef.current;
       if (!subscriptionId) return;
+      window.dispatchEvent(new Event(PROJECT_THUMBNAIL_RECHECK_EVENT));
       void projectWorkspaceClient.watchFileRoot(workspacePath, project.status, project.name, { reconcile: true, subscriptionId }).then(result => {
         if (fileRootSubscriptionRef.current !== subscriptionId) return;
         if (result.success && !result.degraded) setRootWatchFailed(false);
@@ -1463,6 +1473,39 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   }, [active, currentFolderRecursiveSearchActive, externalWatchRevision, loadProgressFolders, project.name, project.path, project.status, projectRootScopeSelected, projectWorkflows, recursiveFlatOpen, rootWatchFailed, watchRootDirectly, workspacePath]);
   useEffect(() => {
     if (!active) return;
+    if (document.hidden) backgroundedAtRef.current ??= Date.now();
+    const markBackgrounded = () => { backgroundedAtRef.current ??= Date.now(); };
+    const recheckOnReturn = () => {
+      if (document.hidden || backgroundedAtRef.current === null) return;
+      const elapsed = Date.now() - backgroundedAtRef.current;
+      backgroundedAtRef.current = null;
+      if (elapsed < PROJECT_BACKGROUND_RECHECK_MS) return;
+      // A filesystem watcher can miss changes during sleep or a long absence
+      // without reporting an error. Reinstall it and reconcile the visible view.
+      setExternalWatchRevision(current => current + 1);
+      directoryEntriesCacheRef.current.clear();
+      window.dispatchEvent(new Event(PROJECT_THUMBNAIL_RECHECK_EVENT));
+      const currentPath = normalizeProjectRelativePath(currentRelativePathRef.current);
+      void refresh(currentPath, { includeProjectContents: !currentPath });
+      if (projectRootScopeSelected) setScopeRefreshToken(current => current + 1);
+      else if (recursiveFlatOpen || currentFolderRecursiveSearchActive) setRecentRefreshToken(current => current + 1);
+      if (finalViewOpen) void loadFinalViewEntries();
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) markBackgrounded();
+      else recheckOnReturn();
+    };
+    window.addEventListener('blur', markBackgrounded);
+    window.addEventListener('focus', recheckOnReturn);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('blur', markBackgrounded);
+      window.removeEventListener('focus', recheckOnReturn);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [active, currentFolderRecursiveSearchActive, finalViewOpen, loadFinalViewEntries, projectRootScopeSelected, recursiveFlatOpen]);
+  useEffect(() => {
+    if (!active) return;
     let timer: number | undefined;
     let progressFolderTimer: number | undefined;
     let refreshProjectContents = false;
@@ -1476,12 +1519,12 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
         : project.name.replace(/\\/g, '/');
     const unsubscribe = projectWorkspaceClient.onWorkspaceFilesChanged(change => {
       if (change.root && change.root.replace(/\\/g, '/').replace(/\/+$/, '').toLocaleLowerCase() !== normalizedWorkspaceRoot) return;
-      if (change.watcherFailed && watchRootDirectly) setRootWatchFailed(true);
       const changedPath = (change.fileName || '').replace(/\\/g, '/');
       if (!changedPath) refreshProjectContents = true;
       if (change.eventType === 'rename' && /(?:^|\/)[^/]+\.lnk$/i.test(changedPath)) setExternalWatchRevision(current => current + 1);
       // A change in another project should never make a photo-heavy folder redraw.
       if (projectPrefix && changedPath && changedPath !== projectPrefix && !changedPath.startsWith(`${projectPrefix}/`)) return;
+      if (change.watcherFailed || change.watcherDegraded) setRootWatchFailed(true);
       // Content writes are handled by thumbnail/media tracking. Re-reading the
       // whole directory is only necessary when its membership may have changed.
       if (change.eventType === 'change') {
@@ -1539,8 +1582,10 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
         directoryEntriesCacheRef.current.clear();
         if (currentEntries) directoryEntriesCacheRef.current.set(currentPath, currentEntries);
       }
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
+      // Keep the first deadline: continuous writes to an external project
+      // must not postpone its visible directory refresh indefinitely.
+      if (timer === undefined) timer = window.setTimeout(() => {
+        timer = undefined;
         const includeProjectContents = refreshProjectContents;
         refreshProjectContents = false;
         refresh(currentRelativePathRef.current, { includeProjectContents });
@@ -1989,7 +2034,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     setPanelImportResult(null);
     setPanelImportBusy('broll');
     try {
-      const result = await projectWorkspaceClient.importBroll(workspacePath, project.status, project.name, { splitVideosOnImport: brollConfig.splitVideosOnImport, transcodeVideosOnImport: brollConfig.transcodeVideosOnImport, transcodeSettings: videoTools.transcode, deleteSourceAfterImport: deleteBrollSources, sourcePaths: brollSourcePaths });
+      const result = await projectWorkspaceClient.importBroll(workspacePath, project.status, project.name, { splitVideosOnImport: brollConfig.splitVideosOnImport, transcodeVideosOnImport: brollConfig.transcodeVideosOnImport, transcodeSettings: brollTranscodeSettings ?? videoTools.transcode, deleteSourceAfterImport: deleteBrollSources, sourcePaths: brollSourcePaths });
+      if (result.requiresTranscodeSettings) { setShowBrollTranscodeSettings(true); return; }
       const pageOwnsNotice = pageOwnsFileOperationNotification(result);
       if (!result.success) { if (pageOwnsNotice) onNotice(`导入花絮失败：${result.error || '未知错误'}`); return; }
       if (result.cancelled) { if (pageOwnsNotice) onNotice('已取消选择花絮文件。'); return; }
@@ -2709,6 +2755,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     setPreviewHighlightPath('');
     // Invalidate the directory that is still loading before React commits the
     // breadcrumb change, so its late result cannot replace the new folder.
+    directoryRefreshEpochRef.current += 1;
     refreshSequenceRef.current += 1;
     currentRelativePathRef.current = normalizedPath;
     const cachedEntries = directoryEntriesCacheRef.current.get(normalizedPath);
@@ -3471,6 +3518,25 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const currentPreviewMetadataError = focusedEntry && previewMetadataResolvedPath === focusedEntry.path ? previewMetadataError : '';
   const previewCanMarkFinal = Boolean(previewEntry && (!previewEntry.viaShortcut) && (previewEntry.kind === 'image' || previewEntry.kind === 'raw'));
   const previewRatingCacheKey = previewEntry ? mediaRatingCacheKey(previewEntry.path, previewEntry.updatedAt) : '';
+  const loadThumbnailRating = useCallback(async (entry: ProjectFileEntry) => {
+    const key = mediaRatingCacheKey(entry.path, entry.updatedAt);
+    const cached = previewRatingCacheRef.current.get(key);
+    if (cached !== undefined) return cached;
+    let request = previewRatingRequestsRef.current.get(key);
+    if (!request) {
+      request = projectWorkspaceClient.getMediaRating(entry.path);
+      previewRatingRequestsRef.current.set(key, request);
+      void request.finally(() => previewRatingRequestsRef.current.delete(key)).catch(() => undefined);
+    }
+    const result = await request;
+    // A rating written while this read was pending takes precedence.
+    const current = previewRatingCacheRef.current.get(key);
+    if (current !== undefined) return current;
+    if (!result.success) return undefined;
+    if (previewRatingCacheRef.current.size >= 400) previewRatingCacheRef.current.delete(previewRatingCacheRef.current.keys().next().value as string);
+    previewRatingCacheRef.current.set(key, result.rating);
+    return result.rating;
+  }, []);
   useEffect(() => {
     let active = true;
     setPreviewRating(0);
@@ -3482,17 +3548,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       return () => { active = false; };
     }
     setPreviewRatingLoading(true);
-    let request = previewRatingRequestsRef.current.get(previewRatingCacheKey);
-    if (!request) {
-      request = projectWorkspaceClient.getMediaRating(previewEntry.path);
-      previewRatingRequestsRef.current.set(previewRatingCacheKey, request);
-      void request.finally(() => previewRatingRequestsRef.current.delete(previewRatingCacheKey)).catch(() => undefined);
-    }
-    request.then(result => {
-      if (!active || !result.success) return;
-      if (previewRatingCacheRef.current.size >= 400) previewRatingCacheRef.current.delete(previewRatingCacheRef.current.keys().next().value as string);
-      previewRatingCacheRef.current.set(previewRatingCacheKey, result.rating);
-      setPreviewRating(result.rating);
+    loadThumbnailRating(previewEntry).then(rating => {
+      if (active && rating !== undefined) setPreviewRating(rating);
     }).catch(() => undefined).finally(() => { if (active) setPreviewRatingLoading(false); });
     return () => { active = false; };
   }, [previewEntry?.path, previewEntry?.updatedAt, previewCanMarkFinal, previewRatingCacheKey]);
@@ -4179,8 +4236,9 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       return large ? <span className="relative flex h-full w-full min-h-0 min-w-0 items-center justify-center">{shortcutIcon}</span> : shortcutIcon;
     }
     const thumbnailDecoder = decoderForFile(previewDecoders.filter(item => item.thumbnails), visualEntry.name);
-    if (thumbnailDecoder) return <ComponentFileThumbnail relativePath={visualEntry.relativePath} updatedAt={visualEntry.updatedAt} decoder={thumbnailDecoder} context={{ workspacePath: componentWorkspacePath, projectId: project.id, projectName: project.name, projectStatus: project.status, scopeRelativePath: currentRelativePath, sourcePageId: pageId, contentKind: componentContentKind }} size={large ? gridThumbnailSize : 160} fallback={<SystemFileIcon filePath={visualEntry.path} size={large ? 48 : 28}/>}/>;
-    if (visualEntry.kind === 'image' || visualEntry.kind === 'raw' || visualEntry.kind === 'video') return <><MediaThumbnail entry={visualEntry} cacheConfig={mediaCacheConfig} requestedSize={large ? gridThumbnailSize : 160} queueOrder={queueOrder} large={large}/></>;
+    if (thumbnailDecoder || visualEntry.kind === 'image' || visualEntry.kind === 'raw' || visualEntry.kind === 'video') return <RatedMediaThumbnail entry={visualEntry} mode={favoriteDisplayMode} large={large} loadRating={loadThumbnailRating}>
+      {thumbnailDecoder ? <ComponentFileThumbnail relativePath={visualEntry.relativePath} updatedAt={visualEntry.updatedAt} decoder={thumbnailDecoder} context={{ workspacePath: componentWorkspacePath, projectId: project.id, projectName: project.name, projectStatus: project.status, scopeRelativePath: currentRelativePath, sourcePageId: pageId, contentKind: componentContentKind }} size={large ? gridThumbnailSize : 160} fallback={<SystemFileIcon filePath={visualEntry.path} size={large ? 48 : 28}/>}/> : <MediaThumbnail entry={visualEntry} cacheConfig={mediaCacheConfig} requestedSize={large ? gridThumbnailSize : 160} queueOrder={queueOrder} large={large}/>}
+    </RatedMediaThumbnail>;
     return <SystemFileIcon filePath={visualEntry.path} size={large ? 48 : 28}/>;
   };
   const entryHasPreviewState = (entry: ProjectFileEntry) => previewHighlightPath === entry.relativePath || directoryReturnHighlightPath === entry.relativePath;
@@ -4678,7 +4736,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       {fileMenu && createPortal(<ViewportContextMenu x={fileMenu.x} y={fileMenu.y} widthClass="w-52" allowSubmenus>
         {isFolderLikeEntry(fileMenu.entry) && !isUnsupportedShortcutContent(fileMenu.entry) && onOpenDirectoryPage && <><button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); onOpenDirectoryPage(entry.relativePath); }}><FolderPlus size={14}/>{t("ui.open.in.new.tab.79c5e0")}</button><div className="my-1 border-t border-slate-100"/></>}
         {projectWorkflows && isFolderLikeEntry(fileMenu.entry) && !fileMenuVersionTreeFolder && <><button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); void openMarkProgress(entry); }}><GitBranch size={14}/>{t("ui.mark.f10902")}</button><div className="my-1 border-t border-slate-100"/></>}
-        {projectWorkflows && fileMenuRegisteredProgressFolder && <><button disabled={fileMenuRegisteredProgressFolder.trackingState === 'committing' || fileMenuRegisteredProgressFolder.trackingState === 'needs_repair'} className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); void openMarkProgress(entry); }}><GitBranch size={14}/>{t("ui.edit.progress.a52b5e")}</button>{!fileMenuRegisteredProgressFolder.parentProgressId && <button className="project-menu-item" onClick={() => { const progressFolder = fileMenuRegisteredProgressFolder; setFileMenu(null); void unregisterLegacyOrphanProgress(progressFolder); }}><X size={14}/>{t("ui.unregister.legacy.detached.progress.f90ea2")}</button>}{progressTrackingAction(fileMenuRegisteredProgressFolder) && <button disabled={progressSubmitting || Boolean(workspaceActivityMessage)} title={t("ui.refresh.main.branch.version.tracking.using.749253")} className="project-menu-item" onClick={() => { const progressFolder = fileMenuRegisteredProgressFolder; setFileMenu(null); void refreshProgressTracking(progressFolder); }}><RefreshCw size={14}/>{progressTrackingRefreshLabel(fileMenuRegisteredProgressFolder)}</button>}<div className="my-1 border-t border-slate-100"/></>}
+        {projectWorkflows && fileMenuRegisteredProgressFolder && <><button disabled={fileMenuRegisteredProgressFolder.trackingState === 'committing' || fileMenuRegisteredProgressFolder.trackingState === 'needs_repair'} className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); void openMarkProgress(entry); }}><GitBranch size={14}/>{t("ui.edit.progress.a52b5e")}</button>{!fileMenuRegisteredProgressFolder.parentProgressId && <button className="project-menu-item" onClick={() => { const progressFolder = fileMenuRegisteredProgressFolder; setFileMenu(null); void unregisterLegacyOrphanProgress(progressFolder); }}><X size={14}/>{t("ui.cancel.version.registration")}</button>}{progressTrackingAction(fileMenuRegisteredProgressFolder) && <button disabled={progressSubmitting || Boolean(workspaceActivityMessage)} title={t("ui.refresh.main.branch.version.tracking.using.749253")} className="project-menu-item" onClick={() => { const progressFolder = fileMenuRegisteredProgressFolder; setFileMenu(null); void refreshProgressTracking(progressFolder); }}><RefreshCw size={14}/>{progressTrackingRefreshLabel(fileMenuRegisteredProgressFolder)}</button>}<div className="my-1 border-t border-slate-100"/></>}
         {gatherToProject && <><button disabled={fileMenuContainsShortcutContent || gatheringInspiration || !inspirationProjects.length} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); startGatherInspiration(targets); }}><FolderInput size={14}/>{t("message.fb0d370ff144", { value0: inspirationTargetProject ? `“${inspirationTargetProject.name}”` : '…' })}</button>{inspirationTargetProject && <button disabled={fileMenuContainsShortcutContent || gatheringInspiration} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); setGatherPickerPaths(targets); }}><ChevronDown size={14}/>{t("ui.choose.another.project.952baa")}</button>}<div className="my-1 border-t border-slate-100"/></>}
         {projectWorkflows && canSelectFileMenuMedia && <><button className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); selectMediaFiles(targets); }}><CheckCircle2 size={14}/>{t("ui.selection.8c8db6")}</button><div className="my-1 border-t border-slate-100"/></>}
         {(fileMenu.entry.kind === 'image' || fileMenu.entry.kind === 'raw' || fileMenu.entry.kind === 'video') && <button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; const restoreSelection = fileMenuSelectionWasImplicitRef.current ? fileMenuSelectionSnapshotRef.current : null; setFileMenu(null); if (restoreSelection) { selectionAnchorPathRef.current = fileMenuSelectionAnchorSnapshotRef.current; setSelectedPaths(restoreSelection); } openPreviewFromMenu(entry); }}><PanelLeftOpen size={14}/>{t("ui.preview.13d61f")}</button>}
@@ -4789,7 +4847,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
           {visibleProjectToolbarActionIds.map(id => <React.Fragment key={id}>{projectToolbarButtons[id]}</React.Fragment>)}
         </div>
         </div>
-        <div className="project-toolbar-component-actions contents"><ComponentToolbarActions actions={visibleComponentHostActions} scope={{ scopeRelativePath: currentRelativePath, selectedRelativePaths: componentHostSelectedRelativePaths, sourcePageId: pageId, contentKind: componentContentKind }} onOpen={onOpenComponentPage}/><ComponentContributionDock contributions={componentContributions.filter(item => item.type !== 'application.command')} project={project} workspacePath={componentWorkspacePath} scope={{ scopeRelativePath: currentRelativePath, selectedRelativePaths, sourcePageId: pageId, contentKind: componentContentKind }} active={active}/></div>
+        <div className="project-toolbar-component-actions contents"><ComponentToolbarActions actions={visibleComponentHostActions} scope={{ scopeRelativePath: currentRelativePath, selectedRelativePaths: componentHostSelectedRelativePaths, sourcePageId: pageId, contentKind: componentContentKind }} onOpen={onOpenComponentPage}/><ComponentContributionDock contributions={componentContributions.filter(item => !['application.command', 'application.homeCard'].includes(item.type))} project={project} workspacePath={componentWorkspacePath} scope={{ scopeRelativePath: currentRelativePath, selectedRelativePaths, sourcePageId: pageId, contentKind: componentContentKind }} active={active}/></div>
         <div className="project-toolbar-overflow relative" onClick={event => event.stopPropagation()}>
           <button type="button" onClick={() => { const next = !showToolbarOverflowMenu; window.dispatchEvent(new Event('photoflow-menu-open')); setShowToolbarOverflowMenu(next); }} aria-label={t("ui.expand.toolbar.actions.a5328d")} aria-haspopup="menu" aria-expanded={showToolbarOverflowMenu} className={`project-action-button ${showToolbarOverflowMenu ? 'bg-blue-50 text-blue-600' : ''}`}><ChevronDown size={17} className={`transition-transform ${showToolbarOverflowMenu ? 'rotate-180' : ''}`}/></button>
           {showToolbarOverflowMenu && <div role="menu" aria-label={t("ui.more.toolbar.actions.b67a3d")} className="project-toolbar-overflow-menu absolute left-0 top-full z-50 mt-1 w-56 overflow-visible rounded-lg border border-slate-200 bg-white p-1 shadow-xl" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setShowToolbarOverflowMenu(false); (event.currentTarget.previousElementSibling as HTMLButtonElement | null)?.focus(); } }} onClick={event => { const button = (event.target as HTMLElement).closest('button'); if (button && button.getAttribute('aria-haspopup') !== 'menu') setShowToolbarOverflowMenu(false); }}>
@@ -4908,13 +4966,22 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
         panelKind="broll"
         open={panel === 'broll'}
         busy={panelImportBusy === 'broll'}
-        onClose={() => { setBrollSourcePaths([]); setPanelImportResult(null); setPanel(null); }}
+        onClose={() => { setBrollSourcePaths([]); setBrollTranscodeSettings(null); setShowBrollTranscodeSettings(false); setPanelImportResult(null); setPanel(null); }}
       >
         {panelImportResult?.kind === 'broll' ? <ImportCompletionNotice
           message={t("ui.behind.the.scenes.files.imported.value0.570c19", { value0: panelImportResult.count, value1: panelImportResult.sourceDeleted ? t("ui.deleted.077a6d") : t("ui.kept.e309f2") })}
-          onClose={() => { setBrollSourcePaths([]); setPanelImportResult(null); setPanel(null); }}
+          onClose={() => { setBrollSourcePaths([]); setBrollTranscodeSettings(null); setShowBrollTranscodeSettings(false); setPanelImportResult(null); setPanel(null); }}
         /> : <div className="space-y-4">
           <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3"><p className="text-sm font-bold text-blue-800">{t("message.20cd447b217d", { value0: project.name })}</p><p className="mt-1 text-xs leading-5 text-blue-600">{t("ui.supports.images.and.videos.settings.determine.a65b29")}</p></div>
+          {brollConfig.transcodeVideosOnImport && <div className="space-y-3 rounded-xl border border-slate-200 p-3">
+            <button type="button" disabled={panelImportBusy === 'broll'} aria-expanded={showBrollTranscodeSettings} className="text-sm font-bold text-blue-700 disabled:opacity-50" onClick={() => setShowBrollTranscodeSettings(value => !value)}>{t('broll.settings.title')}</button>
+            {showBrollTranscodeSettings && <>
+              <p className="text-xs text-slate-500">{t('broll.settings.description')}</p>
+              <fieldset disabled={panelImportBusy === 'broll'}>
+                <VideoTranscodeView embedded settingsOnly initialSettings={brollTranscodeSettings ?? videoTools.transcode} onSettingsChange={setBrollTranscodeSettings}/>
+              </fieldset>
+            </>}
+          </div>}
           <ImportSourceControls
             selectionTitle={t("legacy.476630cec7de")}
             selectionDescription={t("legacy.9e795ddc04d2")}
@@ -5104,7 +5171,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
         {versionTreeOpen ? <div ref={filesSurfaceRef} data-photoflow-file-surface="true" tabIndex={0} onContextMenu={openSurfaceMenu} onPointerDownCapture={handleFileSurfacePointerDownCapture} onDragOver={handleSurfaceDragOver} onDragLeave={handleSurfaceDragLeave} onDrop={event => void handleSurfaceDrop(event)} style={{ marginInline: -FILE_SURFACE_HORIZONTAL_PADDING }} className={`relative min-h-0 flex-1 select-none overflow-hidden outline-none transition ${surfaceDropActive ? 'rounded-lg bg-blue-50 ring-2 ring-inset ring-blue-400' : ''}`}>
           {!progressFoldersReady ? <div role={progressFoldersLoadError ? 'alert' : versionTreeSlowLoadVisible ? 'status' : undefined} aria-live={progressFoldersLoadError || versionTreeSlowLoadVisible ? 'polite' : undefined} className={`flex h-full min-h-[360px] flex-col items-center justify-center gap-3 border-y border-slate-200 text-sm ${progressFoldersLoadError ? 'text-red-600' : 'text-slate-500'}`}>
             {progressFoldersLoadError ? <><AlertTriangle size={20}/><span>{t("message.9a413ca373dc", { value0: progressFoldersLoadError })}</span><button type="button" onClick={() => void loadProgressFoldersSnapshot().then(() => loadProgressFolders())} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50">{t("ui.reload.7bdd5c")}</button></> : versionTreeSlowLoadVisible ? <><Loader2 size={20} className="animate-spin"/><span>{t("ui.loading.version.relationships.b5bcd7")}</span></> : null}
-          </div> : progressRelationInspection.needsRepair ? <div role="alert" className="m-4 rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-900"><div className="flex items-center gap-2 font-bold"><AlertTriangle size={18}/>{t("ui.version.relationships.need.repair.4ac5b6")}</div><p className="mt-2 text-sm">{t("ui.a.cycle.was.detected.version.tree.c6eb80")}</p><p className="mt-2 break-all font-mono text-xs text-amber-700">{t("message.0391976a817c", { value0: progressRelationInspection.cycleNodeIds.join('、') })}</p></div> : <>{orphanedProgressFolders.length > 0 && <div role="alert" className="m-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900"><div className="flex items-center gap-2 font-bold"><AlertTriangle size={18}/>{t("ui.legacy.detached.progress.kept.2a934c")}</div><p className="mt-2 text-sm">{t("ui.these.nodes.are.kept.during.refresh.d3ef41")}</p><p className="mt-2 text-xs text-amber-700">{orphanedProgressFolders.map(folder => folder.displayName).join('、')}</p></div>}<ProjectVersionTree
+          </div> : progressRelationInspection.needsRepair ? <div role="alert" className="m-4 rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-900"><div className="flex items-center gap-2 font-bold"><AlertTriangle size={18}/>{t("ui.version.relationships.need.repair.4ac5b6")}</div><p className="mt-2 text-sm">{t("ui.a.cycle.was.detected.version.tree.c6eb80")}</p><p className="mt-2 break-all font-mono text-xs text-amber-700">{t("message.0391976a817c", { value0: progressRelationInspection.cycleNodeIds.join('、') })}</p></div> : <><ProjectVersionTree
             active={active && activeView === 'project'}
             progressFolders={progressFolders}
             graphEdges={versionGraphEdges}

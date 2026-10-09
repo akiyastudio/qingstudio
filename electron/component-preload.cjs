@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('photoFlowComponent', Object.freeze({
   onPlaybackState: callback => subscribe('video-player-state', callback),
   getContext: () => ipcRenderer.invoke('component-sdk:get-context'),
   setPanelInfo: info => ipcRenderer.invoke('component-sdk:panel-info', { action: 'update', ...info }),
+  openPanelWindow: () => ipcRenderer.invoke('component-sdk:open-panel-window'),
   getPreview: () => ipcRenderer.invoke('component-sdk:preview', { action: 'get' }),
   seekPreview: (sessionId, time) => ipcRenderer.invoke('component-sdk:preview', { action: 'seek', sessionId, time }),
   onPreviewChange: async callback => {

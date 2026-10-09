@@ -32,6 +32,7 @@ MIGRATION_OWNERS = {
     32: ("versioning",),
     33: ("versioning",),
     34: ("workspace", "operations"),
+    35: ("versioning",),
 }
 
 # Physical history and rollback details are descriptive metadata, not owners.

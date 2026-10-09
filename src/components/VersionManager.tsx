@@ -355,6 +355,8 @@ const SingleVersionView = ({ active, version, cacheConfig, videoPlaybackSettings
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; panX: number; panY: number } | null>(null);
   const layoutRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
+  const onNoticeRef = useRef(onNotice);
+  onNoticeRef.current = onNotice;
   const fileName = version.filePath.replace(/\\/g, '/').split('/').pop() || version.versionName;
 
   useEffect(() => {
@@ -393,6 +395,27 @@ const SingleVersionView = ({ active, version, cacheConfig, videoPlaybackSettings
     observer.observe(layout);
     return () => observer.disconnect();
   }, [clampMetadataWidth]);
+  useEffect(() => {
+    if (!active) setFullscreen(false);
+  }, [active]);
+  useEffect(() => {
+    if (!fullscreen || !active) return;
+    let current = true;
+    void window.electronAPI.setWindowFullscreen(true).then(entered => {
+      if (current && !entered) {
+        setFullscreen(false);
+        onNoticeRef.current('无法进入全屏模式');
+      }
+    }).catch(error => {
+      if (!current) return;
+      setFullscreen(false);
+      onNoticeRef.current(`无法进入全屏模式：${error instanceof Error ? error.message : String(error)}`);
+    });
+    return () => {
+      current = false;
+      void window.electronAPI.setWindowFullscreen(false);
+    };
+  }, [active, fullscreen]);
   useEscapeLayer(fullscreen, () => setFullscreen(false));
   useEscapeLayer(actionsOpen, () => setActionsOpen(false));
   useEffect(() => {
@@ -411,7 +434,7 @@ const SingleVersionView = ({ active, version, cacheConfig, videoPlaybackSettings
     return groups;
   }, new Map<string, MediaMetadataField[]>()), [metadataFields]);
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
-  const preview = <section className={`flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50 ${fullscreen ? 'fixed inset-x-0 bottom-0 top-10 z-[370] w-screen' : ''}`}>
+  const preview = <section className={`flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50 ${fullscreen ? 'version-preview-fullscreen fixed inset-0 z-[370] h-screen w-screen' : ''}`}>
     <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-slate-200 px-3 py-2">
       <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t("ui.preview.13d61f")}</p><p className="truncate text-sm font-semibold text-slate-700">{fileName}</p></div>
       <div className="flex items-center gap-1">

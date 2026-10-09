@@ -247,7 +247,7 @@ class ComponentServiceManager {
     const id = String(this.nextRequestId++);
     const message = { type: 'request', id, method, payload, context: {
       ...publicContext(boundContext, invocationIdentity === BACKUP_RESTORE_INVOCATION),
-      permissions: ['application.settings', 'application.command'].includes(boundContext.surface)
+      permissions: ['application.settings', 'application.command', 'application.homeCard'].includes(boundContext.surface)
         ? (descriptor.service.permissions || []).filter(permission => ['component.settings', 'component.secrets', 'network.fetch', 'component.lifecycle.read', 'component.lifecycle.manage', 'dialogs', 'notifications'].includes(permission))
         : descriptor.service.permissions || [],
     } };

@@ -1002,7 +1002,7 @@ mediaTrackingScanScheduler = createMediaTrackingScanScheduler({
   mediaScanService,
   versionStaleDetectionService,
   getProject: (root, projectName) => workspaceCatalogs.get(root)?.byName.get(String(projectName || '').toLocaleLowerCase()),
-  onThumbnailCandidate: candidate => { void ensureTrackedVersionThumbnail(candidate); },
+  onThumbnailCandidate: ensureTrackedVersionThumbnail,
   thumbnailPriority: PRIORITY.project,
   writeLog,
 });
@@ -1225,7 +1225,7 @@ app.whenReady().then(async () => {
     setPlaybackPaused:capabilityRuntime.setComponentPlaybackPaused,updatePlaybackBounds:capabilityRuntime.updateComponentPlaybackBounds,refreshPlaybackBounds:capabilityRuntime.refreshComponentPlaybackBounds,
     screen,
     readConfig: configMutationService.read, mutateConfig: configMutationService.mutate,
-    WebContentsView,
+    BrowserWindow, nativeImage, WebContentsView,
     mainWindow,
     registry: componentHostRegistry,
     preloadPath: path.join(__dirname, 'component-preload.cjs'),
@@ -1247,7 +1247,7 @@ app.whenReady().then(async () => {
   registerMediaIpc({ Buffer, Date, Error, IMAGE_EXTENSIONS, IMAGE_PREVIEW_CONVERSION_EXTENSIONS, Math, Number, Object, PRIORITY, Promise, RAW_EXTENSIONS, String, VIDEO_EXTENSIONS, approvedMediaCacheDirectories, backgroundTasks, clearTimeout, convertedImagePreviewPath, dialog, exiftool, findImportedVideoPreview, flattenMetadataValue, fs, getMediaCacheDir, ipcMain, mainWindow, mediaCacheIndexes, mediaMetadataCache, mediaRuntimeState, mediaService, normalizeMediaCacheSizeGB, path, rawOrientationCorrection, rawPreviewPath, refreshMediaCacheIndex, setTimeout, thumbnailService, trimMediaCache, undefined, writeLog });
   registerMediaRatingIpc({ IMAGE_EXTENSIONS, RAW_EXTENSIONS, ensureWorkspace, getProjectPath, ipcMain, mediaRatingService, mediaService, path, refreshWorkspaceCatalog, workspaceCatalogs, writeLog });
   registerVersionIpc({ cancelMediaTrackingScan, Array, Boolean, Error, IMAGE_EXTENSIONS, JSON, Math, Number, RAW_EXTENSIONS, Set, String, VIDEO_EXTENSIONS, backgroundTasks, buildVersionBatchImportKey, cleanVersionName, copyFileAtomic, crypto, dialog, ensureTrackedVersionThumbnail, ensureWorkspace, fs, getProjectPath, getWorkspaceDataRoot, ipcMain: componentRpcIpcMain, mainWindow, mediaRatingService, mediaScanService, mediaService, path, projectVirtualPaths, recycleBinService, refreshWorkspaceCatalog, releaseWorkspaceWatchPath, resolveProjectEntry, runPythonEventAction, scheduleMediaTrackingScan, supportedVersionFileKind, suppressWorkspaceWatchPath, thumbnailService, trackingScanService, undefined, uniqueDestination, versionService, workspaceCatalogs, writeLog });
-  registerSelectionIpc({ ipcMain, path, fs, selectionService, workspaceCatalogs });
+  registerSelectionIpc({ ipcMain, path, fs, selectionService, workspaceCatalogs, getProjectPath });
   videoPlaybackService = registerVideoPlaybackIpc({ BrowserWindow, app, crypto, dialog, fs, ipcMain, mediaService, path, pluginService, processSupervisor, screen, spawn, writeLog });
   const credentialService = createCredentialService({ writeLog });
   const recoveryClients = [

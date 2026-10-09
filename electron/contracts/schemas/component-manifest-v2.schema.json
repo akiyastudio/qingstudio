@@ -599,7 +599,8 @@
                       "project.contextAction",
                       "project.importProvider",
                       "project.exportProvider",
-                      "application.command"
+                      "application.command",
+                      "application.homeCard"
                     ]
                   },
                   "id": {
@@ -1129,7 +1130,8 @@
                     "type": {
                       "enum": [
                         "workspace.toolbarAction",
-                        "component.sidePanel"
+                        "component.sidePanel",
+                        "application.homeCard"
                       ]
                     }
                   }

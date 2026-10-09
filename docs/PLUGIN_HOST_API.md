@@ -12,6 +12,25 @@ The UI sandbox disables Node, navigation, and browser permissions for UI WebCont
 
 Component RPC/events end in `.vN`; Host capabilities are unversioned. Breaking changes require new RPC/event versions, not changes to published semantics. Business adapters under `electron/compatibility/` are not public and receive no new methods. `window.photoFlowComponent.contractVersion` remains `1`, an independent preload ABI, not a negotiated Host API version. Context has no Host API version field. Its `locale` is the display language; see the [SDK](../component-sdk/README.md#display-language).
 
+## Native plugin windows
+
+A `component.sidePanel` page can call `await window.photoFlowComponent.openPanelWindow()` to open a second instance of the same contribution in a native window. It returns `{windowId}`. The original panel remains open. The new instance inherits its project, folder, and safe selection context, uses the same sandbox and RPC allowlist, and displays the plugin icon and name with native window controls.
+
+To add an application-level home card beside the built-in cards, declare an `application.homeCard` contribution:
+
+```json
+{
+  "type": "application.homeCard",
+  "id": "open-studio",
+  "label": "Studio",
+  "description": "Open the plugin workspace",
+  "pageId": "studio-page",
+  "rpcMethods": ["studio.open.v1"]
+}
+```
+
+`pageId` references a `component.fullPage` in the same manifest. Top-level `icon` and `displayName` supply the card icon and window title. Each click creates a separate instance with an application context and no project or file selection. RPC is limited by this entry's `rpcMethods`; Host capabilities follow application command permissions. A component with only a home card and full page is valid. Home-card and detached-panel windows share a limit of eight instances. Closing the source application page, disabling or unloading the component closes its windows.
+
 ## Manifests and permissions
 
 UI/service manifests declare Host contract version 2, contributions, service protocol/runtime/entry, versioned RPC allowlists, unversioned capabilities, and permissions. Explicitly use an empty events array if none are emitted. Do not declare Host API compatibility.
@@ -98,7 +117,7 @@ Secrets is available in project and application settings. Put/list/delete strict
 
 Network fetch requires canonical origin to exactly match the URL origin and manifest networkOrigins. Headers/secrets must be plain objects; mode/timeout/body types are strict, GET/HEAD cannot have bodies, and base64 must be canonical. One deadline and uninstall controller starts before secret resolution, covering secret-lock/disk waits, DNS, connection, redirects, and response. Every hop rejects non-global addresses and pins validated addresses to `agent:false` TLS lookup, using the original hostname for SNI/Host/certificates. Cross-origin redirects strip authorization/cookie/proxy headers; 301/302/303 switch to GET and clear body. Secrets enter fixed headers only through secretBindings. Uninstall aborts through the capability barrier; counts release in finally. Ordinary view closure does not alter concurrency.
 
-Contributions cover side panels, media/project actions, import/export providers, and application commands, each with ID, label, pageId, and separate RPC allowlist. Pages reference packaged fullPage; methods belong to the service. Ordinary tool components need a toolbar action or side panel; panel-only components need no new tab. Settings-only/decoder-only exceptions are documented separately.
+Contributions cover side panels, media/project actions, import/export providers, application commands, and application home cards, each with ID, label, pageId, and separate RPC allowlist. Pages reference packaged fullPage; methods belong to the service. Ordinary tool components need a toolbar action, side panel, or home card; panel-only components need no new tab. Settings-only/decoder-only exceptions are documented separately.
 
 Entries bind invocation scope and selection. Cross-directory selection uses the common ancestor; toolbar receives the complete safe selection for plugin filtering. Inspiration entries carry `contentKind:"inspiration"`; the host ignores renderer path identity and binds the configured inspiration root, without version-tree/progress access. Side panels/project actions may join videoTools/imageTools/officeTools groups. All three toolbar entries remain without selection, Office keeps a one-item dropdown, and inspiration always shows all three. Any panel ID works. A project action sharing a same-component/page toolbar action opens that full page; otherwise normal opening applies. Placed entries are not duplicated in standalone toolbar, Dock, root, or blank-area menus. Clicks carry safe selection/content kind; other contribution types cannot use these placements. Panels are source-page-specific and use the shared frame.
 

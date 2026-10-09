@@ -29,7 +29,7 @@ STORAGE_OWNERSHIP = {
     "workspace": {
         "filename": "<workspace-id>.sqlite3",
         "tables": WORKSPACE_TABLES,
-        "schemaVersion": 34,
+        "schemaVersion": 35,
         "migrationVersions": tuple(
             version for version, owners in MIGRATION_OWNERS.items() if "workspace" in owners
         ),

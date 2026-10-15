@@ -28,3 +28,7 @@ Apache 2.0 仅适用于本仓库原创代码，不替代第三方许可。本仓
 | Send2Trash | 1.8.3 | BSD-3-Clause | [源码](https://github.com/arsenetar/send2trash) · [许可](https://github.com/arsenetar/send2trash/blob/main/LICENSE) |
 
 构建或分发安装包时，应保留 Electron/Chromium 及其他依赖随附的许可证和声明。对 LGPL 等依赖，还需依据实际打包方式满足对应源码、替换或重新链接等要求；不能仅凭此索引代替这些材料。构建工具及其他 npm 依赖的许可见各自软件包。
+
+## 7-Zip 引擎
+
+内置压缩工具使用未经修改的 7-Zip 26.04，从固定版本的官方安装程序下载并校验 SHA-256。[对应源码](https://github.com/ip7z/7zip/tree/26.04)、[上游许可](https://www.7-zip.org/license.txt)、[LGPL 2.1 正文](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)。大部分代码采用 LGPL，部分采用 BSD；RAR 解压受 unRAR 限制，禁止用于开发 RAR 压缩软件。运行资源携带 License.txt。分发二进制时保留完整声明，提供适用的对应源码，并允许替换 LGPL 组件。准备引擎不授予其他插件的分发权。

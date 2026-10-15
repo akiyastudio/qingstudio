@@ -6,8 +6,7 @@ import { t, type MessageKey } from './runtime';
 import * as metadata from '../features/metadata/metadata-labels';
 import * as filters from '../features/workspace/project-file-filter-options';
 import * as panels from '../features/workspace/workspace-panel-model';
-import * as versions from '../features/versioning/versioning-v2-model';
-import * as edges from '../features/versioning/version-tree-edge-model';
+import * as versions from '../features/versioning/public-labels';
 import { VIDEO_ACTIONS as actions } from '../contracts/video-shortcuts';
 const labelKeys = new Map(Object.entries(zh).map(([key, source]) => [source, key as MessageKey]));
 /** Only application-owned labels. Never call this on file names, user text or metadata values. */
@@ -24,7 +23,7 @@ for (const key of Object.keys(WORKSPACE_PANEL_LABELS) as Array<keyof typeof WORK
 export const trackingStateLabel = (...args: Parameters<typeof versions.trackingStateLabel>) => localizeBuiltInLabel(versions.trackingStateLabel(...args));
 export const versionTreeNodeBadgeLabel = (...args: Parameters<typeof versions.versionTreeNodeBadgeLabel>) => localizeBuiltInLabel(versions.versionTreeNodeBadgeLabel(...args));
 export const progressTrackingActionLabel = (...args: Parameters<typeof versions.progressTrackingActionLabel>) => localizeBuiltInLabel(versions.progressTrackingActionLabel(...args));
-export const versionTreeRelationLabel = (...args: Parameters<typeof edges.versionTreeRelationLabel>) => localizeBuiltInLabel(edges.versionTreeRelationLabel(...args));
+export const versionTreeRelationLabel = (...args: Parameters<typeof versions.versionTreeRelationLabel>) => localizeBuiltInLabel(versions.versionTreeRelationLabel(...args));
 export const VERSION_PANEL_DEFINITIONS = Object.fromEntries(Object.entries(versions.VERSION_PANEL_DEFINITIONS).map(([id, value]) => [id, { ...value, get title() { return localizeBuiltInLabel(value.title); } }])) as typeof versions.VERSION_PANEL_DEFINITIONS;
 
 export const componentCapabilityUnavailableMessage = (components: Parameters<typeof availability.componentCapabilityUnavailableMessage>[0], capability: string, displayName: string) => renderText(availability.componentCapabilityUnavailableMessage(components, capability, localizeBuiltInLabel(displayName)));

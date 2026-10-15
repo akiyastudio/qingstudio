@@ -167,9 +167,19 @@ Persist PhotoFlow IDs and component metadata rather than project paths as busine
 
 ## Testing and releases
 
-- Public-checkout commands are `npm run test:examples`, `npm test`, and the build/smoke commands in the root README. Upstream Host API, architecture, lifecycle, and transaction suites are not exposed here as npm scripts; do not assume they ran for this update.
+- Run `npm test`, `npm run test:examples`, and the build/smoke commands in the root README. `npm run prepare:compression` then `npm run test:compressed-files` verifies the native archive engine and file-handler declarations. These selected suites do not represent every upstream integration test.
 - Validate the manifest against `electron/contracts/schemas/component-manifest-v2.schema.json` before packaging.
 - Package built UI, services, and runtime resources only. Hash declared lifecycle actions. Install in a clean profile, exercise cancellation/restart, and use real V1 data for upgrade/downgrade testing.
 - Increment the component business version for every release. Change RPC/event `.vN` only for breaking semantics; retain old and new methods together during migration.
 
 Legacy host business adapters have been removed. Components use the current Host API and explicit adoption grants.
+
+## Open files with a plugin
+
+A `component.sidePanel` contribution can declare `fileHandler: { extensions: [".abc"] }` to handle ordinary files. Use lowercase dotted extensions; do not combine fileHandler with placement. `contextMenu: "none"` hides the redundant menu entry. The host uses the manifest icon and the user's single/double-click preference, then opens the normal host panel with the selected file.
+
+Handlers apply only to writable ordinary files, not folders, shortcuts, or read-only archive members. Extension matching ignores case; competing handlers sort by componentId then contributionId. Supported built-in archives open in the host archive browser first. “Open with default application” bypasses the handler; no OS association is installed.
+
+UI context includes contributionId; the service context does not. Put any operation selector in the RPC payload and validate it against declared operations in the service. Handling a file grants no additional capabilities: read through scoped input tokens and request the required permissions.
+
+Compression is now a [built-in host feature](COMPRESSED_FILES.md), not an optional plugin.

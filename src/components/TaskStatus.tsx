@@ -94,14 +94,14 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({
   }, []);
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-slate-50 p-4" aria-live="polite" aria-busy={isRunning}>
+    <section className="pf-task-progress rounded-xl border border-slate-200 bg-slate-50 p-4" aria-live="polite" aria-busy={isRunning}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
         <div className="min-w-0 flex-1">
-          <div className="mb-2 flex items-center justify-between gap-4 text-sm">
-            <p className={`min-w-0 truncate font-medium ${color}`} title={message} role="status"><LocalizedText value={message}/></p>
-            <span className="shrink-0 font-mono text-blue-600">{percentage.toFixed(Number.isInteger(percentage) ? 0 : 1)}%</span>
+          <div className="pf-task-progress-header mb-2 flex items-center justify-between gap-4 text-sm">
+            <p className={`pf-task-progress-message min-w-0 truncate font-medium ${color}`} title={message} role="status"><LocalizedText value={message}/></p>
+            <span className="pf-task-progress-percentage shrink-0 font-mono text-blue-600">{percentage.toFixed(Number.isInteger(percentage) ? 0 : 1)}%</span>
           </div>
-          <ProgressBar value={percentage} trackClassName="h-2 overflow-hidden rounded-full bg-slate-200" barClassName="h-full rounded-full bg-blue-500 transition-all duration-300"/>
+          <ProgressBar value={percentage} trackClassName="pf-progress-track h-2 overflow-hidden rounded-full bg-slate-200" barClassName="pf-progress-fill h-full rounded-full bg-blue-500 transition-all duration-300"/>
         </div>
         {action && <div className="shrink-0">{action}</div>}
       </div>

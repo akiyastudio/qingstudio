@@ -62,6 +62,8 @@ const discardVerifiedMediaHandle = async (token, filePath) => {
 
 const createMediaAccessService = ({ getWorkspaceRoots, getAdditionalRoots = () => [] }) => {
   const grants = new Map();
+  const deferredGrants = new Map();
+  const inputAliases = new Map(), inputAliasKeys = new Map();
   const rootGrants = new Map();
   const TOKEN_TTL_MS = 60 * 60 * 1000;
   const pathKey = value => process.platform === 'win32' ? path.resolve(value).toLocaleLowerCase() : path.resolve(value);
@@ -112,6 +114,18 @@ const createMediaAccessService = ({ getWorkspaceRoots, getAdditionalRoots = () =
   const authorizeInput = async value => {
     if (typeof value === 'string' && value.startsWith('media-token:')) {
       const token = value.slice('media-token:'.length);
+      const deferred = deferredGrants.get(token);
+      if (deferred) {
+        if (deferred.expiresAt < Date.now()) { deferredGrants.delete(token); throw new Error('媒体访问授权已失效'); }
+        deferred.pending ||= Promise.resolve().then(deferred.materialize).then(target => {
+          if (deferredGrants.get(token) !== deferred) throw new Error('媒体访问授权已失效');
+          grants.set(token, captureGrant(target));
+          const key = pathKey(grants.get(token).path), aliases = inputAliases.get(key) || new Set();
+          aliases.add(token); inputAliases.set(key, aliases); inputAliasKeys.set(token, key);
+          deferredGrants.delete(token);
+        }).catch(error => { deferred.pending = null; throw error; });
+        await deferred.pending;
+      }
       const grant = grants.get(token);
       if (!grant || grant.expiresAt < Date.now()) {
         grants.delete(token);
@@ -195,8 +209,35 @@ const createMediaAccessService = ({ getWorkspaceRoots, getAdditionalRoots = () =
     return grant.path;
   };
 
-  const revokeToken = async token => { grants.delete(token); await discardVerifiedMediaHandle(token); };
-  return { authorizeInput, authorizeWorkspaceInput, grantRoot, grantPath, resolveToken, revokeToken };
+  // Internal producers supply the loader; renderers receive only an opaque token.
+  // Materialization passes through the same identity checks as ordinary grants.
+  const grantDeferredPath = materialize => {
+    if (typeof materialize !== 'function') throw new Error('无效的媒体读取器');
+    const now = Date.now();
+    for (const [token, grant] of deferredGrants) if (grant.expiresAt < now) deferredGrants.delete(token);
+    if (deferredGrants.size >= 16000) throw new Error('媒体访问授权过多');
+    const token = crypto.randomBytes(24).toString('base64url');
+    deferredGrants.set(token, { materialize, expiresAt: now + TOKEN_TTL_MS, pending: null });
+    return token;
+  };
+  const removeInputAlias = token => {
+    const key = inputAliasKeys.get(token), aliases = inputAliases.get(key);
+    aliases?.delete(token); if (aliases && !aliases.size) inputAliases.delete(key);
+    inputAliasKeys.delete(token);
+  };
+  const inputAliasesForPath = value => {
+    const tokens = inputAliases.get(pathKey(value));
+    if (!tokens) return [];
+    const result = [];
+    for (const token of tokens) {
+      const grant = grants.get(token);
+      if (!grant || grant.expiresAt < Date.now()) { removeInputAlias(token); continue; }
+      result.push(`media-token:${token}`);
+    }
+    return result;
+  };
+  const revokeToken = async token => { deferredGrants.delete(token); grants.delete(token); removeInputAlias(token); await discardVerifiedMediaHandle(token); };
+  return { authorizeInput, authorizeWorkspaceInput, grantRoot, grantPath, grantDeferredPath, inputAliasesForPath, resolveToken, revokeToken };
 };
 
 module.exports = { createMediaAccessService, discardVerifiedMediaHandle, takeVerifiedMediaHandle };

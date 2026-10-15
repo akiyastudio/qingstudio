@@ -125,7 +125,7 @@ else app.on('second-instance', () => {
 const projectVirtualPaths = createProjectVirtualPathService();
 const projectRoot = path.join(__dirname, '..');
 const privacyService = createPrivacyService({ app, fs, path, shell, projectRoot });
-const userComponentRoot = process.env.LOCALAPPDATA
+const userComponentRoot = process.env.PHOTOFLOW_SMOKE_TEST === '1' && smokeUserDataPath ? path.join(app.getPath('userData'), 'components') : process.env.LOCALAPPDATA
   ? path.join(process.env.LOCALAPPDATA, 'PhotoFlow', 'components')
   : path.join(app.getPath('userData'), 'components');
 const componentRegistry = createComponentRegistry({
@@ -139,6 +139,7 @@ const componentHostRegistry = createComponentHostRegistry({
   admitDescriptor: componentRegistry.admitHostDescriptor,
 });
 configureProtectedProjectFolderRegistry({ descriptorProvider: componentHostRegistry.list, descriptorRevisionProvider: componentRegistry.hostPolicyRevision });
+let compressedFilesService;
 let componentViewManager; let componentServiceManager; let configMutationService; let toastViewManager;
 let componentCapabilityBroker; let abortComponentNetworkRequests;
 let getApplicationQuitState = () => 'idle';
@@ -1029,7 +1030,10 @@ thumbnailPipeline = new ThumbnailPipeline({
   trimCache: trimMediaCache,
   notify: update => {
     handleThumbnailUpdate(update);
-    if (mainWindow && !mainWindow.isDestroyed()) sendToApplicationRenderers(mainWindow, 'thumbnail-state-changed', update);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      sendToApplicationRenderers(mainWindow, 'thumbnail-state-changed', update);
+      for (const filePath of mediaAccessService.inputAliasesForPath(update.filePath)) sendToApplicationRenderers(mainWindow, 'thumbnail-state-changed', { ...update, filePath });
+    }
   },
   log: writeLog,
   concurrency: Math.max(2, Math.min(4, Math.floor((os.availableParallelism?.() || os.cpus().length || 4) / 4))),
@@ -1217,6 +1221,16 @@ app.whenReady().then(async () => {
   });
   ({ componentCapabilityBroker, abortComponentNetworkRequests } = capabilityRuntime);
   const { componentInputGrants, componentNotificationService, clearComponentCapabilityState, clearComponentViewState, clearComponentSecretData } = capabilityRuntime;
+  require('./services/compressed-files/engine.cjs').configureProcessSupervisor(processSupervisor);
+  compressedFilesService = require('./services/compressed-files/native-service.cjs').createCompressedFilesService({
+    broker: componentCapabilityBroker, mediaAccessService, shell,
+    resolveContext: input => {
+      const normalized = componentContentBinding.resolveOpenRequest(input);
+      const binding = componentContentBinding.resolve(normalized);
+      return { ...normalized, workspacePath: binding.workspaceRoot, projectId: String(binding.project.id), projectName: binding.project.name, projectStatus: binding.project.status };
+    },
+  });
+  require('./modules/compressed-files-ipc.cjs').registerCompressedFilesIpc({ ipcMain, service: compressedFilesService });
   componentServiceManager = new ComponentServiceManager({
     registry: componentHostRegistry,
     processSupervisor,
@@ -1242,8 +1256,9 @@ app.whenReady().then(async () => {
   registerComponentHostIpc({ ipcMain, manager: componentViewManager, mainWindow });
   const componentRpcIpcMain = createComponentRpcIpcProxy({ ipcMain, manager: componentViewManager });
 
-  const { componentTransactionReady } = registerSystemIpc({ Array, Boolean, BrowserWindow, Date, Error, JSON, Object, String, abortComponentNetworkRequests, app, approvedMediaCacheDirectories, backgroundTasks, checkForUpdates, clearComponentSecretData, componentCapabilityBroker, componentServiceManager, componentViewManager, configMutationService, console, crypto, dialog, domainCommandJournal, domainHealthService, exiftoolPath, filePublicationService, fileSystemService, findLatestPhotoshop, fs, getConfigPath, getLogDir, getRunConfig, getUserBirthdaysPath, ipcMain: componentRpcIpcMain, mainWindow, mediaRuntimeState, openAllowedExternalUrl, path, pluginService, privacyService, process, processSupervisor, readSavedConfig, releaseWorkspaceWatchPath, screen, shell, spawn, suppressWorkspaceWatchPath, telemetryService, thumbnailService, undefined, writeLog });
+  const { componentTransactionReady, retireBuiltInComponents } = registerSystemIpc({ Array, Boolean, BrowserWindow, Date, Error, JSON, Object, String, abortComponentNetworkRequests, app, approvedMediaCacheDirectories, backgroundTasks, checkForUpdates, clearComponentSecretData, componentCapabilityBroker, componentServiceManager, componentViewManager, configMutationService, console, crypto, dialog, domainCommandJournal, domainHealthService, exiftoolPath, filePublicationService, fileSystemService, findLatestPhotoshop, fs, getConfigPath, getLogDir, getRunConfig, getUserBirthdaysPath, ipcMain: componentRpcIpcMain, mainWindow, mediaRuntimeState, openAllowedExternalUrl, path, pluginService, privacyService, process, processSupervisor, readSavedConfig, releaseWorkspaceWatchPath, screen, shell, spawn, suppressWorkspaceWatchPath, telemetryService, thumbnailService, undefined, writeLog });
   await componentTransactionReady;
+  await retireBuiltInComponents();
   for (const descriptor of componentHostRegistry.list()) componentCapabilityBroker.assertCapabilities(descriptor);
   registerWorkspaceIpc({ getReadyProjectPath, Array, Boolean, CANCELLED_CODE, Date, Error, HIDDEN_SYSTEM_ENTRY_NAMES, IMAGE_EXTENSIONS, Math, Number, Object, Promise, RAW_EXTENSIONS, Set, String, VIDEO_EXTENSIONS, WORKSPACE_STATUSES, activeProjectFileOperations, acquireFileRootWatcher, app, assertDiskSpace, assertExistingInside, assertInside, assertRegularFile, assertUndoIdentity, backgroundTasks, cancelMediaTrackingScan, capturePathIdentity, cleanProjectName, clipboard, collectCopyPlan, copyFileAtomic, copyPlannedFiles, componentServiceManager, crypto, dialog, ensureWorkspace, extractVideoTimelineFrames, fileSystemService, findLatestPhotoshop, fs, getProjectPath, getWorkspaceDataRoot, ipcMain: componentRpcIpcMain, mainWindow, mediaRuntimeState, mediaService, moveFileAtomic, movePathAtomic, publishPathNoClobber, mutateWorkspaceCatalog, normalizeMediaCacheSizeGB, path, pathExists, pluginService, projectVirtualPaths, pushUndoOperation, removeUndoOperation, reconcileWorkspaceCatalog, recycleBinService, refreshWorkspaceCatalog, releaseFileRootWatcher, releaseWorkspaceWatchPath, removeCopiedSources, renameHistory, resolveProjectEntry, resolveWorkspaceRoot, resumeFileRootWatcher, runPythonJsonAction, samePathIdentity, scheduleMediaTrackingScan, shell, shellNewService, spawn, suspendFileRootWatcher, suppressWorkspaceWatchPath, telemetryService, thumbnailService, throwIfCancelled, undefined, uniqueDestination, versionService, watchWorkspace, workspaceCatalogs, workspaceMaintenanceRepository, workspaceRepository, writeLog });
   registerFileOperationsIpc({ isOrdinaryProjectRoot, Array, Boolean, BrowserWindow, CANCELLED_CODE, Date, Error, IMAGE_EXTENSIONS, Math, Promise, RAW_EXTENSIONS, Set, String, VIDEO_EXTENSIONS, activeProjectFileOperations, app, assertDiskSpace, assertExistingInside, assertInside, backgroundTasks, cancelMediaTrackingScan, cancelSystemFileCut, canUseNativeFastCut, capturePathIdentity, clearSystemFileClipboardIfCurrent, clipboard, collectCopyPlan, copyFileAtomic, copyPlannedFiles, crypto, dns, ensureWorkspace, fetch: electronNet.fetch.bind(electronNet), fileOperationState, fs, getProjectPath, ipcMain, movePathAtomic, movePlannedFilesFast, publishPathNoClobber, nativeImage, net: nodeNet, path, process, projectVirtualPaths, pushUndoOperation, readSystemFileClipboard, recycleBinService, releaseWorkspaceWatchPath, removeCopiedSources, removeCreatedPasteTargets, resolveRemoteHost: async hostname => (await electronNet.resolveHost(hostname)).endpoints, resumeToastViewAfterNativeDrag, samePathIdentity, scheduleMediaTrackingScan, screen, selectionService, suspendToastViewForNativeDrag, suppressWorkspaceWatchPath, throwIfCancelled, uniqueDestination, versionService, workspaceRepository, writeLog, writeSystemFileClipboard });
@@ -1402,7 +1417,7 @@ getApplicationQuitState = registerConfigDrainBeforeQuit({
         () => mediaRatingService.flushRatingCache(),
         () => exiftool.end(false),
       ],
-      teardown: [() => componentServiceManager?.destroy(), () => componentViewManager?.destroy(), () => eventBus.clear()],
+      teardown: [() => compressedFilesService?.destroy(), () => componentServiceManager?.destroy(), () => componentViewManager?.destroy(), () => eventBus.clear()],
     });
   },
   onQuitFailed: async error => {

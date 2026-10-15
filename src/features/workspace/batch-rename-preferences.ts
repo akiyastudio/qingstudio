@@ -65,3 +65,26 @@ export const writeBatchRenameParts = (parts: BatchRenamePart[], storage?: Pick<S
     (storage ?? window.localStorage).setItem(BATCH_RENAME_PREFERENCES_KEY, JSON.stringify(rules));
   } catch { /* Preferences are optional when storage is unavailable. */ }
 };
+
+export const formatBatchRenameDate = (date: Date, pattern: string) => {
+  const values: Record<string, string> = {
+    YYYY: String(date.getFullYear()),
+    YY: String(date.getFullYear()).slice(-2),
+    MM: String(date.getMonth() + 1).padStart(2, '0'),
+    DD: String(date.getDate()).padStart(2, '0'),
+    HH: String(date.getHours()).padStart(2, '0'),
+    mm: String(date.getMinutes()).padStart(2, '0'),
+    ss: String(date.getSeconds()).padStart(2, '0')
+  };
+  return pattern.replace(/YYYY|YY|MM|DD|HH|mm|ss/g, token => values[token]);
+};
+export const formatBatchRenameLetter = (index: number, letterCase: 'upper' | 'lower') => {
+  let value = Math.max(0, index) + 1;
+  let result = '';
+  while (value > 0) {
+    value -= 1;
+    result = String.fromCharCode(65 + (value % 26)) + result;
+    value = Math.floor(value / 26);
+  }
+  return letterCase === 'lower' ? result.toLocaleLowerCase() : result;
+};

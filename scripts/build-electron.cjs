@@ -26,6 +26,7 @@ const builderConfigFor = version => {
 const run = async () => {
   const root = path.resolve(__dirname, '..');
   const metadata = require('../package.json');
+  if (process.platform === 'win32' && process.arch === 'x64') await require('./prepare-compression-runtime.cjs').prepareRuntime();
   const restore = installVersionAdapter(metadata.name);
   try {
     await require('electron-builder').build({ projectDir: root, config: builderConfigFor(metadata.version), publish: 'never' });

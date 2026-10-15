@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Crop,
   FileImage,
+  FileArchive,
   FileInput,
   FileText,
   FolderInput,
@@ -28,6 +29,7 @@ import { PanelTaskScope, useTaskCenter } from '../background-tasks/TaskCenter';
 import { isActivePresentedBackgroundTaskForPanel, panelTaskSessionKey } from '../background-tasks/panel-task-session-model';
 
 const TOOL_MODAL_DETAILS: Record<string, { description: string; icon: React.ReactNode }> = {
+  'component:builtin-compression:tool': { get description() { return t('compression.description'); }, icon: <FileArchive size={18}/> },
   import: { get description() { return t("ui.analyze.sd.card.media.and.import.fab2c4"); }, icon: <MemoryStick size={18}/> },
   'negative-import': { get description() { return t("ui.import.files.or.folders.and.register.4d2f65"); }, icon: <Aperture size={18}/> },
   broll: { get description() { return t("ui.batch.import.behind.the.scenes.images.3fc252"); }, icon: <FolderInput size={18}/> },

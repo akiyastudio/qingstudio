@@ -7,6 +7,8 @@ const { COMPONENT_HOST_CONTRACT_VERSION, parseComponentHostManifest, isSettingsO
 const { listIntegrityFiles, readPinnedComponentIntegrity, validateComponentIntegrity, validateComponentIntegrityAsync } = require('./component-integrity.cjs');
 const { developmentComponentMetadataToken, discoverDevelopmentComponents, safeFile } = require('./component-development.cjs');
 const { legacyRuntimeCapabilities } = require('./compatibility/legacy-runtime-capabilities.cjs');
+// These tools have moved into the host; old installations must not contribute UI.
+const RETIRED_COMPONENT_IDS = Object.freeze(['archive-tools']);
 
 const COMPONENT_DEFINITIONS = Object.freeze(Object.fromEntries(Object.entries(PLUGIN_DEFINITIONS).map(([id, definition]) => {
   const runtimeDefinition = { ...definition, capability: definition.capabilities[0] };
@@ -182,7 +184,7 @@ const createComponentRegistry = ({ projectRoot, userComponentRoot, isPackaged, p
     enablementStateTrusted = true;
   };
   const withEnablementState = component => component && component.installed
-    ? { ...component, enabled: enablementStateTrusted && !disabledComponentIds.has(component.id), ...(!enablementStateTrusted || disabledComponentIds.has(component.id) ? { status: 'disabled' } : {}) }
+    ? { ...component, enabled: enablementStateTrusted && !disabledComponentIds.has(component.id) && !RETIRED_COMPONENT_IDS.includes(component.id), ...(!enablementStateTrusted || disabledComponentIds.has(component.id) || RETIRED_COMPONENT_IDS.includes(component.id) ? { status: 'disabled' } : {}) }
     : component;
   const roots = [{ source: 'user', path: installRoot }];
   let developmentCache = { token: '', components: [] };
@@ -489,6 +491,7 @@ const createComponentRegistry = ({ projectRoot, userComponentRoot, isPackaged, p
     const component = installedComponents().get(id);
     if (!component?.installed) throw new Error('组件尚未安装或发现');
     const shouldEnable = enabled === true;
+    if (shouldEnable && RETIRED_COMPONENT_IDS.includes(id)) throw new Error('此功能已内置于主程序，不再使用旧插件');
     const wasDisabled = disabledComponentIds.has(id);
     if (wasDisabled === !shouldEnable) return { componentId: id, enabled: shouldEnable };
     if (shouldEnable) disabledComponentIds.delete(id); else disabledComponentIds.add(id);
@@ -510,4 +513,4 @@ const createComponentRegistry = ({ projectRoot, userComponentRoot, isPackaged, p
   return { inspect, list, listInstalled, listWithSizes, resolve, resolveAsync, resolvePackage, verifyDirectory, verifyDirectoryAsync, componentIntegrityToken, seedIntegrityToken, ensureInstallRoot, installRoot, roots, hostCandidates, hostPolicyRevision, admitHostDescriptor, componentStatePath, setComponentEnabled, clearComponentEnabledState };
 };
 
-module.exports = { COMPONENT_DEFINITIONS, compareVersions, readComponentPackageManifest, readZipEntries, validateComponentPackageInspection, createComponentRegistry };
+module.exports = { COMPONENT_DEFINITIONS, RETIRED_COMPONENT_IDS, compareVersions, readComponentPackageManifest, readZipEntries, validateComponentPackageInspection, createComponentRegistry };

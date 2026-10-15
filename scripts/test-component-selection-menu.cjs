@@ -9,101 +9,9 @@ const { ComponentViewManager } = require('../electron/services/component-view-ma
 
 const exportsModule = { exports: {} };
 vm.runInNewContext(transformSync(fs.readFileSync('src/features/components/component-contribution-scope-model.ts', 'utf8'), { loader: 'ts', format: 'cjs' }).code, { module: exportsModule, exports: exportsModule.exports });
-const { componentContributionAcceptsSelection: accepts } = exportsModule.exports;
+const { componentContributionAcceptsSelection: accepts, componentFileHandlerForEntry: handlerFor } = exportsModule.exports;
 const archive = { kind: 'file', relativePath: 'folder/FILE.ZIP' }, image = { kind: 'image', relativePath: 'folder/a.jpg' }, folder = { kind: 'folder', relativePath: 'folder/nested' };
-const manifest = {
-  "apiVersion": 1,
-  "id": "menu-fixture",
-  "version": "1.0.0",
-  "componentHost": {
-    "contractVersion": 2,
-    "contributions": [
-      {
-        "type": "component.fullPage",
-        "id": "panel-ui",
-        "title": "Menu fixture",
-        "entry": "ui/index.html"
-      },
-      {
-        "type": "component.sidePanel",
-        "id": "extract-panel",
-        "label": "Extract",
-        "pageId": "panel-ui",
-        "placement": "workspace.officeTools",
-        "contextMenu": "none",
-        "selection": {
-          "minCount": 1,
-          "kinds": [
-            "file"
-          ],
-          "extensions": [
-            ".zip",
-            ".7z",
-            ".rar",
-            ".001",
-            ".tar",
-            ".gz",
-            ".bz2",
-            ".xz"
-          ]
-        },
-        "rpcMethods": [
-          "sample.context.v1",
-          "sample.media-page.v1"
-        ]
-      },
-      {
-        "type": "component.sidePanel",
-        "id": "add",
-        "label": "Create archive",
-        "pageId": "panel-ui",
-        "contextMenu": "root",
-        "selection": {
-          "minCount": 1,
-          "kinds": [
-            "file",
-            "folder",
-            "image",
-            "raw",
-            "video"
-          ],
-          "excludedExtensions": [
-            ".zip",
-            ".7z",
-            ".rar",
-            ".001",
-            ".tar",
-            ".gz",
-            ".bz2",
-            ".xz"
-          ]
-        },
-        "rpcMethods": [
-          "sample.context.v1",
-          "sample.media-page.v1"
-        ]
-      }
-    ],
-    "service": {
-      "protocolVersion": 1,
-      "runtime": "node",
-      "entrypoints": {
-        "default": "service.cjs"
-      },
-      "rpcMethods": [
-        "sample.context.v1",
-        "sample.media-page.v1"
-      ],
-      "capabilities": [
-        "project.media.page"
-      ],
-      "permissions": [
-        "project.media.read"
-      ],
-      "events": []
-    }
-  }
-};
+const manifest = JSON.parse(fs.readFileSync('scripts/fixtures/file-tools-component.json', 'utf8'));
 const unzip = manifest.componentHost.contributions.find(item => item.id === 'extract-panel'), add = manifest.componentHost.contributions.find(item => item.id === 'add');
 assert.equal(accepts(unzip, []), false);
 assert.equal(accepts(unzip, [archive]), true);
@@ -117,11 +25,24 @@ assert.equal(accepts(add, [{ ...image, readOnly: true }]), false);
 assert.equal(accepts({ selection: { minCount: 1, maxCount: 1 } }, [image, folder]), false);
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'photoflow-menu-contract-'));
 try {
-  fs.mkdirSync(path.join(root, 'ui')); fs.writeFileSync(path.join(root, 'ui', 'index.html'), '<!doctype html>'); fs.writeFileSync(path.join(root, 'service.cjs'), '');
+  fs.mkdirSync(path.join(root, 'ui')); fs.writeFileSync(path.join(root, 'ui', 'index.html'), '<!doctype html>'); fs.writeFileSync(path.join(root, 'service.cjs'), ''); fs.writeFileSync(path.join(root, 'ui', 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
   const descriptor = parseComponentHostManifest(manifest, root);
   const listed = ComponentViewManager.prototype.listContributions.call({ registry: { list: () => [descriptor] } });
   assert.equal(listed.find(item => item.contributionId === 'add').contextMenu, 'root');
   assert.deepEqual(listed.find(item => item.contributionId === 'extract-panel').selection.extensions, unzip.selection.extensions);
+  const handler = listed.find(item => item.contributionId === 'browse');
+  assert.deepEqual(handler.fileHandler.extensions, unzip.selection.extensions);
+  assert(handler.iconUrl.startsWith('photoflow-component://icon/file-tools-fixture'));
+  assert.equal(handlerFor(listed, archive), handler);
+  assert.equal(handlerFor([], archive), undefined, 'uninstalling or disabling removes handling and icons');
+  assert.equal(handlerFor(listed, image), undefined);
+  assert.equal(handlerFor(listed, { ...archive, viaShortcut: true }), undefined);
+  for (const fileHandler of [{ extensions: ['ZIP'] }, { extensions: [] }, { extensions: ['.zip'], unknown: true }, null]) {
+    const invalid = structuredClone(manifest); invalid.componentHost.contributions.find(item => item.id === 'browse').fileHandler = fileHandler;
+    assert.throws(() => parseComponentHostManifest(invalid, root), /fileHandler/);
+  }
+  const placedHandler = structuredClone(manifest); const placedBrowse = placedHandler.componentHost.contributions.find(item => item.id === 'browse'); placedBrowse.placement = 'workspace.folderPanel'; delete placedBrowse.contextMenu;
+  assert.throws(() => parseComponentHostManifest(placedHandler, root), /fileHandler/);
   for (const selection of [{ minCount: 2, maxCount: 1 }, { extensions: ['ZIP'] }, { kinds: ['unknown'] }, { extra: true }, []]) {
     const invalid = structuredClone(manifest); invalid.componentHost.contributions[1].selection = selection;
     assert.throws(() => parseComponentHostManifest(invalid, root));

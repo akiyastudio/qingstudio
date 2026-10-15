@@ -44,6 +44,7 @@ type AlertDialogOptions = {
 };
 
 type PromptDialogOptions = {
+  inputType?: 'text' | 'password';
   title: LocalizedText;
   message?: LocalizedText;
   detail?: LocalizedText;
@@ -135,6 +136,7 @@ const AppDialogProvider = ({ children }: { children: ReactNode }) => {
     if (!active || resolvingId.current === active.id) return;
     resolvingId.current = active.id;
     active.resolve(value);
+    if (active.kind === 'prompt' && (active.options as PromptDialogOptions).inputType === 'password') setPromptValue('');
     setQueue(current => current.filter(request => request.id !== active.id));
     resolvingId.current = null;
   }, [active]);
@@ -175,7 +177,7 @@ const AppDialogProvider = ({ children }: { children: ReactNode }) => {
         </div>
         {options.message && <p id={`app-dialog-message-${active.id}`} className={`mt-3 whitespace-pre-line text-sm leading-6 ${alertOptions ? 'font-medium text-slate-700' : 'text-slate-500'}`}>{renderText(options.message)}</p>}
         {options.detail && <p className="mt-2 whitespace-pre-line text-xs leading-5 text-slate-500">{renderText(options.detail)}</p>}
-        {promptOptions && <input aria-label={renderText(promptOptions.message || promptOptions.title)} data-default-focus="true" value={promptValue} onChange={event => setPromptValue(event.target.value)} placeholder={renderText(promptOptions.placeholder)} className="form-input mt-4"/>}
+        {promptOptions && <input type={promptOptions.inputType || 'text'} autoComplete={promptOptions.inputType === 'password' ? 'off' : undefined} aria-label={renderText(promptOptions.message || promptOptions.title)} data-default-focus="true" value={promptValue} onChange={event => setPromptValue(event.target.value)} placeholder={renderText(promptOptions.placeholder)} className="form-input mt-4"/>}
         <div className="mt-5 flex justify-end gap-2">
           {!alertOptions && <button type="button" data-default-focus={Boolean(choiceOptions?.cancelDefault || dangerousConfirm || dangerousDefaultChoice)} onClick={() => finish(active.kind === 'confirm' ? false : null)} className="dialog-secondary">{renderText(confirmOptions?.cancelLabel || promptOptions?.cancelLabel || choiceOptions?.cancelLabel) || t("common.cancel")}</button>}
           {alertOptions

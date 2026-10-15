@@ -1,4 +1,5 @@
 const { localizeDialogOptions } = require("../services/localization.cjs");
+const { RETIRED_COMPONENT_IDS } = require('../component-registry.cjs');
 const { t: translateNative } = require("../services/localization.cjs");
 const applicationLocalization = require('../services/localization.cjs');
 const { sendToApplicationRenderers, sendToRequestingRenderer, applicationWindowFor } = require('../services/application-windows.cjs');
@@ -1136,16 +1137,17 @@ const registerSystemIpc = context => {
     }
   });
 
-  ipcMain.handle('components-uninstall', async (_event, componentId, options = {}) => {
+  const uninstallComponent = async (_event, componentId, options = {}, retireBuiltInReplacement = false) => {
     let transitionLease;
     try {
       await componentTransactionReady;
       const recoveryComponentId = String(componentId || '');
-      if (!app.isPackaged) throw new Error('开发环境组件由源码提供，不能在应用内卸载');
+      const retiring = retireBuiltInReplacement === true && RETIRED_COMPONENT_IDS.includes(componentId);
+      if (!app.isPackaged && !retiring) throw new Error('开发环境组件由源码提供，不能在应用内卸载');
       const clearUserData = options?.clearUserData === true;
       if (clearUserData && typeof clearComponentSecretData !== 'function') throw new Error('组件私密数据清理依赖不可用');
       const promptComponent = pluginService.list().find(item => item.id === componentId);
-      if (!await confirmComponentBackgroundStop({ componentId: recoveryComponentId, componentName: promptComponent?.name || recoveryComponentId, action: 'uninstall', processSupervisor, lifecycleCoordinator, dialog, mainWindow })) return { success: false, cancelled: true };
+      if (!retiring && !await confirmComponentBackgroundStop({ componentId: recoveryComponentId, componentName: promptComponent?.name || recoveryComponentId, action: 'uninstall', processSupervisor, lifecycleCoordinator, dialog, mainWindow })) return { success: false, cancelled: true };
       const recoveredTransactions = await recoverPendingComponentTransaction(recoveryComponentId);
       const recoveredUninstall = recoveredTransactions.find(result => result.kind === 'uninstall' && result.status === 'committed');
       if (recoveredUninstall) { invalidateComponentStatus(); return { success: true, recovered: true, dataCleared: recoveredUninstall.clearUserData, cleanupWarnings: [], operationId: recoveredUninstall.operationId }; }
@@ -1183,7 +1185,15 @@ const registerSystemIpc = context => {
       writeLog('error', 'Component uninstall failed', { componentId, clearUserData: options?.clearUserData === true, code: error.code, error: error.message || String(error), stack: error.stack, operationId: error?.journal?.operationId || error?.transactionRecord?.operationId });
       return { success: false, error: error.message || String(error), operationId: error?.journal?.operationId || error?.transactionRecord?.operationId, cleanupPending: Boolean(error?.journal) || error?.cleanupPending === true, outcomeUnknown: Boolean(error?.outcomeUnknown) };
     } finally { transitionLease?.release?.(); }
-  });
+  };
+  ipcMain.handle('components-uninstall', (event, componentId, options) => uninstallComponent(event, componentId, options));
+  const retireBuiltInComponents = async () => {
+    await componentTransactionReady;
+    for (const componentId of RETIRED_COMPONENT_IDS) {
+      const component = pluginService.list().find(item => item.id === componentId);
+      if (component?.installed && component.source === 'user') await uninstallComponent(null, componentId, { clearUserData: false }, true);
+    }
+  };
 
   ipcMain.handle('cancel-python', async (_event, requestId) => {
     const normalizedRequestId = String(requestId || '');
@@ -2000,7 +2010,7 @@ const registerSystemIpc = context => {
     const executable = await findLatestPhotoshop();
     return { available: Boolean(executable) };
   });
-  return { componentTransactionReady };
+  return { componentTransactionReady, retireBuiltInComponents };
 };
 
 module.exports = { copyComponentIntoStaging, awaitDurableCleanupRestart, componentTemporaryCleanupTargets, confirmComponentBackgroundStop, confirmComponentPackageInstall, createComponentInstallAdmission, createDurableCleanupAdmission, enterComponentInstallTransition, normalizeSdImportAutoMove, prepareSafeComponentInstallContainer, pythonToolResourcePaths, registerHostCapabilities, registerSystemIpc, resolvePythonWorkerResourceLease, savePrivacyConsentWithConfig, shouldTrackPythonToolAsBackgroundTask, snapshotComponentTrust, transitionComponentEnabled, validateComponentInstallRequest, validatePrivacyConsentRequest };

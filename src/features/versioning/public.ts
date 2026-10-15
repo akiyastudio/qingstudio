@@ -1,3 +1,4 @@
+// Non-UI consumers should use ./public-labels to avoid initializing renderer views.
 export * from './TrackingConfirmationPanel';
 export * from './ProgressPairPreview';
 export * from './VersionProgressPanel';

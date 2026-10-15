@@ -267,12 +267,20 @@ const parseComponentHostManifest = (manifest, componentRoot, developmentFiles = 
       }
       settingsForms.push(Object.freeze({ type: raw.type, id, label, title: raw.title === undefined ? label : requiredExactStringText(raw.title, 'settings form title'), form: parseComponentSettingsForm(raw.form), customPage }));
     } else {
-      rejectUnknownFields(raw, ['type', 'id', 'label', 'title', 'description', 'pageId', 'rpcMethods', 'placement', 'selection', 'contextMenu'], `${raw.type} contribution`);
+      rejectUnknownFields(raw, ['type', 'id', 'label', 'title', 'description', 'pageId', 'rpcMethods', 'placement', 'selection', 'contextMenu', 'fileHandler'], `${raw.type} contribution`);
       const label = requiredExactStringText(raw.label, `${raw.type} label`, 80); const pageId = requiredExactId(raw.pageId, `${raw.type} pageId`);
       const description = raw.description === undefined ? '' : requiredExactStringText(raw.description, `${raw.type} description`, 240);
       const placement = raw.placement === undefined ? '' : requiredExactStringText(raw.placement, `${raw.type} placement`, 80);
       if (placement && !(['workspace.videoTools', 'workspace.imageTools', 'workspace.officeTools'].includes(placement) && ['component.sidePanel', 'project.contextAction'].includes(raw.type) || placement === 'workspace.folderPanel' && raw.type === 'component.sidePanel')) throw new Error(`Invalid ${raw.type} placement`);
       if (raw.contextMenu !== undefined && (!['root', 'group', 'none'].includes(raw.contextMenu) || !['component.sidePanel', 'project.contextAction'].includes(raw.type) || placement === 'workspace.folderPanel')) throw new Error('Invalid contribution contextMenu');
+      let fileHandler;
+      if (raw.fileHandler !== undefined) {
+        const handler = raw.fileHandler;
+        if (raw.type !== 'component.sidePanel' || placement || !handler || typeof handler !== 'object' || Array.isArray(handler)) throw new Error('Invalid contribution fileHandler');
+        rejectUnknownFields(handler, ['extensions'], 'contribution fileHandler');
+        if (!Array.isArray(handler.extensions) || !handler.extensions.length || handler.extensions.length > 64 || handler.extensions.some(extension => typeof extension !== 'string' || !/^\.[a-z0-9]{1,16}$/.test(extension)) || new Set(handler.extensions).size !== handler.extensions.length) throw new Error('Invalid fileHandler extensions');
+        fileHandler = Object.freeze({ extensions: Object.freeze([...handler.extensions]) });
+      }
       let selection;
       if (raw.selection !== undefined) {
         const filter = raw.selection;
@@ -287,7 +295,7 @@ const parseComponentHostManifest = (manifest, componentRoot, developmentFiles = 
       if (!Array.isArray(raw.rpcMethods) || raw.rpcMethods.length < 1 || raw.rpcMethods.length > 128) throw new Error(`${raw.type} RPC methods must be a bounded allowlist (1-128)`);
       const rpcMethods = raw.rpcMethods.map(method => requiredExactStringText(method, `${raw.type} RPC method`, 128));
       if (new Set(rpcMethods).size !== rpcMethods.length || rpcMethods.some(method => !VERSIONED_METHOD.test(method))) throw new Error(`${raw.type} RPC methods must be unique versioned methods`);
-      hostContributions.push(Object.freeze({ type: raw.type, id, label, title: raw.title === undefined ? label : requiredExactStringText(raw.title, `${raw.type} title`, 160), ...(description ? { description } : {}), pageId, rpcMethods: Object.freeze(rpcMethods), ...(placement ? { placement } : {}), ...(selection ? { selection } : {}), ...(raw.contextMenu ? { contextMenu: raw.contextMenu } : {}) }));
+      hostContributions.push(Object.freeze({ type: raw.type, id, label, title: raw.title === undefined ? label : requiredExactStringText(raw.title, `${raw.type} title`, 160), ...(description ? { description } : {}), pageId, rpcMethods: Object.freeze(rpcMethods), ...(placement ? { placement } : {}), ...(selection ? { selection } : {}), ...(fileHandler ? { fileHandler } : {}), ...(raw.contextMenu ? { contextMenu: raw.contextMenu } : {}) }));
     }
   }
   if (settingsPages.length + settingsForms.length > 16) throw new Error('Component settings contributions must be bounded');

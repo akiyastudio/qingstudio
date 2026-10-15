@@ -1,3 +1,9 @@
+import { formatBatchRenameDate, formatBatchRenameLetter } from './batch-rename-preferences';
+import { buildProgressCompareListItems, progressCompareNewSourcesFor, type ProgressCompareFilter } from './progress-compare-list-model';
+import { isArchiveText, useArchiveDirectory } from './useArchiveDirectory';
+import { CompressionToolPanel } from './CompressionToolPanel';
+import { isCompressedFile, type CompressionContext } from '../../contracts/compressed-files';
+import { FileArchive } from 'lucide-react';
 import { LocalizedText } from "../../i18n/LocalizedText";
 import { localizedMessage } from "../../i18n/messages";
 import { getLocale } from "../../i18n/runtime";
@@ -43,7 +49,7 @@ import { useTaskCenter } from '../background-tasks/TaskCenter';
 import { isPanelTaskRestoreForPage, panelTaskSessionKey, type PanelTaskRestoreDetail } from '../background-tasks/panel-task-session-model';
 import { FILE_GRID_GAP, FILE_LIST_HEADER_HEIGHT, FILE_LIST_ROW_HEIGHT, FILE_SURFACE_HORIZONTAL_PADDING, FILE_SURFACE_PADDING, calculateFileGridGeometry, fileSurfaceContentWidth, finiteLogicalCanvasSize, hitMarqueeIndices, mergeMarqueeSelection, normalizeMarqueeRect, rectanglesIntersect, viewportPointToContentPoint, type MarqueeRect } from './marquee-selection-model';
 import { advanceMarqueeAutoScroll, marqueeAutoScrollDelta } from './marquee-auto-scroll';
-import { converterTriggerAction } from './project-panel-lifecycle';
+import { converterTriggerAction, PROJECT_PANEL_TITLES, type ProjectPanel, type MountedProjectPanel } from './project-panel-lifecycle';
 import { PROJECT_BACKGROUND_LOAD_DELAYS_MS, PROJECT_BACKGROUND_RECHECK_MS, PROJECT_WATCH_FALLBACK_REFRESH_MS, isForegroundDirectoryRefresh, resolveProjectWorkspaceLifecycle, shouldReconcileProjectWatch, type ProjectWorkspaceLifecycleIdentity } from './project-workspace-lifecycle';
 import { createDirectoryRefreshQueue } from './directory-refresh-queue';
 import { applyShortcutPreviewState } from './shortcut-preview-state-model';
@@ -56,7 +62,7 @@ import { useProjectFileQueries } from './useProjectFileQueries';
 import { useProjectVersionRelations } from './useProjectVersionRelations';
 import { useProgressFolderOnboarding } from './useProgressFolderOnboarding';
 import { useDelayedVisibility } from './use-delayed-visibility';
-import type { CompareMatch, ProgressCompareConfirmation, ProgressSetupDraft } from './project-progress-workflow-types';
+import type { ProgressCompareConfirmation, ProgressSetupDraft } from './project-progress-workflow-types';
 import { createProjectProgressWorkflow } from './createProjectProgressWorkflow';
 import { createProjectProgressSetup } from './createProjectProgressSetup';
 import { setProjectProgressTrackingState } from './project-progress-tracking-service';
@@ -83,7 +89,7 @@ import { PhotoshopIcon } from './PhotoshopIcon';
 import { useUserFacingToast, type ToastActivityHandle } from '../app/useUserFacingToast';
 import { ComponentContributionDock } from '../components/ComponentContributionDock';
 import { ComponentIcon } from '../../components/ComponentIcon';
-import { componentContributionAcceptsSelection, componentHostSelectedRelativePaths as safeComponentHostSelectedRelativePaths, mediaContributionScope, resolvePlacedFullPageAction, projectContributionScope, visibleComponentToolbarActions, workspaceToolContributions, type WorkspaceToolPlacement } from '../components/component-contribution-scope-model';
+import { componentFileHandlerForEntry, componentContributionAcceptsSelection, componentHostSelectedRelativePaths as safeComponentHostSelectedRelativePaths, mediaContributionScope, resolvePlacedFullPageAction, projectContributionScope, visibleComponentToolbarActions, workspaceToolContributions, type WorkspaceToolPlacement } from '../components/component-contribution-scope-model';
 import { mayCommitAsyncOperationResult } from '../file-operation-identity-model';
 import type { SelectionEntryDetails } from './multi-selection-metadata-model';
 import { FileMetadataPane } from './FileMetadataPane';
@@ -93,20 +99,6 @@ const FILE_VIRTUAL_OVERSCAN_ROWS = 10;
 const DIRECTORY_PREVIEW_RETRY_DELAYS_MS = [120, 480] as const;
 const JPG_CONVERSION_EXTENSIONS = new Set(['.png', '.webp', '.heic', '.heif', '.hif', '.avif', '.tif', '.tiff', '.bmp', '.gif']);
 type DirectoryPreviewLoadResult = { entries: ProjectFileEntry[]; authoritative: boolean };
-type ProjectPanel = 'import' | 'negative-import' | 'broll' | 'file-import' | 'match' | 'research' | 'converter' | 'screenshot-main-image' | 'office-extract' | 'trash' | null;
-type MountedProjectPanel = Exclude<ProjectPanel, null>;
-const PROJECT_PANEL_TITLES: Record<MountedProjectPanel, string> = {
-  import: '从 SD 卡导入',
-  'negative-import': '导入 · 原始素材',
-  broll: '导入 · 花絮',
-  'file-import': '导入 · 其他文件',
-  match: '从文件名选片',
-  research: '截取分镜帧',
-  converter: '图片转 JPG',
-  'screenshot-main-image': '提取截图主图',
-  'office-extract': '提取文档图片',
-  trash: '移入回收站',
-};
 type ProjectBrowseMode = 'recent' | 'grid' | 'list' | 'version-tree';
 const isProjectBrowseMode = (value: unknown): value is ProjectBrowseMode => value === 'recent' || value === 'grid' || value === 'list' || value === 'version-tree';
 const DEFAULT_FOLDER_GRID_ICON_SIZE = 132;
@@ -120,67 +112,8 @@ const projectRelativeParentPath = (value: string) => normalizeProjectRelativePat
 const INSPIRATION_DISABLED_IMPORT_KINDS: readonly ImportMaterialKind[] = ['original', 'progress', 'broll'];
 const PROTECTED_PROJECT_FOLDER_NAMES = new Set(['raw', 'jpg', 'mov', 'mov_转码', '策划']);
 const progressNodeMediaKind = (folder: Pick<ProgressFolder, 'mediaKind'>): 'image' | 'video' | null => folder.mediaKind === 'image' || folder.mediaKind === 'video' ? folder.mediaKind : null;
-type ProgressCompareFilter = 'recognized' | 'accepted' | 'new' | 'missing';
-type ProgressCompareListItem = {
-  key: string;
-  source?: string;
-  reference?: string;
-  match?: CompareMatch;
-  category: ProgressCompareFilter;
-};
-const progressCompareCandidatesFor = (compare: ProgressCompareConfirmation) => [...compare.matches, ...compare.suggestions];
-const progressCompareMissingReferencesFor = (compare: ProgressCompareConfirmation) => {
-  const acceptedSources = new Set(compare.acceptedSources);
-  const acceptedReferences = new Set(progressCompareCandidatesFor(compare)
-    .filter(match => acceptedSources.has(match.source))
-    .map(match => match.reference));
-  return compare.unmatchedReferences.filter(reference => !acceptedReferences.has(reference));
-};
-const progressCompareNewSourcesFor = (compare: ProgressCompareConfirmation) => {
-  const acceptedSources = new Set(compare.acceptedSources);
-  return Array.from(new Set([
-    ...compare.unmatchedSources,
-    ...compare.matches.filter(match => !acceptedSources.has(match.source)).map(match => match.source),
-  ])).filter(source => !acceptedSources.has(source));
-};
-const buildProgressCompareListItems = (compare: ProgressCompareConfirmation, filter: ProgressCompareFilter): ProgressCompareListItem[] => {
-  const candidates = progressCompareCandidatesFor(compare);
-  const acceptedSources = new Set(compare.acceptedSources);
-  if (filter === 'recognized') return compare.matches.map(match => ({ key: `source:${match.source}`, source: match.source, reference: match.reference, match, category: filter }));
-  if (filter === 'accepted') return candidates.filter(match => acceptedSources.has(match.source)).map(match => ({ key: `source:${match.source}`, source: match.source, reference: match.reference, match, category: filter }));
-  if (filter === 'new') return progressCompareNewSourcesFor(compare).map(source => {
-    const match = candidates.find(candidate => candidate.source === source);
-    return { key: `source:${source}`, source, reference: match?.reference, match, category: filter };
-  });
-  return progressCompareMissingReferencesFor(compare).map(reference => {
-    const match = candidates.find(candidate => candidate.reference === reference && !acceptedSources.has(candidate.source));
-    return { key: `reference:${reference}`, source: match?.source, reference, match, category: filter };
-  });
-};
 const EMPTY_PREVIEW_TECHNICAL_METADATA: PreviewTechnicalMetadata = {};
 type ProjectEntryDetails = { size: number; createdAt: number; updatedAt: number; fileCount: number; folderCount: number };
-const formatBatchRenameDate = (date: Date, pattern: string) => {
-  const values: Record<string, string> = {
-    YYYY: String(date.getFullYear()),
-    YY: String(date.getFullYear()).slice(-2),
-    MM: String(date.getMonth() + 1).padStart(2, '0'),
-    DD: String(date.getDate()).padStart(2, '0'),
-    HH: String(date.getHours()).padStart(2, '0'),
-    mm: String(date.getMinutes()).padStart(2, '0'),
-    ss: String(date.getSeconds()).padStart(2, '0')
-  };
-  return pattern.replace(/YYYY|YY|MM|DD|HH|mm|ss/g, token => values[token]);
-};
-const formatBatchRenameLetter = (index: number, letterCase: 'upper' | 'lower') => {
-  let value = Math.max(0, index) + 1;
-  let result = '';
-  while (value > 0) {
-    value -= 1;
-    result = String.fromCharCode(65 + (value % 26)) + result;
-    value = Math.floor(value / 26);
-  }
-  return letterCase === 'lower' ? result.toLocaleLowerCase() : result;
-};
 type FileBrowserWorkspaceProps = {
   pageId: string;
   initialRelativePath?: string;
@@ -226,7 +159,7 @@ type FileBrowserWorkspaceProps = {
   onProjectMoved?: (project: WorkspaceProject) => void;
   onDeleted?: () => void;
 };
-const isUnsupportedShortcutContent = (entry: ProjectFileEntry) => entry.viaShortcut === true;
+const isReadOnlyEntry = (entry: ProjectFileEntry) => entry.viaShortcut === true || entry.readOnly === true;
 const backgroundTaskPathKey = (value: unknown) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLocaleLowerCase();
 const handledVideoTrimTaskIds = new Set<string>();
 const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePath, componentWorkspacePath = workspacePath, inspirationTargetWorkspacePath, inspirationLibraryRootPath, installedComponentIds: _installedComponentIds, videoToolsAvailable, advancedVideoPlaybackAvailable, componentHostActions = [], componentContributions = [], onOpenComponentPage = () => undefined, videoPlaybackSettings, projectToolbar = { order: [...PROJECT_TOOLBAR_ACTION_IDS], hidden: [], onlyShowAvailable: false }, customProjectCategories = [], projectCategoryOrder = [], progressNamePresets = [], initialPanel, initialRelativePath = '', importConfig, importDefaults, brollConfig, videoTools, matchConfig, researchConfig, mediaCacheConfig, defaultFolderSort, itemOpenMode, folderAlphabetFilterEnabled = true, versionTreeEnabled = true, favoriteDisplayMode = 'binary', browserContext, navigationRequest, onDirectoryChange, onOpenInspirationPath, onOpenDirectoryPage, onOpenToolTab = () => undefined, onCloseToolTab = () => undefined, onImportConfigChange, onMatchConfigChange, onResearchConfigChange, onNotice, onProjectMoved = () => undefined, onDeleted = () => undefined }: FileBrowserWorkspaceProps) => {
@@ -264,6 +197,13 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     console.error('Version relation cycle detected', { projectName: project.name, nodeIds: progressRelationInspection.cycleNodeIds });
     onNotice(`版本关系需要修复：检测到循环节点 ${progressRelationInspection.cycleNodeIds.join('、')}`, 10000);
   }, [onNotice, progressRelationInspection, project.name]);
+  const [compressionTool, setCompressionTool] = useState<{ mode: 'compress' | 'extract'; paths: string[]; autoStart: boolean; returnDirectory?: string; key: number } | null>(null);
+  const [compressionToolOpen, setCompressionToolOpen] = useState(false);
+  useEffect(() => {
+    const restore = (event: Event) => { const detail = (event as CustomEvent<{ ownerPageId?: string; panelKind?: string }>).detail; if (detail?.ownerPageId === pageId && detail.panelKind === 'component:builtin-compression:tool' && compressionTool) setCompressionToolOpen(true); };
+    window.addEventListener('photoflow:restore-panel-task', restore);
+    return () => window.removeEventListener('photoflow:restore-panel-task', restore);
+  }, [pageId, compressionTool]);
   const [fileEntries, setFileEntries] = useState<ProjectFileEntry[]>([]);
   const fileEntriesRef = useRef(fileEntries);
   fileEntriesRef.current = fileEntries;
@@ -278,6 +218,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const virtualWindowRef = useRef(virtualWindow);
   virtualWindowRef.current = virtualWindow;
   const [currentRelativePath, setCurrentRelativePath] = usePageState(pageId, "currentRelativePath", initialRelativePath);
+  const compressionContext = useMemo<CompressionContext>(() => ({ workspacePath: componentWorkspacePath, projectId: project.id, projectName: project.name, projectStatus: project.status, sourcePageId: pageId, contentKind: browserContext.kind === 'inspiration' ? 'inspiration' : 'project' }), [componentWorkspacePath, project.id, project.name, project.status, pageId, browserContext.kind]);
+  const archiveDirectory = useArchiveDirectory(compressionContext, currentRelativePath);
   const [directoryHistory, setDirectoryHistory] = usePageState<{ back: string[]; forward: string[] }>(pageId, "directoryHistory", { back: [], forward: [] });
   const [browseMode, setBrowseMode] = usePageState<ProjectBrowseMode>(pageId, "browseMode", 'grid');
   const browseModeRef = useRef(browseMode);
@@ -708,6 +650,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     projectRootFilterActive, changeFilterScope,
   } = useProjectFileQueries({
     active,
+    virtualEntries: archiveDirectory.allEntries,
     workspacePath,
     project,
     currentRelativePath,
@@ -797,6 +740,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   }), [project.name]);
   const inspirationMode = browserContext.kind === 'inspiration';
   const componentContentKind: ComponentPageOpenScope['contentKind'] = inspirationMode ? 'inspiration' : 'project';
+  const openCompressionTool = (mode: 'compress' | 'extract', paths: string[], autoStart = false) => { if (archiveDirectory.active && mode !== 'extract') { onNotice(t('compression.read_only')); return; } const archivePath = mode === 'extract' ? archiveDirectory.root : undefined; setCompressionTool({ mode, paths: archivePath ? [archivePath] : paths, autoStart: autoStart || Boolean(archivePath), returnDirectory: archivePath ? projectRelativeParentPath(archivePath) : undefined, key: Date.now() }); setCompressionToolOpen(true); setFileMenu(null); setShowOfficeToolsMenu(false); setShowToolbarOverflowMenu(false); };
   const officeImageExtractorAvailable = true;
   const folderBrowseModeStorageKey = `photoflow:folder-browse-modes:${browserContext.kind}:${workspacePath}|${project.name}`;
   const folderGridIconSizeStorageKey = `photoflow:folder-grid-icon-sizes:${browserContext.kind}:${workspacePath}|${project.name}`;
@@ -1064,13 +1008,13 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       if (activeRef.current) setForegroundDirectoryReady(true);
     }
     setDirectoryLoading(retainedEntries === undefined);
-    const contentsPromise = options.includeProjectContents === false ? null : projectWorkspaceClient.getProjectContents(workspacePath, project.status, project.name).then(
+    const contentsPromise = options.includeProjectContents === false || archiveDirectory.contains(requestedPath) ? null : projectWorkspaceClient.getProjectContents(workspacePath, project.status, project.name).then(
       result => ({ result }),
       error => ({ error }),
     );
     let browseResult: Awaited<ReturnType<typeof projectWorkspaceClient.browseProjectFiles>>;
     try {
-      browseResult = await projectWorkspaceClient.browseProjectFiles(workspacePath, project.status, project.name, requestedPath, mediaCacheConfig);
+      browseResult = await archiveDirectory.browse(requestedPath) ?? await projectWorkspaceClient.browseProjectFiles(workspacePath, project.status, project.name, requestedPath, mediaCacheConfig);
     } catch (error) {
       if (refreshSequence !== refreshSequenceRef.current
         || !isForegroundDirectoryRefresh(requestedPath, currentRelativePathRef.current, requestedProjectPath, projectPathRef.current)) return false;
@@ -1142,7 +1086,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     const requestedProjectPath = project.path;
     let result: Awaited<ReturnType<typeof projectWorkspaceClient.browseProjectFiles>>;
     try {
-      result = await projectWorkspaceClient.browseProjectFiles(workspacePath, project.status, project.name, directoryPath, mediaCacheConfig);
+      result = await archiveDirectory.browse(directoryPath) ?? await projectWorkspaceClient.browseProjectFiles(workspacePath, project.status, project.name, directoryPath, mediaCacheConfig);
     } catch {
       if (recursiveDirectoryRefreshSequenceRef.current.get(directoryPath) === sequence) recursiveDirectoryRefreshSequenceRef.current.delete(directoryPath);
       return;
@@ -1880,6 +1824,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
 
   const loadDirectoryPreviewEntries = useCallback((entry: ProjectFileEntry) => {
     if (entry.kind !== 'folder' && entry.kind !== 'shortcut') return Promise.resolve({ entries: [], authoritative: true });
+    if (entry.archiveMember) return archiveDirectory.browse(entry.relativePath).then(result => ({ entries: result?.entries || [], authoritative: Boolean(result?.success) }));
     const pendingEntry = entry as PendingProjectFileEntry;
     const pendingRename = Boolean(pendingEntry.pendingSourceRelativePath);
     const cacheKey = directoryPreviewCacheKey(entry);
@@ -1960,7 +1905,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       });
     directoryPrefetchesRef.current.set(cacheKey, request);
     return request;
-  }, [workspacePath, project.path, project.status, project.name, mediaCacheConfig.directory, mediaCacheConfig.maxSizeGB]);
+  }, [workspacePath, project.path, project.status, project.name, mediaCacheConfig.directory, mediaCacheConfig.maxSizeGB, archiveDirectory.browse]);
   const prefetchDirectory = (entry: ProjectFileEntry) => {
     if (entry.kind === 'folder' || entry.kind === 'shortcut') void loadDirectoryPreviewEntries(entry);
   };
@@ -2025,6 +1970,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     return true;
   };
   const importFiles = async () => {
+    if (archiveDirectory.active) { onNotice(t('compression.read_only')); return; }
     if (!fileImportSourcePaths.length) return;
     const targetRelativePath = fileImportTarget;
     setPanelImportResult(null);
@@ -2117,6 +2063,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     onProjectMoved(result.project);
   };
   const createFolder = async (targetRelativePath = currentRelativePath) => {
+    if (archiveDirectory.contains(targetRelativePath)) { onNotice(t('compression.read_only')); return; }
     setShowCreateMenu(false);
     const requestedProjectPath = project.path;
     const normalizedTarget = normalizeProjectRelativePath(targetRelativePath);
@@ -2206,6 +2153,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     if (next) void loadShellNewTypes();
   };
   const createShellNewFile = async (type: ShellNewFileType, targetRelativePath = currentRelativePath) => {
+    if (archiveDirectory.contains(targetRelativePath)) { onNotice(t('compression.read_only')); return; }
     setShowCreateMenu(false);
     const requestedProjectPath = project.path;
     const normalizedTarget = normalizeProjectRelativePath(targetRelativePath);
@@ -2356,7 +2304,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     setPanel('screenshot-main-image');
   };
   const analyzePreviewImageCrop = async (entry: ProjectFileEntry): Promise<PreviewImageCropAnalysis> => {
-    if (!isScreenshotMainImageEntry(entry) || isUnsupportedShortcutContent(entry)) {
+    if (!isScreenshotMainImageEntry(entry) || isReadOnlyEntry(entry)) {
       return { success: false, error: '当前图片格式暂不支持裁剪' };
     }
     try {
@@ -2516,8 +2464,9 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     if (progressFolder?.nodeRole === 'progress') await loadProgressFolders();
   };
   const beginRename = (targetPaths = selectedPaths) => {
+    if (archiveDirectory.active) { onNotice(t('compression.read_only')); return; }
     if (!targetPaths.length) return;
-    if (activeFileEntries.some(entry => targetPaths.includes(entry.relativePath) && isUnsupportedShortcutContent(entry))) { onNotice('普通快捷方式中的文件是只读浏览内容，不能在项目中重命名'); return; }
+    if (activeFileEntries.some(entry => targetPaths.includes(entry.relativePath) && isReadOnlyEntry(entry))) { onNotice('普通快捷方式中的文件是只读浏览内容，不能在项目中重命名'); return; }
     if (activeFileEntries.some(entry => targetPaths.includes(entry.relativePath) && isProtectedRenameEntry(entry))) { onNotice('所选内容包含工作流文件夹，请使用“修改进度”。'); return; }
     const registeredProgressEntries = activeFileEntries.filter(entry => targetPaths.includes(entry.relativePath) && registeredProgressFolderForEntry(entry)?.nodeRole === 'progress');
     if (registeredProgressEntries.length && targetPaths.length > 1) { onNotice('已登记版本目录暂不支持批量或混合批量重命名，请单独重命名。'); return; }
@@ -2638,7 +2587,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     filesSurfaceRef.current?.focus({ preventScroll: true });
     window.dispatchEvent(new Event('photoflow-menu-open'));
     setSurfaceMenu(null);
-    setOperationDirectoryPath(isUnsupportedShortcutContent(entry) ? currentRelativePath : projectRelativeParentPath(entry.relativePath));
+    setOperationDirectoryPath(isReadOnlyEntry(entry) ? currentRelativePath : projectRelativeParentPath(entry.relativePath));
     fileMenuSelectionSnapshotRef.current = [...selectedPaths];
     fileMenuSelectionAnchorSnapshotRef.current = selectionAnchorPathRef.current;
     fileMenuSelectionWasImplicitRef.current = selectEntry && !selectedPaths.includes(entry.relativePath);
@@ -2654,6 +2603,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     openFileMenuAt(event.clientX, event.clientY, entry, selectEntry);
   };
   const openSurfaceMenu = (event: React.MouseEvent<HTMLElement>, targetRelativePath = currentRelativePath, targetLabel = '') => {
+    if (archiveDirectory.contains(targetRelativePath)) { event.preventDefault(); event.stopPropagation(); return; }
     if (versionTreeOpen) {
       event.preventDefault();
       event.stopPropagation();
@@ -2769,6 +2719,14 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   };
   const openProjectEntry = async (entry: ProjectFileEntry, external = false) => {
     if (isFolderLikeEntry(entry) && !external) { navigateToDirectory(entry.relativePath); return; }
+    if (entry.archiveMember) { try { await archiveDirectory.member(entry, true); } catch (error) { onNotice(String((error as Error).message)); } return; }
+    if (!external && entry.kind === 'file' && !entry.viaShortcut && isCompressedFile(entry.name)) { const source = currentRelativePathRef.current; try { const session = await archiveDirectory.open(entry.relativePath); if (session && source === currentRelativePathRef.current) navigateToDirectory(entry.relativePath); } catch (error) { onNotice(String((error as Error).message)); } return; }
+    const fileHandler = !external && componentFileHandlerForEntry(componentContributions, entry);
+    if (fileHandler) {
+      const scope = projectContributionScope(currentRelativePath, pageId, [entry.relativePath], componentContentKind);
+      window.dispatchEvent(new CustomEvent('photoflow:open-component-contribution', { detail: { contribution: fileHandler, scope } }));
+      return;
+    }
     if (entry.viaShortcut) {
       const linkedResult = await projectWorkspaceClient.openMediaVersion(entry.path);
       if (!linkedResult.success) onNotice(`打开快捷方式中的文件失败：${linkedResult.error || '无法打开文件'}`);
@@ -2891,15 +2849,16 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     }
   };
   const openProjectEntriesInPhotoshop = async (entries: ProjectFileEntry[]) => {
+    if (entries.some(entry => entry.archiveMember)) { onNotice(t('compression.read_only')); return; }
     const imagePaths = entries.filter(isPhotoshopOpenEntry).map(entry => entry.relativePath);
     if (!imagePaths.length) return;
     const result = await projectWorkspaceClient.openProjectEntriesInPhotoshop(workspacePath, project.status, project.name, imagePaths);
     if (!result.success) onNotice(`用 Photoshop 打开失败：${result.error || '无法打开文件'}`);
   };
   const copyEntryPath = async (entry: ProjectFileEntry) => {
-    if (entry.viaShortcut) {
+    if (entry.viaShortcut || entry.archiveMember) {
       try {
-        await navigator.clipboard.writeText(entry.path);
+        await navigator.clipboard.writeText(entry.archiveMember ? entry.relativePath : entry.path);
         onNotice('成功复制文件地址');
       } catch {
         onNotice('复制文件地址失败');
@@ -2917,7 +2876,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     }
     if (!entries.length) return;
     try {
-      await navigator.clipboard.writeText(entries.map(entry => entry.path).join('\n'));
+      await navigator.clipboard.writeText(entries.map(entry => entry.archiveMember ? entry.relativePath : entry.path).join('\n'));
       onNotice(`已复制 ${entries.length} 个项目的地址`);
     } catch {
       onNotice('复制项目地址失败');
@@ -3162,10 +3121,11 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     setClipboardHasFiles(result.hasFiles);
   };
   const runFileOperation = async (operation: 'trash' | 'copy' | 'cut' | 'paste' | 'rename', nextName?: string, targetPaths = selectedRelativePaths, destinationRelativePath = operationDirectoryPath) => {
+    if (archiveDirectory.active || archiveDirectory.contains(destinationRelativePath)) { onNotice(t('compression.read_only')); return; }
     if (operation !== 'paste' && !targetPaths.length) return;
     const requestedProjectPath = projectPathRef.current;
     if (finalViewOpen && operation !== 'copy') { onNotice('当前为只读视图，请到原文件夹修改。'); return; }
-    if (operation !== 'paste' && activeFileEntries.some(entry => targetPaths.includes(entry.relativePath) && isUnsupportedShortcutContent(entry))) { onNotice('普通快捷方式中的文件是只读浏览内容，不能执行此操作'); return; }
+    if (operation !== 'paste' && activeFileEntries.some(entry => targetPaths.includes(entry.relativePath) && isReadOnlyEntry(entry))) { onNotice('普通快捷方式中的文件是只读浏览内容，不能执行此操作'); return; }
 
 
     if (operation === 'trash' && projectWorkflows) {
@@ -3390,7 +3350,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const selectedEntries = useMemo(() => activeFileEntries.filter(entry => selectedPaths.includes(entry.relativePath)), [activeFileEntries, selectedPaths]);
   const selectedRelativePaths = useMemo(() => selectedEntries.map(entry => entry.relativePath), [selectedEntries]);
   const componentHostSelectedRelativePaths = useMemo(() => safeComponentHostSelectedRelativePaths(selectedEntries), [selectedEntries]);
-  const selectedContainsShortcutContent = selectedEntries.some(isUnsupportedShortcutContent);
+  const selectedContainsReadOnlyContent = selectedEntries.some(isReadOnlyEntry);
   const registeredProgressFolderForEntry = (entry?: ProjectFileEntry) => {
     if (!entry) return undefined;
     const entryPath = entry.path.replace(/\\/g, '/').replace(/\/$/, '').toLocaleLowerCase();
@@ -3430,7 +3390,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       setSelectionEntryDetailsLoading(false);
       return () => { active = false; };
     }
-    const targets = selectedEntries.filter(entry => (isFolderLikeEntry(entry) || entry.size < 0) && (!entry.viaShortcut));
+    const targets = selectedEntries.filter(entry => (isFolderLikeEntry(entry) || entry.size < 0) && !isReadOnlyEntry(entry));
     if (!targets.length) {
       setSelectionEntryDetailsLoading(false);
       return () => { active = false; };
@@ -3451,8 +3411,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   }, [selectedEntries, workspacePath, project.status, project.name]);
   const previewDecoders = usePreviewDecoders();
   const cloudPlugins = useCloudPluginCatalog(active);
-  const previewPluginForEntry = (entry: ProjectFileEntry) => entry.viaShortcut ? undefined : previewPluginForFile(cloudPlugins, entry.name, previewDecoders, _installedComponentIds);
-  const canPreviewEntry = (entry: ProjectFileEntry) => entry.kind === 'image' || entry.kind === 'raw' || entry.kind === 'video' || entry.kind === 'file' && Boolean(decoderForFile(previewDecoders, entry.name) || previewPluginForEntry(entry));
+  const previewPluginForEntry = (entry: ProjectFileEntry) => entry.viaShortcut || entry.archiveMember ? undefined : previewPluginForFile(cloudPlugins, entry.name, previewDecoders, _installedComponentIds);
+  const canPreviewEntry = (entry: ProjectFileEntry) => entry.kind === 'image' || entry.kind === 'raw' || entry.kind === 'video' || isArchiveText(entry) || entry.kind === 'file' && !entry.archiveMember && Boolean(decoderForFile(previewDecoders, entry.name) || previewPluginForEntry(entry));
   const focusedPreviewPlugin = focusedEntry ? previewPluginForEntry(focusedEntry) : undefined;
   useEffect(() => {
     // A directory selection can arrive before the network catalog does.
@@ -3475,9 +3435,10 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const currentPreviewMetadataFields = previewMetadataFieldsForEntry(previewMetadataFields, previewMetadataResolvedPath, focusedEntry?.path);
   const currentPreviewMetadataLoading = Boolean(focusedEntry && (previewMetadataLoading || previewMetadataResolvedPath !== focusedEntry.path));
   const currentPreviewMetadataError = focusedEntry && previewMetadataResolvedPath === focusedEntry.path ? previewMetadataError : '';
-  const previewCanMarkFinal = Boolean(previewEntry && (!previewEntry.viaShortcut) && (previewEntry.kind === 'image' || previewEntry.kind === 'raw'));
+  const previewCanMarkFinal = Boolean(previewEntry && !isReadOnlyEntry(previewEntry) && (previewEntry.kind === 'image' || previewEntry.kind === 'raw'));
   const previewRatingCacheKey = previewEntry ? mediaRatingCacheKey(previewEntry.path, previewEntry.updatedAt) : '';
   const loadThumbnailRating = useCallback(async (entry: ProjectFileEntry) => {
+    if (entry.archiveMember) return 0;
     const key = mediaRatingCacheKey(entry.path, entry.updatedAt);
     const cached = previewRatingCacheRef.current.get(key);
     if (cached !== undefined) return cached;
@@ -3611,7 +3572,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     onNotice('裁剪视频完成');
   };
   const trimPreviewVideo = async (start: number, end: number, saveMode: 'new' | 'replace', operationId: string, sourceDuration: number) => {
-    if (!previewEntry || previewEntry.kind !== 'video' || isUnsupportedShortcutContent(previewEntry)) return { success: false, error: '当前视频不可剪辑' };
+    if (!previewEntry || previewEntry.kind !== 'video' || isReadOnlyEntry(previewEntry)) return { success: false, error: '当前视频不可剪辑' };
     const sourceRelativePath = previewEntry.relativePath;
     const result = await projectWorkspaceClient.trimProjectVideo(workspacePath, project.status, project.name, sourceRelativePath, { start, end, saveMode, exportMode: videoTools.trim.exportMode, operationId, sourceDuration });
     if (!result.success) {
@@ -3646,7 +3607,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     void showCompletedVideoTrim(result || {}, String(task.metadata?.sourceRelativePath || ''));
   }, [active, backgroundTasks, project.name, project.status, showCompletedVideoTrim, workspacePath]);
   const loadPreviewVideoTimelineFrames = useCallback((times: number[]) => {
-    if (!previewEntry || previewEntry.kind !== 'video' || isUnsupportedShortcutContent(previewEntry)) return Promise.resolve({ success: false, error: '当前视频不可读取' });
+    if (!previewEntry || previewEntry.kind !== 'video' || isReadOnlyEntry(previewEntry)) return Promise.resolve({ success: false, error: '当前视频不可读取' });
     return projectWorkspaceClient.getProjectVideoTimelineFrames(workspacePath, project.status, project.name, previewEntry.relativePath, times);
   }, [previewEntry?.kind, previewEntry?.relativePath, previewEntry?.viaShortcut, workspacePath, project.status, project.name]);
   const previewMediaEntries = displayedFileEntries.filter(entry => entry.kind === 'image' || entry.kind === 'raw' || entry.kind === 'video');
@@ -3812,7 +3773,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   useEffect(() => {
     let active = true;
     setPreviewEntryDetails(null);
-    if (!focusedEntry || (focusedEntry.viaShortcut)) return () => { active = false; };
+    if (!focusedEntry || isReadOnlyEntry(focusedEntry)) return () => { active = false; };
     projectWorkspaceClient.getProjectEntryDetails(workspacePath, project.status, project.name, focusedEntry.relativePath).then(result => {
       if (active && result.success && result.details) setPreviewEntryDetails(result.details);
     }).catch(() => undefined);
@@ -3886,17 +3847,17 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   };
   const resizeDockBoundary = (left: WorkspacePanelId, right: WorkspacePanelId, delta: number) => setColumnWidths(current =>
     resizePanelBoundary(fitPanelWidths(current, projectLayoutWidth, visibleDockPanels), left, right, delta));
-  const canSelectMedia = !finalViewOpen && !selectedContainsShortcutContent && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length && selectedEntries.every(entry => entry.kind === 'image' || entry.kind === 'raw' || entry.kind === 'video');
-  const selectedScreenshotMainImageEntries = selectedEntries.filter(entry => isScreenshotMainImageEntry(entry) && !entryIsInsideProgressFolder(entry));
+  const canSelectMedia = !finalViewOpen && !selectedContainsReadOnlyContent && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length && selectedEntries.every(entry => entry.kind === 'image' || entry.kind === 'raw' || entry.kind === 'video');
+  const selectedScreenshotMainImageEntries = selectedEntries.filter(entry => !isReadOnlyEntry(entry) && isScreenshotMainImageEntry(entry) && !entryIsInsideProgressFolder(entry));
   const canExtractScreenshotMainImage = !finalViewOpen && selectedScreenshotMainImageEntries.length > 0;
-  const selectedResearchTargets = !finalViewOpen && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length && selectedEntries.every(entry => entry.kind === 'video' || isFolderLikeEntry(entry)) ? selectedEntries : [];
+  const selectedResearchTargets = !archiveDirectory.active && !finalViewOpen && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length && selectedEntries.every(entry => entry.kind === 'video' || isFolderLikeEntry(entry)) ? selectedEntries : [];
   const selectedVideoSplitTargets = selectedResearchTargets;
-  const selectedOfficeExtractEntries = !finalViewOpen && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length && selectedEntries.every(isOfficeOpenXmlEntry) ? selectedEntries : [];
+  const selectedOfficeExtractEntries = !archiveDirectory.active && !finalViewOpen && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length && selectedEntries.every(isOfficeOpenXmlEntry) ? selectedEntries : [];
   const fileMenuEntrySelected = Boolean(fileMenu && selectedPaths.includes(fileMenu.entry.relativePath));
   const fileMenuTargetPaths = fileMenu
     ? fileMenuEntrySelected ? selectedPaths : [fileMenu.entry.relativePath]
     : selectedPaths;
-  const fileMenuContainsShortcutContent = fileMenuTargetPaths.some(path => activeFileEntries.some(entry => entry.relativePath === path && isUnsupportedShortcutContent(entry)));
+  const fileMenuContainsReadOnlyContent = fileMenuTargetPaths.some(path => activeFileEntries.some(entry => entry.relativePath === path && isReadOnlyEntry(entry)));
   const fileMenuEntries = fileMenuTargetPaths.map(relativePath => activeFileEntries.find(entry => entry.relativePath === relativePath)).filter((entry): entry is ProjectFileEntry => Boolean(entry));
   const fileMenuContainsProtectedRenameEntry = fileMenuEntries.some(isProtectedRenameEntry);
   const fileMenuRegisteredProgressRenameEntries = fileMenuEntries.filter(entry => registeredProgressFolderForEntry(entry)?.nodeRole === 'progress');
@@ -3909,7 +3870,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     : [];
   const canSelectFileMenuMedia = !finalViewOpen && fileMenuTargetPaths.length > 0 && fileMenuTargetPaths.every(path => {
     const entry = activeFileEntries.find(candidate => candidate.relativePath === path);
-    return Boolean(entry && !isUnsupportedShortcutContent(entry) && (entry.kind === 'image' || entry.kind === 'raw' || entry.kind === 'video'));
+    return Boolean(entry && !isReadOnlyEntry(entry) && (entry.kind === 'image' || entry.kind === 'raw' || entry.kind === 'video'));
   });
   const gatherInspiration = async (targetProject: WorkspaceProject, targetPaths: string[]) => {
     if (!gatherToProject || gatheringInspiration) return;
@@ -3970,7 +3931,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   };
   const [previewSelectionBusy, setPreviewSelectionBusy] = useState(false);
   const previewSelectionPendingRef = useRef(false);
-  const previewSelectionAvailable = Boolean(projectWorkflows && !finalViewOpen && previewEntry && !isUnsupportedShortcutContent(previewEntry) && (previewEntry.kind === 'image' || previewEntry.kind === 'raw'));
+  const previewSelectionAvailable = Boolean(projectWorkflows && !finalViewOpen && previewEntry && !isReadOnlyEntry(previewEntry) && (previewEntry.kind === 'image' || previewEntry.kind === 'raw'));
   const selectMediaFiles = async (targetPaths = selectedPaths) => {
     if (finalViewOpen) { onNotice('喜爱图片浏览是只读视图，请回到原文件夹进行选片'); return; }
     const targetEntries = activeFileEntries.filter(entry => targetPaths.includes(entry.relativePath));
@@ -4088,7 +4049,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     if (inlineRenamePath === entry.relativePath) return;
     fileInteractionRevisionRef.current += 1;
     (event.currentTarget as HTMLElement).focus({ preventScroll: true });
-    setOperationDirectoryPath(isUnsupportedShortcutContent(entry) ? currentRelativePath : projectRelativeParentPath(entry.relativePath));
+    setOperationDirectoryPath(isReadOnlyEntry(entry) ? currentRelativePath : projectRelativeParentPath(entry.relativePath));
     if ('key' in event) {
       event.preventDefault();
       event.stopPropagation();
@@ -4186,7 +4147,10 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       const shortcutIcon = <ShortcutEntryIcon entry={visualEntry} cacheConfig={mediaCacheConfig} requestedSize={large ? 320 : 160} queueOrder={queueOrder} large={large} loadEntries={loadDirectoryPreviewEntries}/>;
       return large ? <span className="relative flex h-full w-full min-h-0 min-w-0 items-center justify-center">{shortcutIcon}</span> : shortcutIcon;
     }
-    const thumbnailDecoder = decoderForFile(previewDecoders.filter(item => item.thumbnails), visualEntry.name);
+    if (visualEntry.kind === 'file' && isCompressedFile(visualEntry.name)) return <FileArchive size={large ? 64 : 28} strokeWidth={1.5} className="text-blue-500"/>;
+    const fileHandler = componentFileHandlerForEntry(componentContributions, visualEntry);
+    if (fileHandler?.iconUrl) return <ComponentIcon src={fileHandler.iconUrl} size={large ? 64 : 28}/>;
+    const thumbnailDecoder = visualEntry.archiveMember ? undefined : decoderForFile(previewDecoders.filter(item => item.thumbnails), visualEntry.name);
     if (thumbnailDecoder || visualEntry.kind === 'image' || visualEntry.kind === 'raw' || visualEntry.kind === 'video') return <RatedMediaThumbnail entry={visualEntry} mode={favoriteDisplayMode} large={large} loadRating={loadThumbnailRating}>
       {thumbnailDecoder ? <ComponentFileThumbnail relativePath={visualEntry.relativePath} updatedAt={visualEntry.updatedAt} decoder={thumbnailDecoder} context={{ workspacePath: componentWorkspacePath, projectId: project.id, projectName: project.name, projectStatus: project.status, scopeRelativePath: currentRelativePath, sourcePageId: pageId, contentKind: componentContentKind }} size={large ? gridThumbnailSize : 160} fallback={<SystemFileIcon filePath={visualEntry.path} size={large ? 48 : 28}/>}/> : <MediaThumbnail entry={visualEntry} cacheConfig={mediaCacheConfig} requestedSize={large ? gridThumbnailSize : 160} queueOrder={queueOrder} large={large}/>}
     </RatedMediaThumbnail>;
@@ -4216,7 +4180,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     ><CheckSquare size={12}/></button>;
   };
   const entryDragPaths = (entry: ProjectFileEntry) => {
-    return fileEntryDragPaths(entry.relativePath, selectedPaths, path => activeFileEntries.some(candidate => candidate.relativePath === path && isUnsupportedShortcutContent(candidate)));
+    return fileEntryDragPaths(entry.relativePath, selectedPaths, path => activeFileEntries.some(candidate => candidate.relativePath === path && isReadOnlyEntry(candidate)));
   };
   const resetNativeDragSession = (expectedSessionId: string) => {
     const session = nativeFileDragSessionRef.current;
@@ -4236,7 +4200,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     if (pendingPathConflicts(pendingFileOperationsRef.current, requestedPaths)) { onNotice('所选项目正在处理中，暂时不能拖动'); return; }
     if (!dragPaths.length) return;
     const sessionId = crypto.randomUUID();
-    const folderTabSource = origin === 'file-browser' && dragPaths.length === 1 && isFolderLikeEntry(entry) && !isUnsupportedShortcutContent(entry);
+    const folderTabSource = origin === 'file-browser' && dragPaths.length === 1 && isFolderLikeEntry(entry) && !isReadOnlyEntry(entry);
     internalDragPathsRef.current = origin === 'file-browser' ? dragPaths : [];
     internalDropHandledRef.current = false;
     nativeFileDragSessionRef.current = { id: sessionId, origin, paths: dragPaths, folderTabSource };
@@ -4296,6 +4260,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     return folders.filter(folder => !(hasRawFolder && /^(jpg|jpeg|preview|previews|proxy|预览|代理)$/iu.test(folder.name)));
   };
   const performDirectoryDrop = async (internalPaths: string[], externalPaths: string[], droppedImageFiles: DroppedBrowserImageFile[], remoteUrls: string[], targetRelativePath: string, targetName: string) => {
+    if (archiveDirectory.contains(targetRelativePath)) { onNotice(t('compression.read_only')); return; }
     const requestedProjectPath = projectPathRef.current;
     const operation = internalPaths.length ? 'move' : droppedImageFiles.length ? 'import-data' : remoteUrls.length ? 'import-url' : 'import';
     const paths = internalPaths.length ? internalPaths : remoteUrls.length ? remoteUrls : externalPaths;
@@ -4441,7 +4406,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     const titlebarDropZone = releaseElement?.closest<HTMLElement>('[data-folder-tab-drop-zone="true"]');
     if (session.folderTabSource && titlebarDropZone && dragPaths.length === 1 && onOpenDirectoryPage) {
       const draggedEntry = activeFileEntries.find(entry => normalizeProjectRelativePath(entry.relativePath) === normalizeProjectRelativePath(dragPaths[0]));
-      if (draggedEntry && isFolderLikeEntry(draggedEntry) && !isUnsupportedShortcutContent(draggedEntry)) {
+      if (draggedEntry && isFolderLikeEntry(draggedEntry) && !isReadOnlyEntry(draggedEntry)) {
         reportNativeDragDecision('folder-tab-opened', result, 'release-hit-test');
         onOpenDirectoryPage(draggedEntry.relativePath);
         return;
@@ -4462,6 +4427,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   };
   useEffect(() => projectWorkspaceClient.onProjectFileDragEnd(result => projectFileDragEndHandlerRef.current(result)), []);
   const handleSurfaceDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (archiveDirectory.active) { event.preventDefault(); event.dataTransfer.dropEffect = 'none'; return; }
     if (!hasExternalDropData(event)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
@@ -4472,6 +4438,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     setSurfaceDropActive(false);
   };
   const handleSurfaceDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    if (archiveDirectory.active) { event.preventDefault(); event.stopPropagation(); onNotice(t('compression.read_only')); return; }
     if (!hasExternalDropData(event)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -4545,7 +4512,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       onDragLeave={event => handleEntryDragLeave(event, entry)}
       onDrop={event => void handleEntryDrop(event, entry)}
       data-entry-kind={entry.kind}
-      data-drop-capable={isFolderLikeEntry(entry) && !isUnsupportedShortcutContent(entry) ? 'true' : 'false'}
+      data-drop-capable={isFolderLikeEntry(entry) && !isReadOnlyEntry(entry) ? 'true' : 'false'}
       data-entry-path={entry.relativePath}
       data-return-highlight={returnHighlighted ? 'true' : undefined}
       onMouseEnter={() => prefetchDirectory(entry)}
@@ -4571,16 +4538,16 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const progressCompareNewSources = progressCompare ? progressCompareNewSourcesFor(progressCompare) : [];
   const progressCompareListItems = progressCompare ? buildProgressCompareListItems(progressCompare, progressCompareFilter) : [];
   const activeProgressCompareItem = progressCompareListItems.find(item => item.key === activeProgressCompareItemKey);
-  const photoshopToolbarAvailable = photoshopAvailable && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length && selectedEntries.every(isPhotoshopOpenEntry);
+  const photoshopToolbarAvailable = !archiveDirectory.active && photoshopAvailable && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length && selectedEntries.every(isPhotoshopOpenEntry);
   // Do not recursively inspect folders just to decide whether contextual tools
   // should be visible. Folder-based tools validate and collect their inputs only
   // after the user explicitly starts that workflow.
-  const imageConverterToolbarAvailable = !finalViewOpen && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length
+  const imageConverterToolbarAvailable = !archiveDirectory.active && !finalViewOpen && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length
     && selectedEntries.some(entry => isFolderLikeEntry(entry) || JPG_CONVERSION_EXTENSIONS.has(entry.extension.toLocaleLowerCase()));
-  const videoToolsToolbarAvailable = !finalViewOpen && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length
+  const videoToolsToolbarAvailable = !archiveDirectory.active && !finalViewOpen && selectedEntries.length > 0 && selectedEntries.length === selectedPaths.length
     && selectedEntries.every(entry => isFolderLikeEntry(entry) || entry.kind === 'video');
-  const fileMenuHasVideoTarget = fileMenuEntries.length > 0 && fileMenuEntries.every(entry => isFolderLikeEntry(entry) || entry.kind === 'video');
-  const fileMenuHasConvertibleImageTarget = fileMenuEntries.some(entry => isFolderLikeEntry(entry) || JPG_CONVERSION_EXTENSIONS.has(entry.extension.toLocaleLowerCase()));
+  const fileMenuHasVideoTarget = !archiveDirectory.active && fileMenuEntries.length > 0 && fileMenuEntries.every(entry => isFolderLikeEntry(entry) || entry.kind === 'video');
+  const fileMenuHasConvertibleImageTarget = !archiveDirectory.active && fileMenuEntries.some(entry => isFolderLikeEntry(entry) || JPG_CONVERSION_EXTENSIONS.has(entry.extension.toLocaleLowerCase()));
   const fileMenuHasVideoSplitTarget = !finalViewOpen && fileMenuHasVideoTarget;
   const videoToolPanelContributions = componentContributions.filter(item => item.type === 'component.sidePanel' && item.placement === 'workspace.videoTools');
   const visibleComponentHostActions = visibleComponentToolbarActions(componentHostActions, componentContributions);
@@ -4589,7 +4556,8 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const menuContributions = (placement: WorkspaceToolPlacement) => workspaceToolContributions(componentContributions, placement)
     .filter(item => item !== videoTranscodeContribution && item !== videoSplitContribution);
   const toolbarHasSafeToolSelection = componentHostSelectedRelativePaths.length > 0 && componentHostSelectedRelativePaths.length === selectedEntries.length;
-  const fileMenuHasSafeToolSelection = fileMenuEntries.length > 0 && fileMenuEntries.length === fileMenuTargetPaths.length && !fileMenuContainsShortcutContent;
+  const compressionToolbarMode = archiveDirectory.active || selectedEntries.length > 0 && selectedEntries.every(entry => entry.kind === 'file' && isCompressedFile(entry.name)) ? 'extract' : 'compress';
+  const fileMenuHasSafeToolSelection = fileMenuEntries.length > 0 && fileMenuEntries.length === fileMenuTargetPaths.length && !fileMenuContainsReadOnlyContent;
   const fileMenuHasPlacedToolAction = (placement: WorkspaceToolPlacement) => fileMenuHasSafeToolSelection && menuContributions(placement).some(item => item.contextMenu !== 'none' && item.contextMenu !== 'root' && componentContributionAcceptsSelection(item, fileMenuEntries));
   const renderPlacedToolActions = (placement: WorkspaceToolPlacement, contextMenu = false) => menuContributions(placement).filter(item => !contextMenu || item.contextMenu !== 'root' && item.contextMenu !== 'none' && componentContributionAcceptsSelection(item, fileMenuEntries)).map(contribution => {
     const available = !finalViewOpen && (contextMenu ? fileMenuHasSafeToolSelection : toolbarHasSafeToolSelection || (!selectedEntries.length && contribution.type === 'project.contextAction')) && componentContributionAcceptsSelection(contribution, contextMenu ? fileMenuEntries : selectedEntries);
@@ -4608,7 +4576,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   };
   const fileMenuOfficeEntries = !finalViewOpen && fileMenuEntries.length > 0 && fileMenuEntries.every(isOfficeOpenXmlEntry) ? fileMenuEntries : [];
   const fileMenuHasToolActions = Boolean(fileMenu && (fileMenuHasVideoTarget || (['workspace.videoTools', 'workspace.imageTools', 'workspace.officeTools'] as const).some(fileMenuHasPlacedToolAction) || fileMenuHasConvertibleImageTarget || fileMenuScreenshotMainImageEntries.length || fileMenuOfficeEntries.length));
-  const selectedCanSetVersionProgress = Boolean(projectWorkflows && selectedProgressFolder && !selectedRegisteredProgressFolder && !isUnsupportedShortcutContent(selectedProgressFolder));
+  const selectedCanSetVersionProgress = Boolean(projectWorkflows && selectedProgressFolder && !selectedRegisteredProgressFolder && !isReadOnlyEntry(selectedProgressFolder));
   const versionManagementToolbarAvailable = Boolean(selectedEditableProgressFolder) || selectedCanSetVersionProgress || selectedEntries.length === 1 && hasVersionProgressForEntry(selectedEntries[0]);
   const projectToolbarAvailability: Record<ProjectToolbarActionId, boolean> = {
     'filename-selection': true,
@@ -4622,14 +4590,15 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const unavailableProjectToolbarTitle = (label: string, reason: string) => `${label}，${reason}`;
   const projectToolbarButtons: Record<ProjectToolbarActionId, React.ReactNode> = {
     'filename-selection': <button onClick={() => togglePanel('match')} title={t("ui.select.by.file.name.611d95")} aria-label={t("ui.select.by.file.name.611d95")} className="project-action-button"><FileText size={16}/>{t("ui.select.by.file.name.611d95")}</button>,
-    'select-media': <button disabled={!canSelectMedia} title={canSelectMedia ? t("ui.selection.add.selected.media.to.the.853ba0") : unavailableProjectToolbarTitle('选片', finalViewOpen ? '喜爱图片为只读' : selectedContainsShortcutContent ? '快捷方式内容为只读' : '需选择选片源素材使用')} aria-label={t("ui.selection.8c8db6")} onClick={() => void selectMediaFiles()} className="project-action-button"><CheckCircle2 size={16}/>{t("ui.selection.8c8db6")}</button>,
+    'select-media': <button disabled={!canSelectMedia} title={canSelectMedia ? t("ui.selection.add.selected.media.to.the.853ba0") : unavailableProjectToolbarTitle('选片', finalViewOpen ? '喜爱图片为只读' : selectedContainsReadOnlyContent ? '快捷方式内容为只读' : '需选择选片源素材使用')} aria-label={t("ui.selection.8c8db6")} onClick={() => void selectMediaFiles()} className="project-action-button"><CheckCircle2 size={16}/>{t("ui.selection.8c8db6")}</button>,
     'video-tools': <div className="project-toolbar-tool-group relative" onClick={event => event.stopPropagation()}><button type="button" onClick={() => { const next = !showVideoToolsMenu; window.dispatchEvent(new Event('photoflow-menu-open')); setShowVideoToolsMenu(next); }} title={t("ui.video.tools.d2442c")} aria-label={t("ui.video.tools.d2442c")} aria-haspopup="menu" aria-expanded={showVideoToolsMenu} className={`project-action-button ${showVideoToolsMenu || panel === 'research' ? 'bg-blue-50 text-blue-600' : ''}`}><Video size={16}/>{t("ui.video.tools.d2442c")}<ChevronDown size={13}/></button>{showVideoToolsMenu && <div className="project-toolbar-tool-submenu absolute left-0 top-full z-50 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button type="button" disabled={!selectedResearchTargets.length} title={selectedResearchTargets.length ? t("ui.extract.representative.frames.from.the.selected.13bb3d", { value0: selectedResearchTargets.length }) : t("ui.select.videos.or.folders.3439ba")} onClick={event => { event.stopPropagation(); setShowVideoToolsMenu(false); setShowToolbarOverflowMenu(false); if (selectedResearchTargets.length) void openResearchForEntries(selectedResearchTargets); }} className="project-menu-item"><Video size={14}/>{t("ui.extract.storyboard.frames.079aa5")}</button>{videoTranscodeContribution && <button type="button" disabled={!videoToolsToolbarAvailable} onClick={event => { event.stopPropagation(); setShowVideoToolsMenu(false); setShowToolbarOverflowMenu(false); openVideoToolContribution(videoTranscodeContribution, selectedEntries.map(entry => entry.relativePath)); }} className="project-menu-item"><Gauge size={14}/>{t("ui.transcode.video.e5fbc2")}</button>}{videoSplitContribution && <button type="button" disabled={!selectedVideoSplitTargets.length} title={selectedVideoSplitTargets.length ? t("ui.split.selected.videos.or.folders.value0.fd538c", { value0: selectedVideoSplitTargets.length }) : t("ui.select.videos.or.folders.3439ba")} onClick={event => { event.stopPropagation(); setShowVideoToolsMenu(false); setShowToolbarOverflowMenu(false); if (!selectedVideoSplitTargets.length) { onNotice('请先选择视频或文件夹'); return; } openVideoToolContribution(videoSplitContribution, selectedVideoSplitTargets.map(entry => entry.relativePath)); }} className="project-menu-item"><Cut size={14}/>{t("ui.split.video.cd6df3")}</button>}{renderPlacedToolActions('workspace.videoTools')}</div>}</div>,
-    'image-tools': <div className="project-toolbar-tool-group relative" onClick={event => event.stopPropagation()}><button type="button" onClick={() => { const next = !showImageToolsMenu; window.dispatchEvent(new Event('photoflow-menu-open')); setShowImageToolsMenu(next); }} title={t("ui.image.tools.3c27a4")} aria-label={t("ui.image.tools.3c27a4")} aria-haspopup="menu" aria-expanded={showImageToolsMenu} className={`project-action-button ${showImageToolsMenu || panel === 'converter' || panel === 'screenshot-main-image' ? 'bg-blue-50 text-blue-600' : ''}`}><ImageIcon size={16}/>{t("ui.image.tools.3c27a4")}<ChevronDown size={13}/></button>{showImageToolsMenu && <div className="project-toolbar-tool-submenu absolute left-0 top-full z-50 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button type="button" disabled={!imageConverterToolbarAvailable} onClick={event => { event.stopPropagation(); setShowImageToolsMenu(false); setShowToolbarOverflowMenu(false); void openImageConverter(selectedEntries.map(entry => entry.relativePath)); }} title={imageConverterToolbarAvailable ? selectedEntries.length > 1 ? t("ui.convert.images.in.the.selected.files.538072", { value0: selectedEntries.length }) : t("ui.convert.selected.images.or.images.in.c4e7d9") : unavailableProjectToolbarTitle('图片转 JPG', finalViewOpen ? '喜爱图片为只读' : selectedContainsShortcutContent ? '快捷方式内容为只读' : '请选择可转换的图片或文件夹')} className="project-menu-item"><ImageIcon size={14}/>{t("ui.convert.images.to.jpg.c3edb0")}</button><button type="button" disabled={!canExtractScreenshotMainImage} onClick={event => { event.stopPropagation(); setShowImageToolsMenu(false); setShowToolbarOverflowMenu(false); if (!selectedScreenshotMainImageEntries.length) { onNotice('请先选择要提取主图的截图'); return; } openScreenshotMainImage(selectedScreenshotMainImageEntries); }} title={canExtractScreenshotMainImage ? selectedScreenshotMainImageEntries.length > 1 ? t("ui.detect.and.crop.main.image.areas.6187eb", { value0: selectedScreenshotMainImageEntries.length }) : t("ui.detect.and.crop.the.main.image.702a23") : unavailableProjectToolbarTitle('提取截图主图', finalViewOpen ? '喜爱图片为只读' : selectedContainsShortcutContent ? '快捷方式内容为只读' : '需选择截图图片使用')} className="project-menu-item"><Crop size={14}/>{t("message.b5c73d110d0c", { value0: selectedScreenshotMainImageEntries.length > 1 ? t("ui.value0.images.e723e0", { value0: selectedScreenshotMainImageEntries.length }) : '' })}</button>{renderPlacedToolActions('workspace.imageTools')}</div>}</div>,
+    'image-tools': <div className="project-toolbar-tool-group relative" onClick={event => event.stopPropagation()}><button type="button" onClick={() => { const next = !showImageToolsMenu; window.dispatchEvent(new Event('photoflow-menu-open')); setShowImageToolsMenu(next); }} title={t("ui.image.tools.3c27a4")} aria-label={t("ui.image.tools.3c27a4")} aria-haspopup="menu" aria-expanded={showImageToolsMenu} className={`project-action-button ${showImageToolsMenu || panel === 'converter' || panel === 'screenshot-main-image' ? 'bg-blue-50 text-blue-600' : ''}`}><ImageIcon size={16}/>{t("ui.image.tools.3c27a4")}<ChevronDown size={13}/></button>{showImageToolsMenu && <div className="project-toolbar-tool-submenu absolute left-0 top-full z-50 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button type="button" disabled={!imageConverterToolbarAvailable} onClick={event => { event.stopPropagation(); setShowImageToolsMenu(false); setShowToolbarOverflowMenu(false); void openImageConverter(selectedEntries.map(entry => entry.relativePath)); }} title={imageConverterToolbarAvailable ? selectedEntries.length > 1 ? t("ui.convert.images.in.the.selected.files.538072", { value0: selectedEntries.length }) : t("ui.convert.selected.images.or.images.in.c4e7d9") : unavailableProjectToolbarTitle('图片转 JPG', finalViewOpen ? '喜爱图片为只读' : selectedContainsReadOnlyContent ? '快捷方式内容为只读' : '请选择可转换的图片或文件夹')} className="project-menu-item"><ImageIcon size={14}/>{t("ui.convert.images.to.jpg.c3edb0")}</button><button type="button" disabled={!canExtractScreenshotMainImage} onClick={event => { event.stopPropagation(); setShowImageToolsMenu(false); setShowToolbarOverflowMenu(false); if (!selectedScreenshotMainImageEntries.length) { onNotice('请先选择要提取主图的截图'); return; } openScreenshotMainImage(selectedScreenshotMainImageEntries); }} title={canExtractScreenshotMainImage ? selectedScreenshotMainImageEntries.length > 1 ? t("ui.detect.and.crop.main.image.areas.6187eb", { value0: selectedScreenshotMainImageEntries.length }) : t("ui.detect.and.crop.the.main.image.702a23") : unavailableProjectToolbarTitle('提取截图主图', finalViewOpen ? '喜爱图片为只读' : selectedContainsReadOnlyContent ? '快捷方式内容为只读' : '需选择截图图片使用')} className="project-menu-item"><Crop size={14}/>{t("message.b5c73d110d0c", { value0: selectedScreenshotMainImageEntries.length > 1 ? t("ui.value0.images.e723e0", { value0: selectedScreenshotMainImageEntries.length }) : '' })}</button>{renderPlacedToolActions('workspace.imageTools')}</div>}</div>,
     photoshop: <button disabled={!photoshopToolbarAvailable} onClick={() => void openProjectEntriesInPhotoshop(selectedEntries)} title={photoshopToolbarAvailable ? selectedEntries.length > 1 ? t("ui.send.the.selected.images.raw.files.a44636", { value0: selectedEntries.length }) : t("ui.open.selected.images.or.documents.in.a441a2") : unavailableProjectToolbarTitle('用 Photoshop 打开', !photoshopAvailable ? '未检测到 Photoshop' : '需选择图片、RAW 或 PSD/PSB 使用')} aria-label={t("ui.open.selected.images.raw.files.or.f0623b")} className="project-action-button"><PhotoshopIcon size={16}/>{t("message.6b115ac3c9e9", { value0: selectedEntries.length > 1 && photoshopToolbarAvailable ? t("legacy.message.f8514bc52729", { value0: selectedEntries.length }) : '' })}</button>,
     'office-extract': <div className="project-toolbar-tool-group relative" onClick={event => event.stopPropagation()}>
       <button type="button" onClick={() => { const next = !showOfficeToolsMenu; window.dispatchEvent(new Event('photoflow-menu-open')); setShowOfficeToolsMenu(next); }} title={t("ui.office.documents.3a80cd")} aria-label={t("ui.office.documents.3a80cd")} aria-haspopup="menu" aria-expanded={showOfficeToolsMenu} className={`project-action-button ${showOfficeToolsMenu || panel === 'office-extract' ? 'bg-blue-50 text-blue-600' : ''}`}><FileImage size={16}/>{t("ui.office.documents.3a80cd")}<ChevronDown size={13}/></button>
       {showOfficeToolsMenu && <div className="project-toolbar-tool-submenu absolute left-0 top-full z-50 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
         <button type="button" disabled={!selectedOfficeExtractEntries.length} onClick={() => { setShowOfficeToolsMenu(false); setShowToolbarOverflowMenu(false); openOfficeImageExtractor(selectedOfficeExtractEntries); }} title={selectedOfficeExtractEntries.length ? t("ui.extract.images.from.selected.office.documents.6791b0", { value0: selectedOfficeExtractEntries.length }) : t("ui.select.office.documents.24812e")} className="project-menu-item"><FileImage size={14}/>{t("ui.extract.document.images.de3210")}</button>
+        <button type="button" className="project-menu-item" disabled={!archiveDirectory.active && (finalViewOpen || !toolbarHasSafeToolSelection || selectedContainsReadOnlyContent)} onClick={() => openCompressionTool(compressionToolbarMode, selectedEntries.map(entry => entry.relativePath))}><FileArchive size={14}/>{t(compressionToolbarMode === 'extract' ? "compression.extract_title" : "compression.add")}</button>
         {renderPlacedToolActions('workspace.officeTools')}
       </div>}
     </div>,
@@ -4678,20 +4647,22 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   };
 
   return (
-    <div ref={projectWorkspaceRef} className="flex h-full w-full min-w-0 flex-col animate-in fade-in duration-300">
+    <div ref={projectWorkspaceRef} data-archive-directory={archiveDirectory.active ? currentRelativePath : undefined} className="flex h-full w-full min-w-0 flex-col animate-in fade-in duration-300">
       {pendingProgressFolders.length > 0 && !progressSetup && !folderMarkSetup && <div role="dialog" aria-modal="true" aria-label={t("ui.mark.folder.purpose.1e134f")} className="fixed inset-0 z-[339] flex items-center justify-center bg-slate-950/45 p-4"><div className="flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <header className="border-b border-slate-200 px-5 py-4"><h3 className="font-bold text-slate-800">{t("ui.mark.folder.purpose.1e134f")}</h3><p className="mt-1 text-xs leading-5 text-slate-500">{t("ui.choose.original.media.progress.or.behind.78746d")}</p></header>
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-5">{pendingProgressFolders.map(folder => <div key={folder.relativePath} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-3"><Folder size={18} className="shrink-0 text-blue-500"/><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-700" title={folder.relativePath}>{folder.name}</p><p className="mt-0.5 truncate text-xs text-slate-400">{t("message.695522bae23d", { value0: folder.relativePath, value1: folder.mediaKind === 'video' ? t("ui.video.c20f76") : t("ui.image.d24c10") })}</p></div><button type="button" className="dialog-secondary shrink-0" onClick={() => { const relativePath = folder.relativePath; openMarkProgress({ name: folder.name, path: `${project.path}/${relativePath}`, relativePath, kind: 'folder', extension: '', size: 0, createdAt: Date.now(), updatedAt: Date.now() }, folder.mediaKind); }}>{t("ui.mark.f10902")}</button></div>)}</div>
         <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4"><p className="text-xs text-slate-500">{t("ui.you.can.also.right.click.a.5b2404")}</p><button type="button" onClick={() => setPendingProgressFolders([])} className="dialog-secondary">{t("ui.not.now.44ea05")}</button></footer>
       </div></div>}
       {fileMenu && createPortal(<ViewportContextMenu x={fileMenu.x} y={fileMenu.y} widthClass="w-52" allowSubmenus>
-        {isFolderLikeEntry(fileMenu.entry) && !isUnsupportedShortcutContent(fileMenu.entry) && onOpenDirectoryPage && <><button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); onOpenDirectoryPage(entry.relativePath); }}><FolderPlus size={14}/>{t("ui.open.in.new.tab.79c5e0")}</button><div className="my-1 border-t border-slate-100"/></>}
+        {isFolderLikeEntry(fileMenu.entry) && !isReadOnlyEntry(fileMenu.entry) && onOpenDirectoryPage && <><button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); onOpenDirectoryPage(entry.relativePath); }}><FolderPlus size={14}/>{t("ui.open.in.new.tab.79c5e0")}</button><div className="my-1 border-t border-slate-100"/></>}
         {projectWorkflows && isFolderLikeEntry(fileMenu.entry) && !fileMenuVersionTreeFolder && <><button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); void openMarkProgress(entry); }}><GitBranch size={14}/>{t("ui.mark.f10902")}</button><div className="my-1 border-t border-slate-100"/></>}
         {projectWorkflows && fileMenuRegisteredProgressFolder && <><button disabled={fileMenuRegisteredProgressFolder.trackingState === 'committing' || fileMenuRegisteredProgressFolder.trackingState === 'needs_repair'} className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); void openMarkProgress(entry); }}><GitBranch size={14}/>{t("ui.edit.progress.a52b5e")}</button>{!fileMenuRegisteredProgressFolder.parentProgressId && <button className="project-menu-item" onClick={() => { const progressFolder = fileMenuRegisteredProgressFolder; setFileMenu(null); void unregisterLegacyOrphanProgress(progressFolder); }}><X size={14}/>{t("ui.cancel.version.registration")}</button>}{progressTrackingAction(fileMenuRegisteredProgressFolder) && <button disabled={progressSubmitting || Boolean(workspaceActivityMessage)} title={t("ui.refresh.main.branch.version.tracking.using.749253")} className="project-menu-item" onClick={() => { const progressFolder = fileMenuRegisteredProgressFolder; setFileMenu(null); void refreshProgressTracking(progressFolder); }}><RefreshCw size={14}/>{progressTrackingRefreshLabel(fileMenuRegisteredProgressFolder)}</button>}<div className="my-1 border-t border-slate-100"/></>}
-        {gatherToProject && <><button disabled={fileMenuContainsShortcutContent || gatheringInspiration || !inspirationProjects.length} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); startGatherInspiration(targets); }}><FolderInput size={14}/>{t("message.fb0d370ff144", { value0: inspirationTargetProject ? `“${inspirationTargetProject.name}”` : '…' })}</button>{inspirationTargetProject && <button disabled={fileMenuContainsShortcutContent || gatheringInspiration} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); setGatherPickerPaths(targets); }}><ChevronDown size={14}/>{t("ui.choose.another.project.952baa")}</button>}<div className="my-1 border-t border-slate-100"/></>}
+        {gatherToProject && <><button disabled={fileMenuContainsReadOnlyContent || gatheringInspiration || !inspirationProjects.length} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); startGatherInspiration(targets); }}><FolderInput size={14}/>{t("message.fb0d370ff144", { value0: inspirationTargetProject ? `“${inspirationTargetProject.name}”` : '…' })}</button>{inspirationTargetProject && <button disabled={fileMenuContainsReadOnlyContent || gatheringInspiration} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); setGatherPickerPaths(targets); }}><ChevronDown size={14}/>{t("ui.choose.another.project.952baa")}</button>}<div className="my-1 border-t border-slate-100"/></>}
         {projectWorkflows && canSelectFileMenuMedia && <><button className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); selectMediaFiles(targets); }}><CheckCircle2 size={14}/>{t("ui.selection.8c8db6")}</button><div className="my-1 border-t border-slate-100"/></>}
         {(fileMenu.entry.kind === 'image' || fileMenu.entry.kind === 'raw' || fileMenu.entry.kind === 'video') && <button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; const restoreSelection = fileMenuSelectionWasImplicitRef.current ? fileMenuSelectionSnapshotRef.current : null; setFileMenu(null); if (restoreSelection) { selectionAnchorPathRef.current = fileMenuSelectionAnchorSnapshotRef.current; setSelectedPaths(restoreSelection); } openPreviewFromMenu(entry); }}><PanelLeftOpen size={14}/>{t("ui.preview.13d61f")}</button>}
         {mediaContributionScope(fileMenuEntries, fileMenu.entry, pageId, componentContentKind) && componentContributions.filter(item => item.type === 'media.contextAction').map(item => <button key={`${item.componentId}:${item.contributionId}`} className="project-menu-item" onClick={() => { const scope = mediaContributionScope(fileMenuEntries, fileMenu.entry, pageId, componentContentKind)!; setFileMenu(null); window.dispatchEvent(new CustomEvent('photoflow:open-component-contribution', { detail: { contribution: item, scope } })); }}><Plus size={14}/>{item.label}</button>)}
+        {!finalViewOpen && fileMenuHasSafeToolSelection && fileMenuEntries.length > 0 && fileMenuEntries.every(entry => entry.kind === 'file' && isCompressedFile(entry.name)) && <button className="project-menu-item" onClick={() => openCompressionTool('extract', fileMenuTargetPaths, true)}><FileArchive size={14}/>{t("compression.extract")}</button>}
+        {!finalViewOpen && fileMenuHasSafeToolSelection && fileMenuEntries.length > 0 && fileMenuEntries.every(entry => !isCompressedFile(entry.name)) && <button className="project-menu-item" onClick={() => openCompressionTool('compress', fileMenuTargetPaths)}><FileArchive size={14}/>{t("compression.add")}</button>}
         {componentContributions.filter(item => (item.type === 'project.contextAction' && !item.placement || item.type === 'component.sidePanel' && item.contextMenu === 'root') && item.contextMenu !== 'none' && !finalViewOpen && fileMenuHasSafeToolSelection && componentContributionAcceptsSelection(item, fileMenuEntries)).map(item => <button key={`${item.componentId}:${item.contributionId}`} className="project-menu-item" onClick={() => { const scope = projectContributionScope(currentRelativePath, pageId, fileMenuEntries.map(entry => entry.relativePath), componentContentKind); setFileMenu(null); window.dispatchEvent(new CustomEvent('photoflow:open-component-contribution', { detail: { contribution: item, scope } })); }}><Plus size={14}/>{item.label}</button>)}
         {!isFolderLikeEntry(fileMenu.entry) && <button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); void openProjectEntry(entry); }}><ExternalLink size={14}/>{fileMenu.entry.kind === 'shortcut' ? t("ui.open.shortcut.7219d6") : t("ui.open.with.default.application.765f99")}</button>}
 
@@ -4707,11 +4678,11 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
         </ViewportSubmenu>}
         {photoshopAvailable && isPhotoshopOpenEntry(fileMenu.entry) && <button className="project-menu-item" onClick={() => { const entries = selectedPaths.includes(fileMenu.entry.relativePath) ? selectedEntries.filter(isPhotoshopOpenEntry) : [fileMenu.entry]; setFileMenu(null); void openProjectEntriesInPhotoshop(entries); }}><PhotoshopIcon size={14}/>{t("message.6b115ac3c9e9", { value0: selectedPaths.includes(fileMenu.entry.relativePath) && selectedEntries.filter(isPhotoshopOpenEntry).length > 1 ? t("legacy.message.f8514bc52729", { value0: selectedEntries.filter(isPhotoshopOpenEntry).length }) : '' })}</button>}
         {fileMenuHasToolActions && <div className="my-1 border-t border-slate-100"/>}
-        <button disabled={fileMenuContainsShortcutContent || fileMenuContainsProtectedRenameEntry || fileMenuContainsBlockedProgressRenameEntry} title={fileMenuContainsShortcutContent ? t("ui.files.accessed.through.shortcuts.are.read.a5d016") : fileMenuContainsProtectedRenameEntry ? t("ui.this.folder.is.managed.by.the.b7ed82") : fileMenuContainsBlockedProgressRenameEntry ? t("ui.registered.version.folders.do.not.support.5af38a") : undefined} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); beginRename(targets); }}><Edit size={14}/>{fileMenuTargetPaths.length > 1 ? t("ui.batch.rename.07b79b") : t("ui.rename.0d0cba")}</button>
-        <button disabled={finalViewOpen || fileMenuContainsShortcutContent} title={fileMenuContainsShortcutContent ? t("ui.files.accessed.through.shortcuts.are.read.a5d016") : undefined} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); runFileOperation('cut', undefined, targets); }} aria-busy={clipboardActionPending.cut}>{renderClipboardActionIcon('cut', 14)}{t("ui.cut.410a8e")}</button>
-        <button disabled={fileMenuContainsShortcutContent} title={fileMenuContainsShortcutContent ? t("ui.files.accessed.through.shortcuts.are.read.a5d016") : undefined} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); runFileOperation('copy', undefined, targets); }} aria-busy={clipboardActionPending.copy}>{renderClipboardActionIcon('copy', 14)}{t("ui.copy.63d90d")}</button>
-        <button disabled={finalViewOpen || fileMenuContainsShortcutContent || !clipboardHasFiles} title={fileMenuContainsShortcutContent ? t("ui.external.folders.linked.by.shortcuts.are.af3748") : finalViewOpen ? t("ui.liked.images.are.shown.in.a.9907c3") : clipboardHasFiles ? t("ui.paste.into.this.file.s.folder.c0fb69") : t("ui.no.files.in.clipboard.034a58")} className="project-menu-item" onClick={() => { setFileMenu(null); runFileOperation('paste'); }} aria-busy={clipboardActionPending.paste}>{renderClipboardActionIcon('paste', 14)}{t("ui.paste.335179")}</button>
-        <button disabled={finalViewOpen || fileMenuContainsShortcutContent} title={fileMenuContainsShortcutContent ? t("ui.files.accessed.through.shortcuts.are.read.a5d016") : undefined} className="project-menu-item project-menu-danger" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); runFileOperation('trash', undefined, targets); }}><Trash2 size={14}/>{t("ui.delete.2f9daa")}</button>
+        <button disabled={fileMenuContainsReadOnlyContent || fileMenuContainsProtectedRenameEntry || fileMenuContainsBlockedProgressRenameEntry} title={fileMenuContainsReadOnlyContent ? (archiveDirectory.active ? t("compression.read_only") : t("ui.files.accessed.through.shortcuts.are.read.a5d016")) : fileMenuContainsProtectedRenameEntry ? t("ui.this.folder.is.managed.by.the.b7ed82") : fileMenuContainsBlockedProgressRenameEntry ? t("ui.registered.version.folders.do.not.support.5af38a") : undefined} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); beginRename(targets); }}><Edit size={14}/>{fileMenuTargetPaths.length > 1 ? t("ui.batch.rename.07b79b") : t("ui.rename.0d0cba")}</button>
+        <button disabled={finalViewOpen || fileMenuContainsReadOnlyContent} title={fileMenuContainsReadOnlyContent ? (archiveDirectory.active ? t("compression.read_only") : t("ui.files.accessed.through.shortcuts.are.read.a5d016")) : undefined} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); runFileOperation('cut', undefined, targets); }} aria-busy={clipboardActionPending.cut}>{renderClipboardActionIcon('cut', 14)}{t("ui.cut.410a8e")}</button>
+        <button disabled={fileMenuContainsReadOnlyContent} title={fileMenuContainsReadOnlyContent ? (archiveDirectory.active ? t("compression.read_only") : t("ui.files.accessed.through.shortcuts.are.read.a5d016")) : undefined} className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); runFileOperation('copy', undefined, targets); }} aria-busy={clipboardActionPending.copy}>{renderClipboardActionIcon('copy', 14)}{t("ui.copy.63d90d")}</button>
+        <button disabled={finalViewOpen || fileMenuContainsReadOnlyContent || !clipboardHasFiles} title={fileMenuContainsReadOnlyContent ? t("ui.external.folders.linked.by.shortcuts.are.af3748") : finalViewOpen ? t("ui.liked.images.are.shown.in.a.9907c3") : clipboardHasFiles ? t("ui.paste.into.this.file.s.folder.c0fb69") : t("ui.no.files.in.clipboard.034a58")} className="project-menu-item" onClick={() => { setFileMenu(null); runFileOperation('paste'); }} aria-busy={clipboardActionPending.paste}>{renderClipboardActionIcon('paste', 14)}{t("ui.paste.335179")}</button>
+        <button disabled={finalViewOpen || fileMenuContainsReadOnlyContent} title={fileMenuContainsReadOnlyContent ? (archiveDirectory.active ? t("compression.read_only") : t("ui.files.accessed.through.shortcuts.are.read.a5d016")) : undefined} className="project-menu-item project-menu-danger" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); runFileOperation('trash', undefined, targets); }}><Trash2 size={14}/>{t("ui.delete.2f9daa")}</button>
         <button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); openEntryDetails(entry); }}><Info size={14}/>{t("ui.details.1932da")}</button>
         <button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); copyEntryPath(entry); }}><FileText size={14}/>{isFolderLikeEntry(fileMenu.entry) ? t("ui.copy.folder.path.db276c") : t("ui.copy.file.path.63c2ec")}</button>
         <button className="project-menu-item" onClick={() => { const path = fileMenu.entry.relativePath; if (fileMenuEntrySelected) setSelectedPaths(current => current.filter(item => item !== path)); else { selectionAnchorPathRef.current = path; setSelectedPaths(current => [...current, path]); requestFileReveal(path); } setFileMenu(null); }}>{fileMenuEntrySelected ? <X size={14}/> : <CheckSquare size={14}/>} {fileMenuEntrySelected ? t("ui.deselect.74966e") : t("ui.choose.c11330")}</button>
@@ -4758,7 +4729,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       <div className="project-toolbar-wrap sticky top-0 z-30 -mx-6 w-[calc(100%+3rem)] bg-slate-50">
       <div className={`project-toolbar flex w-full flex-nowrap items-center border-b border-slate-200 px-6 py-1 ${selectedPaths.length ? 'project-toolbar--has-selection' : ''}`}>
         <div className="project-toolbar-create-action relative" onClick={event => event.stopPropagation()}>
-          <button onClick={toggleCreateMenu} title={t("ui.new.50ef2f")} aria-label={t("ui.new.50ef2f")} aria-haspopup="menu" aria-expanded={showCreateMenu} className="project-action-button"><FolderPlus size={16}/>{t("ui.new.50ef2f")}</button>
+          <button disabled={archiveDirectory.active} onClick={toggleCreateMenu} title={t("ui.new.50ef2f")} aria-label={t("ui.new.50ef2f")} aria-haspopup="menu" aria-expanded={showCreateMenu} className="project-action-button"><FolderPlus size={16}/>{t("ui.new.50ef2f")}</button>
           {showCreateMenu && <div className="project-create-menu absolute left-0 top-full z-40 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
             {projectWorkflows && <button className="project-menu-item" onClick={() => void openProgressSetup('create')}><FolderPlus size={14}/>{t("ui.new.progress.49a246")}</button>}
             <button className="project-menu-item" onClick={() => void createFolder()}><Folder size={14}/>{t("ui.folder.7c7802")}</button>
@@ -4772,7 +4743,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
           </div>}
         </div>
         <div className="project-toolbar-import-action relative" onClick={event => event.stopPropagation()}>
-          <button onClick={() => { const next = !showImportMenu; window.dispatchEvent(new Event('photoflow-menu-open')); setShowImportMenu(next); }} title={t("ui.import.576d81")} aria-label={t("ui.import.576d81")} aria-haspopup="menu" aria-expanded={showImportMenu} className="project-action-button"><FolderInput size={16}/>{t("ui.import.576d81")}</button>
+          <button disabled={archiveDirectory.active} onClick={() => { const next = !showImportMenu; window.dispatchEvent(new Event('photoflow-menu-open')); setShowImportMenu(next); }} title={t("ui.import.576d81")} aria-label={t("ui.import.576d81")} aria-haspopup="menu" aria-expanded={showImportMenu} className="project-action-button"><FolderInput size={16}/>{t("ui.import.576d81")}</button>
           {showImportMenu && <div className="absolute left-0 top-full z-40 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
             {projectWorkflows && <button className="project-menu-item" onClick={() => { setShowImportMenu(false); setPanel('import'); }}><MemoryStick size={14}/>{t("ui.import.from.sd.card.48ca18")}</button>}
             <button className="project-menu-item" onClick={() => openManualImport(projectWorkflows ? 'original' : 'files')}><FolderInput size={14}/>{t("ui.import.576d81")}</button>
@@ -4780,17 +4751,17 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
         </div>
         <span aria-hidden className="project-toolbar-core-divider toolbar-divider"/>
         {selectedPaths.length > 0 && <span className="project-toolbar-selection mr-1 self-center text-xs text-slate-500">{t("message.34c2d218520b", { count: selectedPaths.length })}</span>}
-        <button disabled={selectedContainsShortcutContent || selectedContainsProtectedRenameEntry || selectedContainsBlockedProgressRenameEntry || !selectedPaths.length} title={selectedContainsShortcutContent ? t("ui.files.accessed.through.shortcuts.are.read.a5d016") : selectedContainsProtectedRenameEntry ? t("ui.the.selected.folder.is.managed.by.e898bb") : selectedContainsBlockedProgressRenameEntry ? t("ui.registered.version.folders.do.not.support.5af38a") : selectedPaths.length > 1 ? t("ui.batch.rename.07b79b") : t("ui.rename.0d0cba")} onClick={() => beginRename()} className="project-action-button compact-hide-file-action"><Edit size={16}/>{selectedPaths.length > 1 ? t("ui.batch.rename.07b79b") : t("ui.rename.0d0cba")}</button>
-        <button disabled={finalViewOpen || selectedContainsShortcutContent || !selectedPaths.length} title={selectedContainsShortcutContent ? t("ui.files.accessed.through.shortcuts.are.read.a5d016") : finalViewOpen ? t("ui.liked.images.are.shown.in.a.9907c3") : t("ui.cut.410a8e")} onClick={() => runFileOperation('cut')} className="project-action-button compact-hide-file-action" aria-busy={clipboardActionPending.cut}>{renderClipboardActionIcon('cut', 16)}{t("ui.cut.410a8e")}</button>
-        <button disabled={selectedContainsShortcutContent || !selectedPaths.length} title={selectedContainsShortcutContent ? t("ui.files.accessed.through.shortcuts.are.read.a5d016") : t("ui.copy.63d90d")} onClick={() => runFileOperation('copy')} className="project-action-button compact-hide-file-action" aria-busy={clipboardActionPending.copy}>{renderClipboardActionIcon('copy', 16)}{t("ui.copy.63d90d")}</button>
+        <button disabled={selectedContainsReadOnlyContent || selectedContainsProtectedRenameEntry || selectedContainsBlockedProgressRenameEntry || !selectedPaths.length} title={selectedContainsReadOnlyContent ? (archiveDirectory.active ? t("compression.read_only") : t("ui.files.accessed.through.shortcuts.are.read.a5d016")) : selectedContainsProtectedRenameEntry ? t("ui.the.selected.folder.is.managed.by.e898bb") : selectedContainsBlockedProgressRenameEntry ? t("ui.registered.version.folders.do.not.support.5af38a") : selectedPaths.length > 1 ? t("ui.batch.rename.07b79b") : t("ui.rename.0d0cba")} onClick={() => beginRename()} className="project-action-button compact-hide-file-action"><Edit size={16}/>{selectedPaths.length > 1 ? t("ui.batch.rename.07b79b") : t("ui.rename.0d0cba")}</button>
+        <button disabled={finalViewOpen || selectedContainsReadOnlyContent || !selectedPaths.length} title={selectedContainsReadOnlyContent ? (archiveDirectory.active ? t("compression.read_only") : t("ui.files.accessed.through.shortcuts.are.read.a5d016")) : finalViewOpen ? t("ui.liked.images.are.shown.in.a.9907c3") : t("ui.cut.410a8e")} onClick={() => runFileOperation('cut')} className="project-action-button compact-hide-file-action" aria-busy={clipboardActionPending.cut}>{renderClipboardActionIcon('cut', 16)}{t("ui.cut.410a8e")}</button>
+        <button disabled={selectedContainsReadOnlyContent || !selectedPaths.length} title={selectedContainsReadOnlyContent ? (archiveDirectory.active ? t("compression.read_only") : t("ui.files.accessed.through.shortcuts.are.read.a5d016")) : t("ui.copy.63d90d")} onClick={() => runFileOperation('copy')} className="project-action-button compact-hide-file-action" aria-busy={clipboardActionPending.copy}>{renderClipboardActionIcon('copy', 16)}{t("ui.copy.63d90d")}</button>
         <button disabled={clipboardPending || finalViewOpen || !clipboardHasFiles} title={clipboardPending ? t("ui.synchronizing.system.clipboard.59e07b") : finalViewOpen ? t("ui.liked.images.are.shown.in.a.9907c3") : clipboardHasFiles ? t("ui.paste.into.current.folder.4b85b8") : t("ui.no.files.in.clipboard.034a58")} onClick={() => runFileOperation('paste')} className="project-action-button compact-hide-file-action" aria-busy={clipboardActionPending.paste}>{renderClipboardActionIcon('paste', 16)}{t("ui.paste.335179")}</button>
-        <button disabled={finalViewOpen || selectedContainsShortcutContent || !selectedPaths.length} title={selectedContainsShortcutContent ? t("ui.files.accessed.through.shortcuts.are.read.a5d016") : finalViewOpen ? t("ui.liked.images.are.shown.in.a.9907c3") : t("ui.delete.2f9daa")} onClick={() => runFileOperation('trash')} className="project-action-button project-action-danger compact-hide-file-action"><Trash2 size={16}/>{t("ui.delete.2f9daa")}</button>
+        <button disabled={finalViewOpen || selectedContainsReadOnlyContent || !selectedPaths.length} title={selectedContainsReadOnlyContent ? (archiveDirectory.active ? t("compression.read_only") : t("ui.files.accessed.through.shortcuts.are.read.a5d016")) : finalViewOpen ? t("ui.liked.images.are.shown.in.a.9907c3") : t("ui.delete.2f9daa")} onClick={() => runFileOperation('trash')} className="project-action-button project-action-danger compact-hide-file-action"><Trash2 size={16}/>{t("ui.delete.2f9daa")}</button>
         <button disabled={!selectedPaths.length} title={t("ui.deselect.74966e")} onClick={() => setSelectedPaths([])} className="project-action-button"><X size={16}/>{t("ui.deselect.74966e")}</button>
         <div className="project-toolbar-secondary contents">
         {(gatherToProject || projectWorkflows && hasProjectToolbarActions) && <span aria-hidden className="toolbar-divider"/>}
         {gatherToProject && <div className="flex items-stretch">
-          <button type="button" disabled={!selectedPaths.length || selectedContainsShortcutContent || gatheringInspiration || !inspirationProjects.length} onClick={() => startGatherInspiration(selectedPaths)} title={inspirationTargetProject ? t("ui.add.selected.inspiration.to.the.folder.eb760f", { value0: inspirationTargetProject.name }) : t("ui.add.selected.inspiration.to.the.target.7fe8b1")} aria-label={t("ui.add.selected.inspiration.to.target.project.92383e")} className="project-action-button inspiration-target-button !rounded-r-none">{gatheringInspiration ? <Loader2 size={16} className="animate-spin"/> : <FolderInput size={16}/>}<span className="truncate">{inspirationTargetProject ? inspirationTargetProject.name : t("ui.add.to.project.a4e92f")}</span></button>
-          <button type="button" disabled={!selectedPaths.length || selectedContainsShortcutContent || gatheringInspiration || !inspirationProjects.length} onClick={() => setGatherPickerPaths(selectedPaths)} title={t("ui.choose.a.project.to.collect.inspiration.e27e80")} aria-label={t("ui.choose.a.project.to.collect.inspiration.e27e80")} className="project-action-button !rounded-l-none !px-1"><ChevronDown size={14}/></button>
+          <button type="button" disabled={!selectedPaths.length || selectedContainsReadOnlyContent || gatheringInspiration || !inspirationProjects.length} onClick={() => startGatherInspiration(selectedPaths)} title={inspirationTargetProject ? t("ui.add.selected.inspiration.to.the.folder.eb760f", { value0: inspirationTargetProject.name }) : t("ui.add.selected.inspiration.to.the.target.7fe8b1")} aria-label={t("ui.add.selected.inspiration.to.target.project.92383e")} className="project-action-button inspiration-target-button !rounded-r-none">{gatheringInspiration ? <Loader2 size={16} className="animate-spin"/> : <FolderInput size={16}/>}<span className="truncate">{inspirationTargetProject ? inspirationTargetProject.name : t("ui.add.to.project.a4e92f")}</span></button>
+          <button type="button" disabled={!selectedPaths.length || selectedContainsReadOnlyContent || gatheringInspiration || !inspirationProjects.length} onClick={() => setGatherPickerPaths(selectedPaths)} title={t("ui.choose.a.project.to.collect.inspiration.e27e80")} aria-label={t("ui.choose.a.project.to.collect.inspiration.e27e80")} className="project-action-button !rounded-l-none !px-1"><ChevronDown size={14}/></button>
         </div>}
         {inspirationMode && <span aria-hidden className="toolbar-divider"/>}
         {inspirationMode && <>{projectToolbarButtons['image-tools']}{projectToolbarButtons['video-tools']}{projectToolbarButtons['office-extract']}</>}
@@ -4803,11 +4774,11 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
           <button type="button" onClick={() => { const next = !showToolbarOverflowMenu; window.dispatchEvent(new Event('photoflow-menu-open')); setShowToolbarOverflowMenu(next); }} aria-label={t("ui.expand.toolbar.actions.a5328d")} aria-haspopup="menu" aria-expanded={showToolbarOverflowMenu} className={`project-action-button ${showToolbarOverflowMenu ? 'bg-blue-50 text-blue-600' : ''}`}><ChevronDown size={17} className={`transition-transform ${showToolbarOverflowMenu ? 'rotate-180' : ''}`}/></button>
           {showToolbarOverflowMenu && <div role="menu" aria-label={t("ui.more.toolbar.actions.b67a3d")} className="project-toolbar-overflow-menu absolute left-0 top-full z-50 mt-1 w-56 overflow-visible rounded-lg border border-slate-200 bg-white p-1 shadow-xl" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setShowToolbarOverflowMenu(false); (event.currentTarget.previousElementSibling as HTMLButtonElement | null)?.focus(); } }} onClick={event => { const button = (event.target as HTMLElement).closest('button'); if (button && button.getAttribute('aria-haspopup') !== 'menu') setShowToolbarOverflowMenu(false); }}>
             <div className="project-toolbar-overflow-primary">
-              <button disabled={selectedContainsShortcutContent || selectedContainsProtectedRenameEntry || selectedContainsBlockedProgressRenameEntry || !selectedPaths.length} onClick={() => beginRename()} className="project-menu-item"><Edit size={14}/>{selectedPaths.length > 1 ? t("ui.batch.rename.07b79b") : t("ui.rename.0d0cba")}</button>
-              <button disabled={finalViewOpen || selectedContainsShortcutContent || !selectedPaths.length} onClick={() => runFileOperation('cut')} className="project-menu-item" aria-busy={clipboardActionPending.cut}>{renderClipboardActionIcon('cut', 14)}{t("ui.cut.410a8e")}</button>
-              <button disabled={selectedContainsShortcutContent || !selectedPaths.length} onClick={() => runFileOperation('copy')} className="project-menu-item" aria-busy={clipboardActionPending.copy}>{renderClipboardActionIcon('copy', 14)}{t("ui.copy.63d90d")}</button>
-              <button disabled={finalViewOpen || !clipboardHasFiles} onClick={() => runFileOperation('paste')} className="project-menu-item" aria-busy={clipboardActionPending.paste}>{renderClipboardActionIcon('paste', 14)}{t("ui.paste.335179")}</button>
-              <button disabled={finalViewOpen || selectedContainsShortcutContent || !selectedPaths.length} onClick={() => runFileOperation('trash')} className="project-menu-item project-menu-danger"><Trash2 size={14}/>{t("ui.delete.2f9daa")}</button>
+              <button disabled={selectedContainsReadOnlyContent || selectedContainsProtectedRenameEntry || selectedContainsBlockedProgressRenameEntry || !selectedPaths.length} onClick={() => beginRename()} className="project-menu-item"><Edit size={14}/>{selectedPaths.length > 1 ? t("ui.batch.rename.07b79b") : t("ui.rename.0d0cba")}</button>
+              <button disabled={finalViewOpen || selectedContainsReadOnlyContent || !selectedPaths.length} onClick={() => runFileOperation('cut')} className="project-menu-item" aria-busy={clipboardActionPending.cut}>{renderClipboardActionIcon('cut', 14)}{t("ui.cut.410a8e")}</button>
+              <button disabled={selectedContainsReadOnlyContent || !selectedPaths.length} onClick={() => runFileOperation('copy')} className="project-menu-item" aria-busy={clipboardActionPending.copy}>{renderClipboardActionIcon('copy', 14)}{t("ui.copy.63d90d")}</button>
+              <button disabled={archiveDirectory.active || finalViewOpen || !clipboardHasFiles} onClick={() => runFileOperation('paste')} className="project-menu-item" aria-busy={clipboardActionPending.paste}>{renderClipboardActionIcon('paste', 14)}{t("ui.paste.335179")}</button>
+              <button disabled={finalViewOpen || selectedContainsReadOnlyContent || !selectedPaths.length} onClick={() => runFileOperation('trash')} className="project-menu-item project-menu-danger"><Trash2 size={14}/>{t("ui.delete.2f9daa")}</button>
             </div>
             <div className="project-toolbar-overflow-compact">
               <div className="my-1 border-t border-slate-100"/>
@@ -4828,7 +4799,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
             </div>
             <div className="project-toolbar-overflow-secondary">
               {(gatherToProject || projectWorkflows && hasProjectToolbarActions) && <div className="my-1 border-t border-slate-100"/>}
-              {gatherToProject && <><button type="button" disabled={!selectedPaths.length || selectedContainsShortcutContent || gatheringInspiration || !inspirationProjects.length} onClick={() => startGatherInspiration(selectedPaths)} className="project-menu-item">{gatheringInspiration ? <Loader2 size={14} className="animate-spin"/> : <FolderInput size={14}/>}{t("message.b9b0244df8da", { value0: inspirationTargetProject ? `“${inspirationTargetProject.name}”` : t("ui.projects.79f326") })}</button><button type="button" disabled={!selectedPaths.length || selectedContainsShortcutContent || gatheringInspiration || !inspirationProjects.length} onClick={() => setGatherPickerPaths(selectedPaths)} className="project-menu-item"><ChevronDown size={14}/>{t("ui.choose.target.project.2b5125")}</button></>}
+              {gatherToProject && <><button type="button" disabled={!selectedPaths.length || selectedContainsReadOnlyContent || gatheringInspiration || !inspirationProjects.length} onClick={() => startGatherInspiration(selectedPaths)} className="project-menu-item">{gatheringInspiration ? <Loader2 size={14} className="animate-spin"/> : <FolderInput size={14}/>}{t("message.b9b0244df8da", { value0: inspirationTargetProject ? `“${inspirationTargetProject.name}”` : t("ui.projects.79f326") })}</button><button type="button" disabled={!selectedPaths.length || selectedContainsReadOnlyContent || gatheringInspiration || !inspirationProjects.length} onClick={() => setGatherPickerPaths(selectedPaths)} className="project-menu-item"><ChevronDown size={14}/>{t("ui.choose.target.project.2b5125")}</button></>}
               {inspirationMode && <>{projectToolbarButtons['image-tools']}{projectToolbarButtons['video-tools']}{projectToolbarButtons['office-extract']}</>}
               {projectWorkflows && visibleProjectToolbarActionIds.map(id => <React.Fragment key={`overflow-${id}`}>{projectToolbarButtons[id]}</React.Fragment>)}
               {visibleComponentHostActions.length > 0 && <><div className="my-1 border-t border-slate-100"/><ComponentToolbarActions overflow actions={visibleComponentHostActions} scope={{ scopeRelativePath: currentRelativePath, selectedRelativePaths: componentHostSelectedRelativePaths, sourcePageId: pageId, contentKind: componentContentKind }} onOpen={onOpenComponentPage}/></>}
@@ -5161,7 +5132,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
         </div> : <div ref={filesSurfaceRef} data-photoflow-file-surface="true" tabIndex={0} onContextMenu={openSurfaceMenu} onPointerDownCapture={handleFileSurfacePointerDownCapture} onDragOver={handleSurfaceDragOver} onDragLeave={handleSurfaceDragLeave} onDrop={event => void handleSurfaceDrop(event)} style={{ marginInline: -FILE_SURFACE_HORIZONTAL_PADDING, paddingInline: FILE_SURFACE_HORIZONTAL_PADDING }} className={`relative min-h-[220px] flex-1 select-none outline-none transition ${surfaceDropActive ? 'rounded-lg bg-blue-50 ring-2 ring-inset ring-blue-400' : ''}`}>
           {groupedResultsActive && (groupedInitialLoading ? <p className="py-12 text-center text-sm text-slate-400"><Loader2 size={17} className="mr-2 inline animate-spin"/>{projectRootFilterActive ? t("ui.loading.all.files.in.pages.912aa0") : searchQuery.trim() ? t("message.9887d2a2c7e8", { value0: recursiveScopeLabel }) : t("ui.loading.all.files.140ff9")}</p> : groupedError && !searchResultGroups.length ? <p className="py-8 text-center text-sm text-red-600">{t("message.1b91c3b60194", { value0: groupedError })}</p> : searchResultGroups.length ? <div className="pb-4">
             <p className="flex items-center gap-1.5 px-1 text-xs text-slate-500">{groupedLoading && <Loader2 aria-label={t("ui.refreshing.in.background.371683")} size={13} className="shrink-0 animate-spin"/>}<span>{projectRootFilterActive ? t("ui.loaded.files.in.pages.from.value0.5403d9", { value0: browserContext.title, value1: displayedFileEntries.length }) : searchQuery.trim() ? t("ui.files.found.in.value0.value1.09bed6", { value0: currentRelativePath ? t("ui.value0.and.its.subfolders.097bf2", { value0: currentRelativePath }) : recursiveScopeLabel, value1: displayedFileEntries.length }) : t("ui.files.loaded.from.value0.value1.601c8a", { value0: currentRelativePath ? t("ui.value0.and.its.subfolders.097bf2", { value0: currentRelativePath }) : recursiveScopeLabel, value1: displayedFileEntries.length })}</span></p>
-            {searchResultGroups.map(([folderPath, entries], groupIndex) => { const viaShortcut = entries.some(entry => entry.viaShortcut); const readOnlyShortcut = viaShortcut; const folderLabel = viaShortcut ? folderPath.replace(/\.lnk(?=\/|$)/gi, '') : folderPath; const targetLabel = folderLabel || project.name; const normalizedFolderPath = normalizeProjectRelativePath(folderPath); return <section key={folderPath || '__root__'} data-recursive-folder-path={normalizedFolderPath} data-recursive-folder-label={targetLabel} data-recursive-folder-readonly={readOnlyShortcut ? 'true' : 'false'} data-drop-capable={readOnlyShortcut ? 'false' : 'true'} onContextMenu={event => { if (readOnlyShortcut) { event.preventDefault(); event.stopPropagation(); onNotice('快捷方式指向的外部文件夹是只读浏览区域'); } else openSurfaceMenu(event, normalizedFolderPath, targetLabel); }} onDragOver={event => handleRecursiveFolderDragOver(event, normalizedFolderPath, readOnlyShortcut)} onDragLeave={event => handleRecursiveFolderDragLeave(event, normalizedFolderPath)} onDrop={event => void handleRecursiveFolderDrop(event, normalizedFolderPath, targetLabel, readOnlyShortcut)} className={`${groupIndex ? 'mt-5 border-t border-slate-200 pt-4' : 'pt-3'} rounded-lg transition ${recursiveDropTargetPath === normalizedFolderPath ? 'bg-blue-50 ring-2 ring-inset ring-blue-400' : ''}`}><header className="mb-2 flex min-w-0 items-center gap-2 px-1"><Folder size={16} className="shrink-0 text-blue-500"/>{readOnlyShortcut ? <span title={t("ui.value0.shortcut.3471df", { value0: folderLabel })} className="min-w-0 truncate text-sm font-bold text-slate-700">{folderLabel || t("ui.shortcut.6ab335")} <span className="font-normal text-slate-400">{t("ui.shortcut.9d3af9")}</span></span> : <button type="button" onClick={() => { setSearchQuery(''); navigateToDirectory(folderPath); }} title={t("ui.open.value0.2d0d16", { value0: folderPath || project.name })} className="min-w-0 truncate text-sm font-bold text-slate-700 hover:text-blue-600">{folderPath || t("ui.project.root.3db07c")}</button>}<span className="shrink-0 text-xs text-slate-400">{t("message.d7fc811a3b82", { count: entries.length })}</span></header><div className="grid w-full content-start" style={{ gap: FILE_GRID_GAP, gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${gridIconSize}px), 1fr))` }}>{entries.map(entry => <div key={`${entry.relativePath}|${entry.path}`} role="button" tabIndex={0} draggable={!entry.viaShortcut} onDragStart={event => startEntryDrag(event, entry)} data-entry-kind={entry.kind} data-drop-capable={isFolderLikeEntry(entry) && !isUnsupportedShortcutContent(entry) ? 'true' : 'false'} data-entry-path={entry.relativePath} onClick={event => handleEntryClick(event, entry)} onDoubleClick={event => handleEntryDoubleClick(event, entry)} onKeyDown={event => { if (event.key === 'Enter') handleEntryClick(event, entry); }} onContextMenu={event => openFileMenu(event, entry)} title={entry.relativePath} className={`group relative min-w-0 cursor-default overflow-hidden rounded-lg p-2 text-left transition hover:bg-blue-50 ${selectedPaths.includes(entry.relativePath) ? 'bg-blue-50 ring-1 ring-blue-400 focus-visible:outline-none' : ''} ${entryHasPreviewState(entry) && !selectedPaths.includes(entry.relativePath) ? 'project-file-entry-preview' : ''} ${cutPaths.includes(entry.relativePath) ? 'opacity-45' : ''}`}>{renderEntrySelectionControl(entry)}<div className="relative flex aspect-square items-center justify-center">{renderEntryIcon(entry, true)}</div><p className="mt-2 truncate text-xs font-medium text-slate-700">{getEntryDisplayName(entry)}</p><p className="mt-0.5 text-[10px] uppercase text-slate-400">{getEntryTypeLabel(entry)}</p></div>)}</div></section>; })}
+            {searchResultGroups.map(([folderPath, entries], groupIndex) => { const viaShortcut = entries.some(entry => entry.viaShortcut); const readOnlyShortcut = viaShortcut || archiveDirectory.active; const folderLabel = viaShortcut ? folderPath.replace(/\.lnk(?=\/|$)/gi, '') : folderPath; const targetLabel = folderLabel || project.name; const normalizedFolderPath = normalizeProjectRelativePath(folderPath); return <section key={folderPath || '__root__'} data-recursive-folder-path={normalizedFolderPath} data-recursive-folder-label={targetLabel} data-recursive-folder-readonly={readOnlyShortcut ? 'true' : 'false'} data-drop-capable={readOnlyShortcut ? 'false' : 'true'} onContextMenu={event => { if (readOnlyShortcut) { event.preventDefault(); event.stopPropagation(); onNotice('快捷方式指向的外部文件夹是只读浏览区域'); } else openSurfaceMenu(event, normalizedFolderPath, targetLabel); }} onDragOver={event => handleRecursiveFolderDragOver(event, normalizedFolderPath, readOnlyShortcut)} onDragLeave={event => handleRecursiveFolderDragLeave(event, normalizedFolderPath)} onDrop={event => void handleRecursiveFolderDrop(event, normalizedFolderPath, targetLabel, readOnlyShortcut)} className={`${groupIndex ? 'mt-5 border-t border-slate-200 pt-4' : 'pt-3'} rounded-lg transition ${recursiveDropTargetPath === normalizedFolderPath ? 'bg-blue-50 ring-2 ring-inset ring-blue-400' : ''}`}><header className="mb-2 flex min-w-0 items-center gap-2 px-1"><Folder size={16} className="shrink-0 text-blue-500"/>{readOnlyShortcut ? <span title={t("ui.value0.shortcut.3471df", { value0: folderLabel })} className="min-w-0 truncate text-sm font-bold text-slate-700">{folderLabel || t("ui.shortcut.6ab335")} <span className="font-normal text-slate-400">{t("ui.shortcut.9d3af9")}</span></span> : <button type="button" onClick={() => { setSearchQuery(''); navigateToDirectory(folderPath); }} title={t("ui.open.value0.2d0d16", { value0: folderPath || project.name })} className="min-w-0 truncate text-sm font-bold text-slate-700 hover:text-blue-600">{folderPath || t("ui.project.root.3db07c")}</button>}<span className="shrink-0 text-xs text-slate-400">{t("message.d7fc811a3b82", { count: entries.length })}</span></header><div className="grid w-full content-start" style={{ gap: FILE_GRID_GAP, gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${gridIconSize}px), 1fr))` }}>{entries.map(entry => <div key={`${entry.relativePath}|${entry.path}`} role="button" tabIndex={0} draggable={!isReadOnlyEntry(entry)} onDragStart={event => startEntryDrag(event, entry)} data-entry-kind={entry.kind} data-drop-capable={isFolderLikeEntry(entry) && !isReadOnlyEntry(entry) ? 'true' : 'false'} data-entry-path={entry.relativePath} onClick={event => handleEntryClick(event, entry)} onDoubleClick={event => handleEntryDoubleClick(event, entry)} onKeyDown={event => { if (event.key === 'Enter') handleEntryClick(event, entry); }} onContextMenu={event => openFileMenu(event, entry)} title={entry.relativePath} className={`group relative min-w-0 cursor-default overflow-hidden rounded-lg p-2 text-left transition hover:bg-blue-50 ${selectedPaths.includes(entry.relativePath) ? 'bg-blue-50 ring-1 ring-blue-400 focus-visible:outline-none' : ''} ${entryHasPreviewState(entry) && !selectedPaths.includes(entry.relativePath) ? 'project-file-entry-preview' : ''} ${cutPaths.includes(entry.relativePath) ? 'opacity-45' : ''}`}>{renderEntrySelectionControl(entry)}<div className="relative flex aspect-square items-center justify-center">{renderEntryIcon(entry, true)}</div><p className="mt-2 truncate text-xs font-medium text-slate-700">{getEntryDisplayName(entry)}</p><p className="mt-0.5 text-[10px] uppercase text-slate-400">{getEntryTypeLabel(entry)}</p></div>)}</div></section>; })}
             {(!searchQuery.trim() || projectRootFilterActive) && <p className={`py-6 text-center text-xs ${groupedLoadError ? 'text-red-500' : 'text-slate-400'}`}>{groupedLoadError ? t("ui.could.not.load.more.value0.47f435", { value0: groupedLoadError }) : groupedLoadingMore ? <><Loader2 size={14} className="mr-1.5 inline animate-spin"/>{t("ui.loading.more.4c4439")}</> : groupedHasMore ? t("ui.scroll.down.to.load.more.files.981f85") : t("ui.all.files.in.this.scope.are.8bea8f")}</p>}
           </div> : <p className="py-12 text-center text-sm text-slate-400">{projectRootFilterActive ? t("ui.no.value1.in.value0.match.the.798f6d", { value0: browserContext.title, value1: filteredFileTypeLabel }) : searchQuery.trim() ? t("ui.no.files.in.value0.containing.value1.a6d847", { value0: recursiveScopeLabel, value1: searchQuery }) : t("ui.no.value0.to.display.in.this.b1074a", { value0: filteredFileTypeLabel })}</p>)}
           {!groupedResultsActive && searchQuery.trim() && searchLoading && <p className="py-12 text-center text-sm text-slate-400"><Loader2 size={17} className="mr-2 inline animate-spin"/>{t("message.9887d2a2c7e8", { value0: recursiveScopeLabel })}</p>}
@@ -5175,14 +5146,14 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
               <span className="file-list-heading-cell"><span className="file-list-heading-label">{t("ui.size.50db74")}</span><FileListColumnResizeHandle last label={t("ui.resize.size.column.8910f0")} onDrag={deltaX => resizeFileListBoundary(3, deltaX)}/></span>
             </div>
             {virtualWindow.top > 0 && <div aria-hidden style={{ height: virtualWindow.top }} />}
-            {renderedFileEntries.map(entry => <div role="button" tabIndex={0} draggable={inlineRenamePath !== entry.relativePath} onDragStart={event => startEntryDrag(event, entry)} onDragOver={event => handleEntryDragOver(event, entry)} onDragLeave={event => handleEntryDragLeave(event, entry)} onDrop={event => void handleEntryDrop(event, entry)} data-entry-kind={entry.kind} data-drop-capable={isFolderLikeEntry(entry) && !isUnsupportedShortcutContent(entry) ? 'true' : 'false'} data-entry-path={entry.relativePath} key={entry.path} onMouseEnter={() => prefetchDirectory(entry)} onClick={event => handleEntryClick(event, entry)} onDoubleClick={event => handleEntryDoubleClick(event, entry)} onKeyDown={event => { if (event.key === 'Enter') handleEntryClick(event, entry); }} onContextMenu={event => openFileMenu(event, entry)} title={entry.name} className={`file-list-row group w-full cursor-default border-t border-slate-200 text-left transition hover:bg-blue-50 ${selectedPaths.includes(entry.relativePath) ? 'bg-blue-50 focus-visible:outline-none' : ''} ${entryHasPreviewState(entry) && !selectedPaths.includes(entry.relativePath) ? 'project-file-entry-preview' : ''} ${cutPaths.includes(entry.relativePath) ? 'opacity-45' : ''} ${dragTargetPath === entry.relativePath ? 'bg-blue-100 ring-2 ring-inset ring-blue-500' : ''}`}>
+            {renderedFileEntries.map(entry => <div role="button" tabIndex={0} draggable={!entry.readOnly && inlineRenamePath !== entry.relativePath} onDragStart={event => startEntryDrag(event, entry)} onDragOver={event => handleEntryDragOver(event, entry)} onDragLeave={event => handleEntryDragLeave(event, entry)} onDrop={event => void handleEntryDrop(event, entry)} data-entry-kind={entry.kind} data-drop-capable={isFolderLikeEntry(entry) && !isReadOnlyEntry(entry) ? 'true' : 'false'} data-entry-path={entry.relativePath} key={entry.path} onMouseEnter={() => prefetchDirectory(entry)} onClick={event => handleEntryClick(event, entry)} onDoubleClick={event => handleEntryDoubleClick(event, entry)} onKeyDown={event => { if (event.key === 'Enter') handleEntryClick(event, entry); }} onContextMenu={event => openFileMenu(event, entry)} title={entry.name} className={`file-list-row group w-full cursor-default border-t border-slate-200 text-left transition hover:bg-blue-50 ${selectedPaths.includes(entry.relativePath) ? 'bg-blue-50 focus-visible:outline-none' : ''} ${entryHasPreviewState(entry) && !selectedPaths.includes(entry.relativePath) ? 'project-file-entry-preview' : ''} ${cutPaths.includes(entry.relativePath) ? 'opacity-45' : ''} ${dragTargetPath === entry.relativePath ? 'bg-blue-100 ring-2 ring-inset ring-blue-500' : ''}`}>
               <span className="flex min-w-0 items-center gap-2.5 overflow-hidden">{renderEntrySelectionControl(entry, true)}<span className="relative flex h-9 w-11 shrink-0 items-center justify-center overflow-hidden">{renderEntryIcon(entry)}</span>{renderEntryName(entry)}</span>
               <span className="min-w-0 truncate text-slate-500">{entry.updatedAt ? new Date(entry.updatedAt).toLocaleString(getLocale()) : '…'}</span>
               <span className="min-w-0 truncate uppercase text-slate-500">{getEntryTypeLabel(entry)}</span>
               <span className="min-w-0 truncate text-slate-500">{entry.kind === 'folder' ? '' : entry.size >= 0 ? formatFileSize(entry.size) : '…'}</span>
             </div>)}
             {virtualWindow.bottom > 0 && <div aria-hidden style={{ height: virtualWindow.bottom }} />}
-          </div> : <><div aria-hidden style={{ height: virtualWindow.top }}/><div className="grid w-full content-start" style={{ gap: FILE_GRID_GAP, gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${gridIconSize}px), 1fr))` }}>{renderedFileEntries.map(entry => <div role="button" tabIndex={0} draggable={inlineRenamePath !== entry.relativePath} onDragStart={event => startEntryDrag(event, entry)} onDragOver={event => handleEntryDragOver(event, entry)} onDragLeave={event => handleEntryDragLeave(event, entry)} onDrop={event => void handleEntryDrop(event, entry)} data-entry-kind={entry.kind} data-drop-capable={isFolderLikeEntry(entry) && !isUnsupportedShortcutContent(entry) ? 'true' : 'false'} data-entry-path={entry.relativePath} key={entry.path} onMouseEnter={() => prefetchDirectory(entry)} onClick={event => handleEntryClick(event, entry)} onDoubleClick={event => handleEntryDoubleClick(event, entry)} onKeyDown={event => { if (event.key === 'Enter') handleEntryClick(event, entry); }} onContextMenu={event => openFileMenu(event, entry)} title={entry.name} className={`group relative min-w-0 cursor-default overflow-hidden rounded-lg p-2 text-left transition hover:bg-blue-50 ${selectedPaths.includes(entry.relativePath) ? 'bg-blue-50 ring-1 ring-blue-400 focus-visible:outline-none' : ''} ${entryHasPreviewState(entry) && !selectedPaths.includes(entry.relativePath) ? 'project-file-entry-preview' : ''} ${cutPaths.includes(entry.relativePath) ? 'opacity-45' : ''} ${dragTargetPath === entry.relativePath ? 'bg-blue-100 ring-2 ring-blue-500' : ''}`}>{renderEntrySelectionControl(entry)}<div className="relative flex aspect-square items-center justify-center">{renderEntryIcon(entry, true)}</div>{renderEntryName(entry, true)}<p className="mt-0.5 text-[10px] uppercase text-slate-400">{getEntryTypeLabel(entry)}</p></div>)}</div><div aria-hidden style={{ height: virtualWindow.bottom }}/></> : <p className="border-y border-slate-200 py-12 text-center text-sm text-slate-400">{searchQuery ? t("ui.no.files.containing.value0.match.the.5c385a", { value0: searchQuery }) : t("ui.this.folder.contains.no.value0.3ae639", { value0: filteredFileTypeLabel })}</p>}
+          </div> : <><div aria-hidden style={{ height: virtualWindow.top }}/><div className="grid w-full content-start" style={{ gap: FILE_GRID_GAP, gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${gridIconSize}px), 1fr))` }}>{renderedFileEntries.map(entry => <div role="button" tabIndex={0} draggable={!entry.readOnly && inlineRenamePath !== entry.relativePath} onDragStart={event => startEntryDrag(event, entry)} onDragOver={event => handleEntryDragOver(event, entry)} onDragLeave={event => handleEntryDragLeave(event, entry)} onDrop={event => void handleEntryDrop(event, entry)} data-entry-kind={entry.kind} data-drop-capable={isFolderLikeEntry(entry) && !isReadOnlyEntry(entry) ? 'true' : 'false'} data-entry-path={entry.relativePath} key={entry.path} onMouseEnter={() => prefetchDirectory(entry)} onClick={event => handleEntryClick(event, entry)} onDoubleClick={event => handleEntryDoubleClick(event, entry)} onKeyDown={event => { if (event.key === 'Enter') handleEntryClick(event, entry); }} onContextMenu={event => openFileMenu(event, entry)} title={entry.name} className={`group relative min-w-0 cursor-default overflow-hidden rounded-lg p-2 text-left transition hover:bg-blue-50 ${selectedPaths.includes(entry.relativePath) ? 'bg-blue-50 ring-1 ring-blue-400 focus-visible:outline-none' : ''} ${entryHasPreviewState(entry) && !selectedPaths.includes(entry.relativePath) ? 'project-file-entry-preview' : ''} ${cutPaths.includes(entry.relativePath) ? 'opacity-45' : ''} ${dragTargetPath === entry.relativePath ? 'bg-blue-100 ring-2 ring-blue-500' : ''}`}>{renderEntrySelectionControl(entry)}<div className="relative flex aspect-square items-center justify-center">{renderEntryIcon(entry, true)}</div>{renderEntryName(entry, true)}<p className="mt-0.5 text-[10px] uppercase text-slate-400">{getEntryTypeLabel(entry)}</p></div>)}</div><div aria-hidden style={{ height: virtualWindow.bottom }}/></> : <p className="border-y border-slate-200 py-12 text-center text-sm text-slate-400">{searchQuery ? t("ui.no.files.containing.value0.match.the.5c385a", { value0: searchQuery }) : t("ui.this.folder.contains.no.value0.3ae639", { value0: filteredFileTypeLabel })}</p>}
           </div>
         </div>}
       </section>
@@ -5194,10 +5165,11 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
 
       </div>
       {componentPanels.panels.map(contribution => { const id = componentWorkspacePanelId(contribution.componentId, contribution.contributionId); const control = componentPanels.controls[id]!; return <ComponentFolderPanelSurface key={id} contribution={contribution} project={project} workspacePath={componentWorkspacePath} scope={{ scopeRelativePath: currentRelativePath, selectedRelativePaths, sourcePageId: pageId, contentKind: componentContentKind }} active={active && activeView === 'project'} open={control.open} pinned={control.pinned} width={displayedColumnWidths[id]} order={panelOrder.indexOf(id) * 2} onClose={() => control.setOpen(false)} onTogglePinned={() => control.setPinned(!control.pinned)}/>; })}
-      {previewPaneOpen && active && activeView === 'project' && <><MediaPreviewPane previewPlugin={previewEntry ? previewPluginForEntry(previewEntry) : undefined} previewContext={{ workspacePath: componentWorkspacePath, projectId: project.id, projectName: project.name, projectStatus: project.status, scopeRelativePath: currentRelativePath, sourcePageId: pageId, contentKind: componentContentKind }} decoder={previewEntry ? decoderForFile(previewDecoders, previewEntry.name) : undefined} panelOrder={panelOrder.indexOf('preview') * 2} onSelectImage={() => void selectPreviewImage()} selectionAvailable={previewSelectionAvailable} selectionBusy={previewSelectionBusy} entry={previewEntry} cacheConfig={mediaCacheConfig} width={displayedColumnWidths.preview} pinned={previewPanePinned} keyboardSettings={videoPlaybackSettings} videoTrimExportMode={videoTools.trim.exportMode} videoTrimAvailable={videoToolsAvailable && advancedVideoPlaybackAvailable} photoshopAvailable={photoshopAvailable} ratingAvailable={previewCanMarkFinal} rating={previewRating} ratingMode={favoriteDisplayMode} ratingLoading={previewRatingLoading} ratingBusy={previewRatingBusy} onChangeRating={rating => void updatePreviewRating(rating)} onTogglePinned={togglePreviewPanePinned} onTechnicalMetadata={setPreviewTechnicalMetadata} onNavigate={navigatePreviewMedia} onContextMenu={event => previewEntry && openFileMenu(event, previewEntry, false)} onContextMenuAt={(x, y) => previewEntry && openFileMenuAt(x, y, previewEntry, false)} onAnalyzeImageCrop={analyzePreviewImageCrop} onConfirmImageCrop={savePreviewImageCrop} onTrimVideo={trimPreviewVideo} onLoadVideoTimelineFrames={loadPreviewVideoTimelineFrames} onOpen={() => previewEntry && openProjectEntry(previewEntry)} onOpenInPhotoshop={() => previewEntry && openProjectEntriesInPhotoshop([previewEntry])} onClose={closePreviewPaneByUser}/></>}
+      {previewPaneOpen && active && activeView === 'project' && <><MediaPreviewPane previewPlugin={previewEntry ? previewPluginForEntry(previewEntry) : undefined} previewContext={{ workspacePath: componentWorkspacePath, projectId: project.id, projectName: project.name, projectStatus: project.status, scopeRelativePath: currentRelativePath, sourcePageId: pageId, contentKind: componentContentKind }} decoder={previewEntry && !previewEntry.archiveMember ? decoderForFile(previewDecoders, previewEntry.name) : undefined} panelOrder={panelOrder.indexOf('preview') * 2} onSelectImage={() => void selectPreviewImage()} selectionAvailable={previewSelectionAvailable} selectionBusy={previewSelectionBusy} entry={previewEntry} cacheConfig={mediaCacheConfig} width={displayedColumnWidths.preview} pinned={previewPanePinned} keyboardSettings={videoPlaybackSettings} videoTrimExportMode={videoTools.trim.exportMode} videoTrimAvailable={videoToolsAvailable && advancedVideoPlaybackAvailable} photoshopAvailable={photoshopAvailable} ratingAvailable={previewCanMarkFinal} rating={previewRating} ratingMode={favoriteDisplayMode} ratingLoading={previewRatingLoading} ratingBusy={previewRatingBusy} onChangeRating={rating => void updatePreviewRating(rating)} onTogglePinned={togglePreviewPanePinned} onTechnicalMetadata={setPreviewTechnicalMetadata} onNavigate={navigatePreviewMedia} onContextMenu={event => previewEntry && openFileMenu(event, previewEntry, false)} onContextMenuAt={(x, y) => previewEntry && openFileMenuAt(x, y, previewEntry, false)} onAnalyzeImageCrop={analyzePreviewImageCrop} onConfirmImageCrop={savePreviewImageCrop} onTrimVideo={trimPreviewVideo} onLoadVideoTimelineFrames={loadPreviewVideoTimelineFrames} onOpen={() => previewEntry && openProjectEntry(previewEntry)} onOpenInPhotoshop={() => previewEntry && openProjectEntriesInPhotoshop([previewEntry])} onClose={closePreviewPaneByUser}/></>}
       {metadataPaneOpen && <><FileMetadataPane panelOrder={panelOrder.indexOf('metadata') * 2} entry={focusedEntry} selectedEntries={selectedEntries} selectionEntryDetails={selectionEntryDetails} selectionEntryDetailsLoading={selectionEntryDetailsLoading} entryDetails={previewEntryDetails} metadataFields={currentPreviewMetadataFields} metadataLoading={currentPreviewMetadataLoading} metadataError={currentPreviewMetadataError} technicalMetadata={focusedEntry?.relativePath === previewEntry?.relativePath ? previewTechnicalMetadata : EMPTY_PREVIEW_TECHNICAL_METADATA} formatFileSize={formatFileSize} width={displayedColumnWidths.metadata} pinned={metadataPanePinned} onTogglePinned={toggleMetadataPanePinned} onOpen={() => focusedEntry && openProjectEntry(focusedEntry, true)} onCopyPath={() => copyEntryPaths(selectedEntries.length > 1 ? selectedEntries : focusedEntry ? [focusedEntry] : [])} onClose={closeMetadataPaneByUser}/></>}
       </WorkspaceDockLayout>
 
+      {compressionTool && <CompressionToolPanel key={compressionTool.key} context={compressionContext} paths={compressionTool.paths} mode={compressionTool.mode} autoStart={compressionTool.autoStart} open={compressionToolOpen} onClose={() => setCompressionToolOpen(false)} onComplete={() => { const directory = compressionTool.returnDirectory; if (directory !== undefined) { directoryEntriesCacheRef.current.delete(directory); navigateToDirectory(directory); scheduleDirectoryRefresh([directory]); } else scheduleDirectoryRefresh(); }}/>}
       {confirmDelete && <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-950/40 p-4"><div role="dialog" aria-modal="true" aria-label={t("ui.delete.project.f6dc6a")} className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"><div className="mb-3 flex items-center justify-between"><h3 className="font-bold text-slate-800">{t("ui.delete.this.project.8bbed1")}</h3><button onClick={() => setConfirmDelete(false)}><X size={18}/></button></div><p className="text-sm text-slate-500">{t("message.70be90ecc5dc", { value0: project.name })}</p><div className="mt-5 flex justify-end gap-2"><button onClick={() => setConfirmDelete(false)} className="dialog-secondary">{t("common.cancel")}</button><button onClick={async () => { setConfirmDelete(false); await moveToTrash(); }} className="rounded-md bg-red-600 px-3 py-2 text-sm font-bold text-white hover:bg-red-500">{t("ui.delete.project.f6dc6a")}</button></div></div></div>}
     </div>
   );

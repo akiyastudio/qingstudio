@@ -2751,6 +2751,7 @@ const registerWorkspaceIpc = context => {
   registerEntryDetailsIpc({ Set, String, assertExistingInside, assertInside, fs, getProjectPath, ipcMain, path });
 
   registerWorkspaceImportIpc({
+    localizeDialogOptions, translateNative,
     sendToApplicationRenderers,
     Array,
     Boolean,

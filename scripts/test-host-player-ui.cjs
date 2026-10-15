@@ -52,6 +52,13 @@ const until = async expression => { const end = Date.now() + 10000; while (Date.
   assert.deepEqual(await evaluate("fixture.commands.filter(c=>['play','pause'].includes(c.action)).map(c=>[c.index,c.id,c.action])"), [[0,'session-0','play'],[0,'session-0','pause'],[1,'session-1','play']]);
   await evaluate("document.querySelector('#second [data-player-step=\"1\"]').click()");
   assert.equal(await evaluate("fixture.commands.some(c=>c.index===1&&c.action==='frame-step')"),true);
+  await evaluate("document.documentElement.lang='en-US'");
+  await until("document.querySelector('#second [data-player-step=\"1\"]').getAttribute('aria-label')==='Next frame'");
+  assert.equal(await evaluate("document.querySelector('#second [data-player-step=\"-1\"]').getAttribute('aria-label')"), 'Previous frame');
+  assert.equal(await evaluate("Array.from(document.querySelectorAll('#second button')).some(button=>button.title==='Seek forward 5 seconds')"), true);
+  await evaluate("document.documentElement.lang='zh-CN'");
+  await until("document.querySelector('#second [data-player-step=\"1\"]').getAttribute('aria-label')==='下一帧'");
+  assert.equal(await evaluate('fixture.stops.length'), 0, 'language changes must not restart or stop playback sessions');
   await evaluate("document.querySelector('#first').style.display='none';document.querySelector('#second [role=button]').focus();document.querySelector('#second [role=button]').dispatchEvent(new KeyboardEvent('keydown',{key:' ',code:'Space',bubbles:true}));");
   assert.equal(await evaluate("fixture.commands.filter(c=>['play','pause'].includes(c.action)).at(-1).index"),1,'focused visible player receives the shortcut');
   await until('fixture.states[1].paused===true');

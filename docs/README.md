@@ -17,6 +17,7 @@ English is the preferred documentation entry point. Each document has a matching
 | Service protocol | [Read](COMPONENT_SERVICE_PROTOCOL_V1.md) | [阅读](COMPONENT_SERVICE_PROTOCOL_V1.zh-CN.md) |
 | Installation transactions | [Read](COMPONENT_TRANSACTIONS.md) | [阅读](COMPONENT_TRANSACTIONS.zh-CN.md) |
 | Project import | [Read](PROJECT_IMPORT.md) | [阅读](PROJECT_IMPORT.zh-CN.md) |
+| Built-in compressed files | [Read](COMPRESSED_FILES.md) | [阅读](COMPRESSED_FILES.zh-CN.md) |
 | SDK UI contract | [Read](../component-sdk/README.md) | [阅读](../component-sdk/README.zh-CN.md) |
 | Examples | [Read](../examples/README.md) | [阅读](../examples/README.zh-CN.md) |
 | Declarative settings example | [Read](../examples/declarative-settings/README.md) | [阅读](../examples/declarative-settings/README.zh-CN.md) |

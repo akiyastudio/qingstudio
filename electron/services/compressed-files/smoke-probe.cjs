@@ -1,0 +1,50 @@
+// Runs only in an isolated PHOTOFLOW_SMOKE_TEST instance.
+const runCompressedFilesSmokeProbe = async ({ mainWindow }) => mainWindow.webContents.executeJavaScript(`(async () => {
+  const api = window.electronAPI, config = await api.loadConfig();
+  const catalog = await api.getWorkspaceProjects(config.workspacePath);
+  if (!catalog.success) throw new Error(catalog.error);
+  const group = catalog.statuses.find(value => value.projects.length), project = group?.projects[0];
+  if (!project) throw new Error('compression smoke project missing');
+  const context = { workspacePath: config.workspacePath, projectId: project.id, projectName: project.name, projectStatus: group.status, sourcePageId: 'compression-smoke', contentKind: 'project' };
+  const call = async request => { const response = await api.compressedFiles(request); if (!response.success) throw new Error(response.code + ': ' + response.error); return response.result; };
+  const packed = await call({ action: 'run', context, payload: { relativePaths: ['素材/说明.txt', '素材/照片.png'], mode: 'compress', format: 'zip', comment: 'synthetic smoke comment' } });
+  if (packed.state !== 'completed' || packed.outputs.length !== 1) throw new Error('compression smoke failed: ' + packed.message);
+  const archive = packed.outputs[0].relativePath;
+  if (archive !== '素材/素材.zip') throw new Error('compression default name changed');
+  const session = await call({ action: 'open', context, relativePath: archive });
+  const contributions = await api.getComponentContributions();
+  if (!contributions.success || contributions.contributions.some(item => item.componentId === 'archive-tools')) throw new Error('retired compression plugin still contributes menus');
+  if (session.entries.length !== 2) throw new Error('archive member listing incomplete');
+  const inputPath = session.entries.find(entry => entry.relativePath === '照片.png')?.inputPath;
+  if (!inputPath?.startsWith('media-token:')) throw new Error('virtual media input missing');
+  const updates = [];
+  const stopUpdates = api.onThumbnailStateChanged(update => updates.push(update));
+  let thumbnail;
+  try {
+    thumbnail = await api.getMediaThumbnail(inputPath, 'image', config.mediaCache, 320, 0, 0);
+    if (!thumbnail.success) throw new Error('archive thumbnail failed: ' + thumbnail.error);
+    const deadline = Date.now() + 15000;
+    while (!updates.some(update => update.filePath === inputPath && update.state === 'READY') && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 30));
+    const ready = updates.find(update => update.filePath === inputPath && update.state === 'READY');
+    const url = thumbnail.previewUrl || ready?.previewUrls?.small;
+    if (!ready || !url) throw new Error('archive thumbnail completion did not reach the virtual entry');
+    await new Promise((resolve, reject) => { const image = new Image(); image.onload = () => image.naturalWidth ? resolve() : reject(new Error('empty thumbnail')); image.onerror = () => reject(new Error('archive thumbnail could not decode')); image.src = url; });
+  } finally { stopUpdates(); }
+  const original = await api.getMediaOriginal(inputPath, 'image', config.mediaCache);
+  if (!original.success || !original.mediaUrl) throw new Error('existing media pipeline cannot read archive member: ' + original.error);
+  const originalBytes = await fetch(original.mediaUrl).then(response => response.arrayBuffer());
+  if (originalBytes.byteLength < 60) throw new Error('existing image preview pipeline returned no bytes');
+  const text = await call({ action: 'member', sessionId: session.sessionId, relativePath: '说明.txt' });
+  if (text.text !== 'synthetic archive member') throw new Error('member text preview mismatch');
+  const image = await call({ action: 'member', sessionId: session.sessionId, relativePath: '照片.png' });
+  const imageBytes = await fetch(image.mediaUrl).then(response => response.arrayBuffer());
+  if (imageBytes.byteLength < 60) throw new Error('media protocol could not read private archive member');
+  const unpacked = await call({ action: 'run', context, payload: { relativePaths: [archive], mode: 'extract' } });
+  if (unpacked.state !== 'completed' || !unpacked.outputs.every(value => value.relativePath.startsWith('素材/素材/'))) throw new Error('archive named extraction failed: ' + unpacked.message);
+  await call({ action: 'close', sessionId: session.sessionId });
+  if ((await api.getMediaOriginal(inputPath, 'image', config.mediaCache)).success) throw new Error('closed archive lazy input still readable');
+  const revoked = await fetch(image.mediaUrl);
+  if (revoked.status !== 404) throw new Error('closed archive media grant still readable');
+  return { preload: true, scopedInput: true, nativeCompression: true, directoryListing: true, textPreview: true, imagePreview: true, existingMediaPipeline: true, queuedThumbnail: true, retiredPlugin: true, archiveNamedExtraction: true, revoked: true };
+})()`);
+module.exports = { runCompressedFilesSmokeProbe };

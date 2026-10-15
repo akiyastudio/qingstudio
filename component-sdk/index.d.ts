@@ -192,4 +192,4 @@ export function mountUiLanguage(onChange?: (locale: string) => void, root?: HTML
 
 /** Generic file-menu visibility; plugins still validate all inputs in their service. */
 export interface ContributionSelectionFilter { minCount?: number; maxCount?: number; kinds?: Array<'folder' | 'image' | 'raw' | 'video' | 'file' | 'shortcut'>; extensions?: string[]; excludedExtensions?: string[] }
-export interface ContributionMenuOptions { selection?: ContributionSelectionFilter; contextMenu?: 'root' | 'group' | 'none' }
+export interface ContributionMenuOptions { fileHandler?: { extensions: string[] }; selection?: ContributionSelectionFilter; contextMenu?: 'root' | 'group' | 'none' }

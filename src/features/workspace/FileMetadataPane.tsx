@@ -98,7 +98,7 @@ export const FileMetadataPane = ({ panelOrder, entry, selectedEntries, selection
     { group: 'Application', name: '大小', value: entryDetails ? formatFileSize(entryDetails.size) : entry.size >= 0 ? formatFileSize(entry.size) : t("legacy.e1fa1bf0cd78") },
     ...(entryDetails ? [{ group: 'Application', name: '创建时间', value: new Date(entryDetails.createdAt).toLocaleString(getLocale()) }, { group: 'Application', name: '修改时间', value: new Date(entryDetails.updatedAt).toLocaleString(getLocale()) }] : []),
     ...(isFolderLikeEntry(entry) && entryDetails ? [{ group: 'Application', name: '包含', value: t('metadata.contents', { files: entryDetails.fileCount, folders: entryDetails.folderCount }) }] : []),
-    { group: 'Application', name: '项目内路径', value: entry.relativePath }, { group: 'Application', name: '完整路径', value: entry.path },
+    { group: 'Application', name: '项目内路径', value: entry.relativePath }, { group: 'Application', name: '完整路径', value: entry.archiveMember ? entry.relativePath : entry.path },
   ] : [];
   const groupedMetadata = [...applicationFields, ...metadataFields].reduce((groups, field) => {
     const existing = groups.get(field.group) || [];

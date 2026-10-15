@@ -17,3 +17,7 @@ For an existing native playback session, `host.setPlaybackPaused(sessionId, paus
 ## Display language
 
 `getContext()` includes the host display language as `locale`. Subscribe with `mountUiLanguage(onChange)` to update document language and receive subsequent changes without restarting component work. The returned function removes the subscription. Older hosts default to `zh-CN`. Component pages keep their own dictionaries; language changes must not alter project identifiers, file names or stored user data.
+
+## Task progress
+
+Use `.pf-task-progress`, `.pf-task-progress-header`, `.pf-task-progress-message`, `.pf-task-progress-percentage`, `.pf-progress-track`, and `.pf-progress-fill` from ui.css. Set role="progressbar", aria-valuemin="0", aria-valuemax="100", and dynamic aria-valuenow; synchronize fill width and visible percentage. Use aria-busy while running, and data-state="completed", "failed", or "publication-failed" for outcomes. Keep cancellation and retry actions alongside the progress. CSS is presentation only: report Host tasks and implement execution/recovery separately.

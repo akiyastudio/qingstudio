@@ -1,0 +1,237 @@
+{
+  "apiVersion": 1,
+  "id": "file-tools-fixture",
+  "version": "1",
+  "displayName": "File tools fixture",
+  "description": "Generic contribution contract fixture",
+  "platforms": [
+    "win32"
+  ],
+  "architectures": [
+    "x64"
+  ],
+  "icon": "ui/icon.svg",
+  "integrity": "component-integrity.json",
+  "requiredFiles": [
+    "service.cjs",
+    "ui/index.html",
+    "ui/icon.svg"
+  ],
+  "componentHost": {
+    "contractVersion": 2,
+    "contributions": [
+      {
+        "type": "component.fullPage",
+        "id": "panel-ui",
+        "title": "压缩文件",
+        "entry": "ui/index.html"
+      },
+      {
+        "type": "component.sidePanel",
+        "id": "extract-panel",
+        "label": "解压缩文件",
+        "title": "解压缩文件",
+        "description": "解压到压缩包旁边的同名文件夹，需要密码时提示输入",
+        "pageId": "panel-ui",
+        "placement": "workspace.officeTools",
+        "contextMenu": "none",
+        "selection": {
+          "minCount": 1,
+          "kinds": [
+            "file"
+          ],
+          "extensions": [
+            ".zip",
+            ".7z",
+            ".rar",
+            ".001",
+            ".tar",
+            ".gz",
+            ".bz2",
+            ".xz",
+            ".tgz",
+            ".tbz2",
+            ".txz"
+          ]
+        },
+        "rpcMethods": [
+          "fixture-files.run.v1",
+          "fixture-files.current.v1",
+          "fixture-files.cancel.v1",
+          "fixture-files.publish.v1",
+          "fixture-files.preferences.v1",
+          "fixture-files.inspect.v1"
+        ]
+      },
+      {
+        "type": "component.sidePanel",
+        "id": "add",
+        "label": "添加到压缩文件",
+        "title": "添加到压缩文件",
+        "description": "ZIP / 7z 压缩、密码加密与分卷",
+        "pageId": "panel-ui",
+        "contextMenu": "root",
+        "selection": {
+          "minCount": 1,
+          "kinds": [
+            "file",
+            "folder",
+            "image",
+            "raw",
+            "video"
+          ],
+          "excludedExtensions": [
+            ".zip",
+            ".7z",
+            ".rar",
+            ".001",
+            ".tar",
+            ".gz",
+            ".bz2",
+            ".xz",
+            ".tgz",
+            ".tbz2",
+            ".txz"
+          ]
+        },
+        "rpcMethods": [
+          "fixture-files.run.v1",
+          "fixture-files.current.v1",
+          "fixture-files.cancel.v1",
+          "fixture-files.publish.v1",
+          "fixture-files.preferences.v1",
+          "fixture-files.inspect.v1"
+        ]
+      },
+      {
+        "type": "component.sidePanel",
+        "id": "extract-here",
+        "label": "解压缩",
+        "title": "解压缩文件",
+        "description": "解压到压缩包旁边的同名文件夹，需要密码时提示输入",
+        "pageId": "panel-ui",
+        "contextMenu": "root",
+        "selection": {
+          "minCount": 1,
+          "kinds": [
+            "file"
+          ],
+          "extensions": [
+            ".zip",
+            ".7z",
+            ".rar",
+            ".001",
+            ".tar",
+            ".gz",
+            ".bz2",
+            ".xz",
+            ".tgz",
+            ".tbz2",
+            ".txz"
+          ]
+        },
+        "rpcMethods": [
+          "fixture-files.run.v1",
+          "fixture-files.current.v1",
+          "fixture-files.cancel.v1",
+          "fixture-files.publish.v1",
+          "fixture-files.preferences.v1",
+          "fixture-files.inspect.v1"
+        ]
+      },
+      {
+        "type": "component.sidePanel",
+        "id": "browse",
+        "label": "打开压缩文件",
+        "title": "压缩文件",
+        "description": "查看包内文件，解压到同名文件夹",
+        "pageId": "panel-ui",
+        "contextMenu": "none",
+        "selection": {
+          "minCount": 1,
+          "kinds": [
+            "file"
+          ],
+          "extensions": [
+            ".zip",
+            ".7z",
+            ".rar",
+            ".001",
+            ".tar",
+            ".gz",
+            ".bz2",
+            ".xz",
+            ".tgz",
+            ".tbz2",
+            ".txz"
+          ],
+          "maxCount": 1
+        },
+        "rpcMethods": [
+          "fixture-files.run.v1",
+          "fixture-files.current.v1",
+          "fixture-files.cancel.v1",
+          "fixture-files.publish.v1",
+          "fixture-files.preferences.v1",
+          "fixture-files.inspect.v1"
+        ],
+        "fileHandler": {
+          "extensions": [
+            ".zip",
+            ".7z",
+            ".rar",
+            ".001",
+            ".tar",
+            ".gz",
+            ".bz2",
+            ".xz",
+            ".tgz",
+            ".tbz2",
+            ".txz"
+          ]
+        }
+      }
+    ],
+    "service": {
+      "protocolVersion": 1,
+      "runtime": "node",
+      "entrypoints": {
+        "default": "service.cjs"
+      },
+      "rpcMethods": [
+        "fixture-files.run.v1",
+        "fixture-files.current.v1",
+        "fixture-files.cancel.v1",
+        "fixture-files.publish.v1",
+        "fixture-files.preferences.v1",
+        "fixture-files.inspect.v1"
+      ],
+      "capabilities": [
+        "project.files.page",
+        "project.files.inputToken",
+        "project.input.tokens",
+        "project.media.page",
+        "project.output",
+        "project.files.mutate",
+        "component.storage",
+        "tasks",
+        "component.settings"
+      ],
+      "permissions": [
+        "project.files.read",
+        "project.input.read",
+        "project.media.read",
+        "project.output.write",
+        "project.files.write",
+        "component.storage",
+        "tasks",
+        "component.settings"
+      ],
+      "events": []
+    }
+  },
+  "entrypoints": {
+    "default": "service.cjs"
+  },
+  "capabilities": []
+}

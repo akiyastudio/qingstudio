@@ -18,6 +18,10 @@ const runElectronSmokeProbe = async ({ app, mainWindow, loadRenderer }) => {
       await new Promise(resolve => setTimeout(resolve, 200));
     }
     assert(result?.renderer && result.preload && result.tasks && result.noCommercialGate && result.biometricDisabled);
+    if (process.env.PHOTOFLOW_SMOKE_COMPRESSION === '1') {
+      const compression = await require('./compressed-files/smoke-probe.cjs').runCompressedFilesSmokeProbe({ mainWindow });
+      console.log('PHOTOFLOW_COMPRESSION_SMOKE_RESULT=' + JSON.stringify(compression));
+    }
     console.log('QINGSTUDIO_SMOKE_RESULT=' + JSON.stringify(result));
     app.quit();
   } catch (error) { console.error(error); app.exit(1); }

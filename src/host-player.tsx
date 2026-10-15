@@ -1,8 +1,9 @@
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
-import { VideoPlayer } from '../../components/AdvancedVideoPlayer';
-import { LayerProvider } from '../../components/LayerProvider';
-import type { PlaybackControl, PlaybackSession } from './playback-session';
+import { VideoPlayer } from './components/AdvancedVideoPlayer';
+import { LayerProvider } from './components/LayerProvider';
+import { getLocale, normalizeLanguage, setLanguage } from './i18n/runtime';
+import type { PlaybackControl, PlaybackSession } from './platform/video-playback/playback-session';
 
 export const apiVersion = 1;
 export type Options = {
@@ -28,6 +29,13 @@ export type Options = {
 // never install a plugin facade on window.electronAPI.
 export function mount(element: HTMLElement, options: Options) {
   if (options.apiVersion !== apiVersion) throw new Error('播放器接口版本不兼容，请更新主程序和插件');
+  const syncLanguage = () => {
+    const language = normalizeLanguage(document.documentElement.lang);
+    if (language !== 'system' && language !== getLocale()) setLanguage(language);
+  };
+  syncLanguage();
+  const languageObserver = new MutationObserver(syncLanguage);
+  languageObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
   element.classList.add('photoflow-player');
   const root = createRoot(element);
   let revision = 0, closed = false;
@@ -114,6 +122,7 @@ export function mount(element: HTMLElement, options: Options) {
     fullscreen,
     close() {
       if (closed) return;
+      languageObserver.disconnect();
       closed = true; document.removeEventListener('fullscreenchange', refreshBounds);
       for (const cancel of pendingFrames) cancel();
       if (document.fullscreenElement && element.contains(document.fullscreenElement)) void document.exitFullscreen().catch(() => {});

@@ -415,8 +415,9 @@ export interface ProjectFileEntry {
   viaShortcut?: boolean;
   /** Known channel that created an ordinary shortcut. */
   sourceChannel?: 'inspiration';
-  /** External shortcut previews never grant mutation capabilities. */
+  /** External shortcuts and archive members never grant mutation capabilities. */
   readOnly?: boolean;
+  archiveMember?: { sessionId: string; relativePath: string; archivePath: string };
   shortcutTargetKind?: 'folder' | 'file';
   shortcutBroken?: boolean;
   /** Project-root-relative parent directory, supplied by recursive enumeration. */
@@ -793,7 +794,7 @@ export interface ComponentPageOpenScope {
 }
 export type ComponentContributionType = 'component.sidePanel' | 'media.contextAction' | 'project.contextAction' | 'project.importProvider' | 'project.exportProvider' | 'application.command' | 'application.homeCard';
 export interface ComponentSelectionFilter { minCount?: number; maxCount?: number; kinds?: ProjectFileEntry['kind'][]; extensions?: string[]; excludedExtensions?: string[] }
-export interface ComponentContribution { componentId: string; componentVersion: string; contributionId: string; type: ComponentContributionType; label: string; title: string; description?: string; pageId: string; rpcMethods: string[]; /** folderPanel is limited to component.sidePanel. */ placement?: 'workspace.videoTools' | 'workspace.imageTools' | 'workspace.officeTools' | 'workspace.folderPanel'; contextMenu?: 'root' | 'group' | 'none'; selection?: ComponentSelectionFilter; iconUrl?: string }
+export interface ComponentContribution { componentId: string; componentVersion: string; contributionId: string; type: ComponentContributionType; label: string; title: string; description?: string; pageId: string; rpcMethods: string[]; /** folderPanel is limited to component.sidePanel. */ placement?: 'workspace.videoTools' | 'workspace.imageTools' | 'workspace.officeTools' | 'workspace.folderPanel'; contextMenu?: 'root' | 'group' | 'none'; fileHandler?: { extensions: string[] }; selection?: ComponentSelectionFilter; iconUrl?: string }
 
 export interface ComponentPageInstance {
   identity: string;
@@ -1332,6 +1333,7 @@ export interface IElectronAPI {
   moveArchivedProjectBack: (workspacePath: string, projectName: string, statusAfter?: Exclude<ProjectStatus, '已归档'>) => Promise<{ success: boolean; queued?: boolean; error?: string }>;
   openArchiveTarget: () => Promise<{ success: boolean; error?: string }>;
   openWorkspaceProject: (workspacePath: string, status: ProjectStatus, name: string, folderName?: string) => Promise<{ success: boolean; error?: string }> ;
+  compressedFiles: (request: import('./contracts/compressed-files').CompressedFilesRequest) => Promise<import('./contracts/compressed-files').CompressedFilesReply>;
   openProjectEntry: (workspacePath: string, status: ProjectStatus, name: string, relativePath: string) => Promise<{ success: boolean; error?: string }>;
   getPhotoshopStatus: () => Promise<{ available: boolean }>;
   openProjectEntriesInPhotoshop: (workspacePath: string, status: ProjectStatus, name: string, relativePaths: string[]) => Promise<{ success: boolean; count?: number; error?: string }>;

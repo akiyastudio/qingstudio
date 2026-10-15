@@ -28,3 +28,7 @@ The following is the main application dependency index. Actual npm versions are 
 | Send2Trash | 1.8.3 | BSD-3-Clause | [Source](https://github.com/arsenetar/send2trash) · [License](https://github.com/arsenetar/send2trash/blob/main/LICENSE) |
 
 When building or distributing installers, retain the licenses and notices shipped with Electron/Chromium and other dependencies. For dependencies such as LGPL libraries, meet the corresponding-source, replacement, or relinking obligations applicable to the actual packaging. This index does not replace those materials. Build tools and other npm dependencies have licenses in their respective packages.
+
+## 7-Zip engine
+
+Built-in compressed-file tools use unmodified 7-Zip 26.04, prepared from a pinned, SHA-256-verified upstream installer. [Corresponding source](https://github.com/ip7z/7zip/tree/26.04), [upstream license](https://www.7-zip.org/license.txt), and [LGPL 2.1 text](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html). Most code is LGPL; some parts use BSD licenses and RAR extraction has unRAR restrictions, including the prohibition on using it to develop a RAR archiver. The runtime ships License.txt. Preserve all notices, provide applicable corresponding source, and allow replacement of LGPL components when distributing binaries. Preparation does not grant rights to redistribute other plugins.

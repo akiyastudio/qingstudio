@@ -17,3 +17,7 @@ UI 契约版本 1 提供设计变量和不依赖框架的设置组、行、按�
 ## 显示语言
 
 `getContext()` 的 `locale` 提供宿主显示语言。使用 `mountUiLanguage(onChange)` 更新文档语言并接收后续变化，无需重启组件任务；返回函数用于取消订阅。较旧宿主默认为 `zh-CN`。组件页面维护自己的词典，语言切换不得修改项目标识、文件名或已保存的用户数据。
+
+## 任务进度
+
+ui.css 提供 `.pf-task-progress`、`.pf-task-progress-header`、`.pf-task-progress-message`、`.pf-task-progress-percentage`、`.pf-progress-track` 和 `.pf-progress-fill`。设置 role="progressbar"、aria-valuemin="0"、aria-valuemax="100" 及动态 aria-valuenow，同步填充宽度和可见百分比。运行时使用 aria-busy；完成、失败、发布失败使用 data-state="completed"、"failed"、"publication-failed"。取消和重试按钮放在进度旁。CSS 只负责展示，仍须上报 Host tasks 并实现执行与恢复。

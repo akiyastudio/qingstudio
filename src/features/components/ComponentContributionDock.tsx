@@ -23,7 +23,7 @@ export const ComponentContributionDock = ({ contributions, project, workspacePat
     restoredDock.current = true; openedRef.current = saved.opened;
     setOpened(saved.opened); setComponentPanelOpen(saved.componentPanelOpen); setWidth(saved.width);
   }, [contributions, transferPageId]);
-  const projectEntries = project ? contributions.filter(item => ['component.sidePanel', 'project.contextAction', 'project.exportProvider'].includes(item.type) && !item.placement && item.contextMenu !== 'root') : []; const commands = contributions.filter(item => item.type === 'application.command'); const filtered = useMemo(() => commands.filter(item => item.label.toLocaleLowerCase().includes(query.toLocaleLowerCase())), [commands, query]); const resolvedCommandIndex = clampCommandIndex(activeCommandIndex, filtered.length);
+  const projectEntries = project ? contributions.filter(item => ['component.sidePanel', 'project.contextAction', 'project.exportProvider'].includes(item.type) && !item.placement && !item.fileHandler && item.contextMenu !== 'root') : []; const commands = contributions.filter(item => item.type === 'application.command'); const filtered = useMemo(() => commands.filter(item => item.label.toLocaleLowerCase().includes(query.toLocaleLowerCase())), [commands, query]); const resolvedCommandIndex = clampCommandIndex(activeCommandIndex, filtered.length);
   const open = async (contribution: ComponentContribution, triggerScope = scope) => {
     if (contribution.placement === 'workspace.folderPanel') return;
     const application = contribution.type === 'application.command'; if (!application && !project) return;

@@ -165,6 +165,17 @@ html.dark {
 .pf-path-value { overflow: hidden; min-height: var(--pf-control-md); padding: 8px var(--pf-space-3); border: 1px solid var(--pf-border); border-radius: var(--pf-radius-sm); background: var(--pf-control-bg); color: var(--pf-text); font-family: var(--pf-font-mono); font-size: var(--pf-text-xs); text-overflow: ellipsis; white-space: nowrap; }
 @keyframes pf-spin { to { transform: rotate(360deg); } }
 
+/* Shared task progress: used by the native import panel and component panels. */
+.pf-task-progress { border: 1px solid var(--pf-border-subtle); border-radius: var(--pf-radius-lg); background: var(--pf-canvas); padding: var(--pf-space-4); }
+.pf-task-progress-header { display: flex; align-items: center; justify-content: space-between; gap: var(--pf-space-4); margin-bottom: var(--pf-space-2); font-size: var(--pf-text-sm); }
+.pf-task-progress-message { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.pf-task-progress-percentage { flex-shrink: 0; font-family: var(--pf-font-mono); color: var(--pf-primary); }
+.pf-task-progress[data-state="completed"] .pf-task-progress-message { color: var(--pf-success); }
+.pf-task-progress[data-state="failed"] .pf-task-progress-message,
+.pf-task-progress[data-state="publication-failed"] .pf-task-progress-message { color: var(--pf-danger); }
+.pf-progress-track { height: 8px; overflow: hidden; border-radius: 999px; background: var(--pf-border-subtle); }
+.pf-progress-fill { height: 100%; border-radius: inherit; background: var(--pf-focus); transition: width 300ms ease; }
+
 @media (max-width: 720px) {
   .pf-settings-container { padding: var(--pf-space-6) var(--pf-space-4); }
   .pf-settings-row { grid-template-columns: 1fr; gap: var(--pf-space-3); }

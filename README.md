@@ -69,3 +69,5 @@ Local deliverables go to `artifacts/installers/` and are not automatically uploa
 Original code is covered by [Apache License 2.0](LICENSE); attribution is in [NOTICE](NOTICE). Third-party dependencies retain their licenses. The license grants no trademark rights.
 
 Issues and improvements are welcome. Remove private paths, credentials, and real customer data before sharing screenshots, logs, or sample projects.
+
+Built-in compression and archive browsing use a verified 7-Zip engine; development startup prepares it automatically. Run `npm run prepare:compression` before `npm run test:compressed-files`. See [compressed files](docs/COMPRESSED_FILES.md).

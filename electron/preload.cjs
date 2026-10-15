@@ -479,6 +479,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   moveArchivedProjectBack: (workspacePath, projectName, statusAfter) => ipcRenderer.invoke('archive-move-back', workspacePath, projectName, statusAfter),
   openArchiveTarget: () => ipcRenderer.invoke('archive-open-target'),
   openWorkspaceProject: (workspacePath, status, name, folderName) => ipcRenderer.invoke('workspace-open-project', workspacePath, status, name, folderName),
+  compressedFiles: request => ipcRenderer.invoke('compressed-files', request),
   openProjectEntry: (workspacePath, status, name, relativePath) => ipcRenderer.invoke('workspace-open-entry', workspacePath, status, name, relativePath),
   getPhotoshopStatus: () => ipcRenderer.invoke('photoshop-status'),
   openProjectEntriesInPhotoshop: (workspacePath, status, name, relativePaths) => invokeFeature('photoshop_open', 'workspace-open-entry-photoshop', workspacePath, status, name, relativePaths),

@@ -169,9 +169,19 @@ stage 元数据与登记文件保留 24 小时，因此宿主重启后可以继�
 
 ## 测试与发布
 
-- 公开仓库可使用 `npm run test:examples`、`npm test` 及根 README 中的构建/启动命令。上游 Host API、架构、生命周期及事务套件未作为 npm 命令提供；本次更新未运行本地测试。
+- 运行 `npm test`、`npm run test:examples` 及根 README 中的构建/启动命令。先执行 `npm run prepare:compression`，再运行 `npm run test:compressed-files` 验证原生压缩引擎和文件接管声明。这些选定测试不代表全部上游集成测试。
 - 打包前用 `electron/contracts/schemas/component-manifest-v2.schema.json` 校验清单。
 - 安装包只包含构建后的 UI、服务和运行资源；为清单声明的生命周期动作计算哈希；在干净用户配置中安装，测试取消、重启，再用真实 V1 数据测试升级与降级。
 - 每次发布提升组件业务版本。只有语义破坏性变化才提升 RPC/事件的 `.vN`；迁移期新增版本应与旧版本并存。
 
 旧宿主业务适配器已经移除。组件只能通过当前 Host API 与显式 adoption grant 运行。
+
+## 使用插件打开指定文件
+
+`component.sidePanel` 可声明 `fileHandler: { extensions: [".abc"] }`，接管普通文件。后缀必须是点开头的小写形式，不可与 placement 同用；`contextMenu: "none"` 可隐藏重复菜单。宿主使用清单图标，按用户单击／双击设置打开标准工具面板。
+
+只匹配可写普通文件，不匹配目录、快捷方式或只读压缩包成员。后缀匹配不区分大小写；多个处理器按 componentId、contributionId 稳定排序。内置支持的压缩包优先进入宿主目录浏览。“使用默认程序打开”绕过插件，不修改系统文件关联。
+
+UI context 包含 contributionId，服务 context 不包含。操作选择应放入 RPC payload，由服务按已声明操作校验。接管文件不增加权限，读取仍需受限输入令牌和对应权限。
+
+压缩现为[主程序内置功能](COMPRESSED_FILES.zh-CN.md)，不再是可选插件。

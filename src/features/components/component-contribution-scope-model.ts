@@ -24,6 +24,12 @@ export const componentContributionAcceptsSelection = (contribution: ComponentCon
       && (!filter.excludedExtensions || entry.kind === 'folder' || !filter.excludedExtensions.includes(extension));
   });
 };
+export const componentFileHandlerForEntry = (contributions: ComponentContribution[], entry: ProjectFileEntry) => {
+  if (entry.kind !== 'file' || entry.viaShortcut || entry.readOnly) return undefined;
+  const extension = `.${entry.relativePath.replace(/\\/g, '/').split('/').pop()?.split('.').pop() || ''}`.toLowerCase();
+  return contributions.filter(item => item.type === 'component.sidePanel' && item.fileHandler?.extensions.includes(extension) && componentContributionAcceptsSelection(item, [entry]))
+    .sort((a, b) => `${a.componentId}:${a.contributionId}`.localeCompare(`${b.componentId}:${b.contributionId}`))[0];
+};
 export type PlacedFullPageAction = { contribution: ComponentContribution; action: ComponentHostAction };
 export const resolvePlacedFullPageAction = (contribution: ComponentContribution, actions: ComponentHostAction[]) => contribution.type === 'project.contextAction' && WORKSPACE_TOOL_PLACEMENTS.some(placement => placement === contribution.placement)
   ? actions.find(action => action.componentId === contribution.componentId && action.pageId === contribution.pageId)

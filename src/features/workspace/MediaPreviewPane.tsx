@@ -1,6 +1,9 @@
 import { LocalizedText } from "../../i18n/LocalizedText";
 import { useLocale } from "../../i18n/react";
 import { t } from "../../i18n/runtime";
+import { compressedFilesRequest } from '../../platform/compressed-files-client';
+import type { ArchiveResource } from '../../contracts/compressed-files';
+import { isArchiveText } from './useArchiveDirectory';
 import React, { useEffect, useRef, useState } from 'react';
 import { usePageTransferParticipant } from '../../platform/page-transfer-state';
 import { createPortal } from 'react-dom';
@@ -31,7 +34,7 @@ export type PreviewImageCropAnalysis = {
 };
 export type PreviewTechnicalMetadata = { width?: number; height?: number; duration?: number; unavailable?: boolean };
 const backgroundTaskPathKey = (value: unknown) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLocaleLowerCase();
-const isUnsupportedShortcutContent = (entry: ProjectFileEntry) => entry.viaShortcut === true;
+const isUnsupportedShortcutContent = (entry: ProjectFileEntry) => entry.viaShortcut === true || entry.readOnly === true;
 
 type VideoTrimExportProgress = { phase: string; progress: number; message: string };
 
@@ -159,7 +162,18 @@ export const MediaPreviewPane = ({ previewPlugin, previewContext, decoder: avail
   const [originalLoading, setOriginalLoading] = useState(false);
   const [originalLoadError, setOriginalLoadError] = useState('');
   const [videoPlaybackFailed, setVideoPlaybackFailed] = useState(false);
-  const decoder = entry?.kind === 'video' && !videoPlaybackFailed ? undefined : availableDecoder;
+  const decoder = entry?.archiveMember || entry?.kind === 'video' && !videoPlaybackFailed ? undefined : availableDecoder;
+  const [archiveText, setArchiveText] = useState<{ path: string; text?: string; error?: string }>();
+  useEffect(() => {
+    let active = true;
+    if (!entry || !isArchiveText(entry) || !entry.archiveMember) { setArchiveText(undefined); return; }
+    const path = entry.path;
+    setArchiveText({ path });
+    void compressedFilesRequest<ArchiveResource>({ action: 'member', sessionId: entry.archiveMember.sessionId, relativePath: entry.archiveMember.relativePath }).then(result => {
+      if (active) setArchiveText({ path, text: result.text });
+    }).catch(error => { if (active) setArchiveText({ path, error: (error as Error).message }); });
+    return () => { active = false; };
+  }, [entry?.path]);
   const [videoPlayerError, setVideoPlayerError] = useState('');
   const [imageZoom, setImageZoom] = useState(1);
   const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
@@ -186,7 +200,7 @@ export const MediaPreviewPane = ({ previewPlugin, previewContext, decoder: avail
   // render; waiting for the synchronization effect would briefly reopen and
   // lock the source file on Windows before a replace commit.
   const trimBusy = Boolean(trimBusyMode || backgroundTrimTask);
-  const componentPreview = useComponentPreview(decoder ? undefined : previewContext, entry?.relativePath, entry?.kind === 'video' && !decoder && !videoPlaybackFailed && !trimBusy);
+  const componentPreview = useComponentPreview(decoder || entry?.archiveMember ? undefined : previewContext, entry?.relativePath, entry?.kind === 'video' && !entry.archiveMember && !decoder && !videoPlaybackFailed && !trimBusy);
   useEffect(() => { if (componentPreview.seek) setVideoEditorSeek({ ...componentPreview.seek, id: Date.now() }); }, [componentPreview.seek]);
   const previewSnapshot = () => ({ path: entry?.path, imageZoom, imagePan, trimEditor, imageCropEditor, imageCropPhase, imageCropError, videoDuration });
   usePageTransferParticipant('previewEditor', {
@@ -740,6 +754,7 @@ export const MediaPreviewPane = ({ previewPlugin, previewContext, decoder: avail
     </WorkspacePanelHeader>}
     {fullscreen && fullscreenControlsVisible && <button type="button" onClick={() => setFullscreen(false)} title={t("ui.exit.full.screen.esc.218e2c")} aria-label={t("ui.exit.full.screen.0f1505")} className="fixed right-5 top-5 z-[520] rounded-full bg-black/60 p-2.5 text-white shadow-lg backdrop-blur transition hover:bg-black/80"><X size={20}/></button>}
     <div className={`relative flex min-h-0 flex-1 items-center justify-center overflow-hidden ${fullscreen ? 'bg-black' : 'bg-slate-50'}`}>
+      {entry && isArchiveText(entry) && <div className="absolute inset-0 z-10 overflow-auto bg-slate-50 p-4"><pre className="whitespace-pre-wrap break-words text-xs text-slate-700">{archiveText?.path === entry.path ? archiveText.error || archiveText.text || t('compression.prepare_preview') : t('compression.prepare_preview')}</pre></div>}
       {entry && previewPlugin && !decoder && <div className="absolute inset-x-3 top-3 z-30 rounded-lg border border-blue-400/30 bg-slate-950/95 p-3 text-center shadow-lg"><p className="text-xs text-slate-300">{previewPlugin.name} · {previewPlugin.latestVersion}</p><button type="button" onClick={() => window.electronAPI.openExternal(previewPlugin.homepage)} className="mt-2 inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500"><ExternalLink size={14}/>{t("preview.downloadPlugin")}</button></div>}
       {entry && decoder && previewContext && <ComponentDecodedPreview key={`${entry.relativePath}:${entry.updatedAt}:${decoder.componentId}:${decoder.id}`} context={previewContext} relativePath={entry.relativePath} decoder={decoder} onOpen={onOpen} playerOptions={{ keyboardSettings, onNavigate, onContextMenuAt, onPointerActivity: revealFullscreenControls, controlsVisible: !fullscreen || fullscreenControlsVisible, controlsOverlay: fullscreen, topRightOverlayHole: fullscreen && fullscreenControlsVisible ? 60 : 0, onEscape: () => setFullscreen(false), onToggleFullscreen: () => setFullscreen(current => !current), onMetadata: onTechnicalMetadata }}/>}
       {!entry && <div className="max-w-[220px] text-center"><ImageIcon size={38} strokeWidth={1.4} className="mx-auto text-slate-600"/><p className="mt-3 text-sm font-medium text-slate-300">{t("ui.click.an.image.raw.file.or.526e0d")}</p><p className="mt-1 text-xs leading-5 text-slate-500">{t("ui.image.or.video.previews.appear.here.4da6bc")}</p></div>}

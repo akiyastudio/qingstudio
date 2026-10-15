@@ -75,6 +75,7 @@ async function testMountedDirectoryReads() {
       requests.push({ directory, ...read });
       return read.promise;
     } },
+    archiveDirectory: { contains: () => false, browse: async () => null },
     mergeRefreshedEntryMetadata: entries => entries,
     setFileEntries: entries => displayed.push(entries), setForegroundDirectoryReady: () => undefined,
     setDirectoryLoading: () => undefined, reconcileDirectoryUiState: () => undefined, onNotice: () => undefined,
@@ -84,10 +85,12 @@ async function testMountedDirectoryReads() {
   const first = refresh('', { includeProjectContents: false });
   const followup = refresh('', { includeProjectContents: false });
   for (let event = 0; event < 10; event += 1) void refresh('', { includeProjectContents: false });
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(requests.length, 1);
   requests[0].resolve({ success: true, entries: ['first root listing'] });
   assert.equal(await first, true);
   assert.deepEqual(displayed.at(-1), ['first root listing'], 'watcher overlap cannot discard a slow initial root listing');
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(requests.length, 2);
   requests[1].resolve({ success: true, entries: ['updated root listing'] });
   assert.equal(await followup, true);
@@ -99,6 +102,7 @@ async function testMountedDirectoryReads() {
   context.refreshSequenceRef.current += 1;
   context.currentRelativePathRef.current = 'child';
   const child = refresh('child', { includeProjectContents: false });
+  await new Promise(resolve => setImmediate(resolve));
   requests[3].resolve({ success: true, entries: ['child listing'] });
   assert.equal(await child, true);
   requests[2].resolve({ success: true, entries: ['obsolete root listing'] });

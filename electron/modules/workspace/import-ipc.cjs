@@ -1,7 +1,7 @@
-const { localizeDialogOptions } = require("../../services/localization.cjs");
-const { t: translateNative } = require("../../services/localization.cjs");
 const registerWorkspaceImportIpc = dependencies => {
   const {
+    localizeDialogOptions,
+    translateNative,
     Array,
     Boolean,
     CANCELLED_CODE,

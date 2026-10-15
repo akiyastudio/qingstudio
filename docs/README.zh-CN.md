@@ -17,6 +17,7 @@
 | 服务协议 | [Read](COMPONENT_SERVICE_PROTOCOL_V1.md) | [阅读](COMPONENT_SERVICE_PROTOCOL_V1.zh-CN.md) |
 | 安装事务 | [Read](COMPONENT_TRANSACTIONS.md) | [阅读](COMPONENT_TRANSACTIONS.zh-CN.md) |
 | 项目导入 | [Read](PROJECT_IMPORT.md) | [阅读](PROJECT_IMPORT.zh-CN.md) |
+| 内置压缩文件 | [Read](COMPRESSED_FILES.md) | [阅读](COMPRESSED_FILES.zh-CN.md) |
 | SDK UI 契约 | [Read](../component-sdk/README.md) | [阅读](../component-sdk/README.zh-CN.md) |
 | 示例 | [Read](../examples/README.md) | [阅读](../examples/README.zh-CN.md) |
 | 声明式设置示例 | [Read](../examples/declarative-settings/README.md) | [阅读](../examples/declarative-settings/README.zh-CN.md) |

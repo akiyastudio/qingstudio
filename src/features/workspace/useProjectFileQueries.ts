@@ -26,6 +26,7 @@ type ProjectFileQueriesOptions = {
   filterScope: ProjectFilterScope;
   searchQuery: string;
   fileFilter: 'all' | 'media' | 'image' | 'video';
+  virtualEntries?: ProjectFileEntry[];
   filesColumnRef: RefObject<HTMLDivElement | null>;
   selectionAnchorPathRef: { current: string };
   setSelectedPaths: Dispatch<SetStateAction<string[]>>;
@@ -44,6 +45,7 @@ export const useProjectFileQueries = ({
   filterScope,
   searchQuery,
   fileFilter,
+  virtualEntries,
   filesColumnRef,
   selectionAnchorPathRef,
   setSelectedPaths,
@@ -93,6 +95,12 @@ export const useProjectFileQueries = ({
     }
     if (!retainExistingEntries) setSearchEntries([]);
     setSearchLoading(true); setSearchError(''); setRecentCursor(''); setRecentHasMore(false); setRecentLoadingMore(false); setRecentLoadError(''); recentLoadInFlightRef.current = false;
+    if (virtualEntries) {
+      const prefix = `${currentRelativePath}/`;
+      setSearchEntries(virtualEntries.filter(entry => entry.kind !== 'folder' && entry.relativePath.startsWith(prefix) && entry.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
+      setSearchLoading(false);
+      return;
+    }
     const timer = window.setTimeout(() => {
       const request = query
         ? projectWorkspaceClient.searchProjectFiles(workspacePath, project.status, project.name, currentRelativePath, query)
@@ -127,7 +135,7 @@ export const useProjectFileQueries = ({
       recentCursorRef.current = '';
       if (cursor) void projectWorkspaceClient.cancelRecentProjectFiles(cursor).catch(() => undefined);
     };
-  }, [active, searchQuery, recursiveFlatOpen, currentFolderRecursiveSearchActive, currentRelativePath, finalViewOpen, workspacePath, project.status, project.name, recentRefreshToken]);
+  }, [active, searchQuery, recursiveFlatOpen, currentFolderRecursiveSearchActive, currentRelativePath, finalViewOpen, workspacePath, project.status, project.name, recentRefreshToken, virtualEntries]);
 
   const loadMoreRecentFiles = useCallback(async () => {
     if (!active || !recursiveFlatOpen || searchQuery.trim() || finalViewOpen || !recentHasMore || !recentCursor || recentLoadInFlightRef.current) return;
@@ -178,6 +186,11 @@ export const useProjectFileQueries = ({
     if (!retainExistingEntries) setScopeEntries([]);
     setScopeHasMore(false); setScopeLoadingMore(false); setScopeError('');
     if (!active || !projectRootFilterActive) { setScopeLoading(false); return; }
+    if (virtualEntries) {
+      setScopeEntries(virtualEntries.filter(entry => entry.kind !== 'folder' && entry.name.toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase())));
+      setScopeLoading(false);
+      return;
+    }
     setScopeLoading(true);
     void projectWorkspaceClient.listProjectFiles(workspacePath, project.status, project.name, '', FILE_LIST_PAGE_SIZE, undefined, scopeFileListFilter).then(result => {
       if (sequence !== scopeRequestSequenceRef.current) { if (result.cursor) void projectWorkspaceClient.cancelListProjectFiles(result.cursor).catch(() => undefined); return; }
@@ -188,7 +201,7 @@ export const useProjectFileQueries = ({
       setScopeHasMore(false); setScopeError(error instanceof Error ? error.message : '读取项目文件失败');
     }).finally(() => { if (sequence === scopeRequestSequenceRef.current) setScopeLoading(false); });
     return () => { scopeRequestSequenceRef.current += 1; cancelScopeSession(); };
-  }, [active, cancelScopeSession, project.name, project.status, projectRootFilterActive, replaceScopeCursor, scopeFileListFilter, scopeRefreshToken, workspacePath]);
+  }, [active, cancelScopeSession, project.name, project.status, projectRootFilterActive, replaceScopeCursor, scopeFileListFilter, scopeRefreshToken, workspacePath, virtualEntries, searchQuery]);
 
   const loadMoreScopeFiles = useCallback(async () => {
     if (!active || !projectRootFilterActive || !scopeHasMore || !scopeCursor || scopeLoadInFlightRef.current) return;

@@ -73,3 +73,5 @@ npm run electron:build
 本仓库原创代码采用 [Apache License 2.0](LICENSE)，版权信息见 [NOTICE](NOTICE)。第三方依赖适用各自许可证。软件许可不授予商标权。
 
 欢迎提交问题和改进。提交截图、日志和示例项目前，请移除私人路径、凭据及真实客户资料。
+
+压缩、解压和压缩包浏览已内置，开发启动会自动准备已校验的 7-Zip 引擎。运行 `npm run test:compressed-files` 前先执行 `npm run prepare:compression`。详见[压缩文件说明](docs/COMPRESSED_FILES.zh-CN.md)。

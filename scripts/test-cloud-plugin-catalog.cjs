@@ -1,0 +1,45 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const ts = require('typescript');
+const { createCloudPluginCatalogService, normalizeCatalogPlugin } = require('../electron/services/cloud-plugin-catalog-service.cjs');
+const source = fs.readFileSync(path.join(__dirname, '../src/features/workspace/preview-plugin-prompt-model.ts'), 'utf8');
+const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+const model = { exports: {} };
+new Function('exports', compiled)(model.exports);
+const { previewPluginForFile } = model.exports;
+const record = { id: 'psd-preview', name: 'PSD 预览', homepage: 'https://qingstudio.cn/plugins', latestVersion: '26.10.11.1', capabilities: ['preview'], formats: ['PSD', '.psb', '.PSD'], previewPromptEnabled: true };
+const plugin = normalizeCatalogPlugin(record);
+assert.deepEqual(plugin.formats, ['.psd', '.psb']);
+assert.equal(previewPluginForFile([plugin], '画面.PSD', [], new Set()), plugin);
+assert.equal(previewPluginForFile([plugin], 'large.psb', [], new Set()), plugin);
+for (const name of ['psd', 'sample.psd.jpg', 'sample.xpsd', '.psd/file.txt', 'sample.png']) assert.equal(previewPluginForFile([plugin], name, [], new Set()), undefined);
+for (const flag of [false, undefined, 'true', 1]) assert.equal(previewPluginForFile([{ ...plugin, previewPromptEnabled: flag }], 'sample.psd', [], new Set()), undefined);
+assert.equal(previewPluginForFile([{ ...plugin, capabilities: ['thumbnail'] }], 'sample.psd', [], new Set()), undefined);
+assert.equal(previewPluginForFile([plugin], 'sample.psd', [], new Set(['psd-preview'])), undefined);
+assert.equal(previewPluginForFile([plugin], 'sample.psd', [{ extensions: ['.PSD'] }], new Set()), undefined);
+assert.equal(previewPluginForFile([plugin], 'sample.psd', [{ extensions: ['*'] }], new Set()), undefined);
+for (const homepage of ['http://qingstudio.cn/plugins', 'https://evil.example/plugins', 'javascript:alert(1)', 'https://user:pass@qingstudio.cn/plugins']) assert.equal(normalizeCatalogPlugin({ ...record, homepage }), null);
+assert.equal(normalizeCatalogPlugin({ ...record, formats: ['*'] }), null);
+assert.equal(normalizeCatalogPlugin({ ...record, id: 123 }), null);
+assert.equal(normalizeCatalogPlugin({ ...record, previewPromptEnabled: 'true' }).previewPromptEnabled, false);
+
+(async () => {
+  let time = 1; let calls = 0; let fail = false; let enabled = true;
+  const service = createCloudPluginCatalogService({ apiBaseUrl: 'https://api.example', now: () => time, fetchImpl: async (url, options) => {
+    calls += 1; assert.equal(url, 'https://api.example/v1/plugins'); assert.equal(options.redirect, 'error');
+    if (fail) throw new Error('offline');
+    return { ok: true, json: async () => ({ plugins: [{ ...record, previewPromptEnabled: enabled }, { ...record, homepage: 'https://evil.example' }, record] }) };
+  } });
+  const [first, second] = await Promise.all([service.list(), service.list()]);
+  assert.equal(calls, 1); assert.strictEqual(first, second); assert.equal(first.plugins.length, 1);
+  await service.list(); assert.equal(calls, 1);
+  time += 60_001; enabled = false;
+  assert.equal((await service.list()).plugins[0].previewPromptEnabled, false);
+  time += 60_001; fail = true;
+  assert.deepEqual(await service.list(), { success: false, plugins: [] });
+  await service.list(); assert.equal(calls, 3);
+  time += 15_001; fail = false; enabled = true;
+  assert.equal((await service.list()).plugins[0].previewPromptEnabled, true);
+  console.log('Cloud plugin catalog and preview prompt tests passed');
+})().catch(error => { console.error(error); process.exitCode = 1; });

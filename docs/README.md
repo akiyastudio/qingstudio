@@ -8,6 +8,7 @@ English is the preferred documentation entry point. Each document has a matching
 | --- | --- | --- |
 | Project overview | [Read](../README.md) | [阅读](../README.zh-CN.md) |
 | Plugin development | [Read](PLUGIN_DEVELOPMENT.md) | [阅读](PLUGIN_DEVELOPMENT.zh-CN.md) |
+| Cloud plugin catalog / 云端插件目录 | [Read](PLUGIN_CATALOG_API.md) | [阅读](PLUGIN_CATALOG_API.zh-CN.md) |
 | Host API | [Read](PLUGIN_HOST_API.md) | [阅读](PLUGIN_HOST_API.zh-CN.md) |
 | File resources and transfers | [Read](PLUGIN_FILE_RESOURCES_API.md) | [阅读](PLUGIN_FILE_RESOURCES_API.zh-CN.md) |
 | Panels and previews | [Read](PLUGIN_PREVIEW_API.md) | [阅读](PLUGIN_PREVIEW_API.zh-CN.md) |

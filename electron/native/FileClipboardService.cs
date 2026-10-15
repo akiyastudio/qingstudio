@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -28,12 +27,18 @@ internal static class FileClipboardService
     private static extern bool EmptyClipboard();
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr GetClipboardData(uint format);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetClipboardData(uint format, IntPtr memory);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint RegisterClipboardFormat(string format);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr GlobalLock(IntPtr memory);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GlobalUnlock(IntPtr memory);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GlobalAlloc(uint flags, UIntPtr bytes);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GlobalFree(IntPtr memory);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern uint DragQueryFile(IntPtr drop, uint index, StringBuilder path, uint pathLength);
 
@@ -44,6 +49,7 @@ internal static class FileClipboardService
         Console.OutputEncoding = new UTF8Encoding(false);
         try
         {
+            if (args.Length == 1 && args[0] == "serve") return Serve();
             if (args.Length != 1) throw new ArgumentException("需要 write、read 或 clear-if-current 命令");
             object result;
             switch (args[0])
@@ -62,6 +68,66 @@ internal static class FileClipboardService
             Console.WriteLine(Json.Serialize(new { success = false, code = "FILE_CLIPBOARD_FAILED", error = error.Message }));
             return 1;
         }
+    }
+
+    // OLE clipboard owners must keep pumping their STA while other applications
+    // inspect/paste files. Blocking that thread in ReadLine breaks external reads.
+    private static int Serve()
+    {
+        using (var dispatcher = new Control())
+        using (var context = new ApplicationContext())
+        {
+            // Create an invisible dispatch window on this STA before input starts.
+            var handle = dispatcher.Handle;
+            var input = new Thread(() =>
+            {
+                try
+                {
+                    string line;
+                    while ((line = Console.ReadLine()) != null)
+                    {
+                        var requestLine = line;
+                        // Invoke synchronously to retain command order and bounded
+                        // input buffering; all clipboard calls remain on the STA.
+                        dispatcher.Invoke(new Action(() => ServeRequest(requestLine)));
+                    }
+                }
+                catch (Exception error) { Console.Error.WriteLine(error.ToString()); }
+                finally { dispatcher.BeginInvoke(new Action(() => context.ExitThread())); }
+            });
+            input.IsBackground = true;
+            Console.WriteLine(Json.Serialize(new { ready = true, protocol = "photoflow-clipboard-v1" }));
+            Console.Out.Flush();
+            input.Start();
+            Application.Run(context);
+        }
+        return 0;
+    }
+
+    private static void ServeRequest(string line)
+    {
+        string id = "";
+        object result;
+        try
+        {
+            if (line.Length > Json.MaxJsonLength) throw new ArgumentException("请求过大");
+            var request = Json.Deserialize<Dictionary<string, object>>(line);
+            id = Convert.ToString(request["id"]);
+            if (String.IsNullOrEmpty(id) || id.Length > 64) throw new ArgumentException("请求序号无效");
+            switch (Convert.ToString(request["command"]))
+            {
+                case "write": result = Write(request); break;
+                case "read": result = Read(); break;
+                case "clear-if-current": result = ClearIfCurrent(request); break;
+                default: throw new ArgumentException("无效的剪贴板命令");
+            }
+        }
+        catch (Exception error)
+        {
+            result = new { success = false, code = "FILE_CLIPBOARD_FAILED", error = error.Message };
+        }
+        Console.WriteLine(Json.Serialize(new { id, result }));
+        Console.Out.Flush();
     }
 
     private static Dictionary<string, object> ReadRequest()
@@ -106,21 +172,71 @@ internal static class FileClipboardService
         object rawOperation;
         var operation = request.TryGetValue("operation", out rawOperation) ? Convert.ToString(rawOperation) : "copy";
         if (operation != "copy" && operation != "cut") throw new ArgumentException("无效的剪贴板操作");
-        Retry(() =>
+        // Publish concrete Win32 buffers. A reused OLE DataObject can leave
+        // transient/stale formats during rapid writes; Explorer needs CF_HDROP
+        // and its drop effect to be fully rendered before we report success.
+        using (var owner = new Control())
         {
-            var files = new StringCollection();
-            files.AddRange(sources);
-            var data = new DataObject();
-            data.SetFileDropList(files);
-            data.SetData(DropEffectFormat, false, new MemoryStream(BitConverter.GetBytes(operation == "cut" ? 2 : 1)));
-            Clipboard.SetDataObject(data, true);
-            return true;
-        });
+            var ownerHandle = owner.Handle;
+            Retry(() => { PublishFiles(ownerHandle, sources, operation); return true; });
+        }
         var verified = (Dictionary<string, object>)Read();
         var verifiedSources = (string[])verified["sources"];
         if (!SameSources(sources, verifiedSources) || Convert.ToString(verified["operation"]) != operation)
-            throw new InvalidOperationException("写入后回读验证失败");
+            throw new InvalidOperationException(String.Format("写入后回读验证失败（文件数 {0}/{1}，操作 {2}/{3}）", sources.Length, verifiedSources.Length, operation, verified["operation"]));
         return new { success = true, sources = verifiedSources, operation, sequence = verified["sequence"] };
+    }
+
+    private static IntPtr AllocateClipboardMemory(byte[] bytes)
+    {
+        var memory = GlobalAlloc(2, new UIntPtr((uint)bytes.Length)); // GMEM_MOVEABLE
+        if (memory == IntPtr.Zero) throw new ExternalException("无法分配剪贴板内存", Marshal.GetLastWin32Error());
+        var pointer = GlobalLock(memory);
+        if (pointer == IntPtr.Zero)
+        {
+            var error = Marshal.GetLastWin32Error();
+            GlobalFree(memory);
+            throw new ExternalException("无法锁定剪贴板内存", error);
+        }
+        try
+        {
+            try { Marshal.Copy(bytes, 0, pointer, bytes.Length); }
+            finally { GlobalUnlock(memory); }
+        }
+        catch { GlobalFree(memory); throw; }
+        return memory;
+    }
+
+    private static void PublishFiles(IntPtr owner, string[] sources, string operation)
+    {
+        var names = Encoding.Unicode.GetBytes(String.Join("\0", sources) + "\0\0");
+        var drop = new byte[checked(20 + names.Length)]; // DROPFILES header
+        Array.Copy(BitConverter.GetBytes(20), 0, drop, 0, 4); // pFiles
+        Array.Copy(BitConverter.GetBytes(1), 0, drop, 16, 4); // fWide
+        Array.Copy(names, 0, drop, 20, names.Length);
+        var dropMemory = IntPtr.Zero;
+        var effectMemory = IntPtr.Zero;
+        var opened = false;
+        try
+        {
+            dropMemory = AllocateClipboardMemory(drop);
+            effectMemory = AllocateClipboardMemory(BitConverter.GetBytes(operation == "cut" ? 2 : 1));
+            var effectFormat = RegisterClipboardFormat(DropEffectFormat);
+            if (effectFormat == 0) throw new ExternalException("无法注册剪贴板拖放格式", Marshal.GetLastWin32Error());
+            if (!OpenClipboard(owner)) throw new ExternalException("无法锁定 Windows 剪贴板", Marshal.GetLastWin32Error());
+            opened = true;
+            if (!EmptyClipboard()) throw new ExternalException("无法清空 Windows 剪贴板", Marshal.GetLastWin32Error());
+            if (SetClipboardData(CF_HDROP, dropMemory) == IntPtr.Zero) throw new ExternalException("无法写入剪贴板文件列表", Marshal.GetLastWin32Error());
+            dropMemory = IntPtr.Zero; // Windows owns successfully published handles.
+            if (SetClipboardData(effectFormat, effectMemory) == IntPtr.Zero) throw new ExternalException("无法写入剪贴板拖放效果", Marshal.GetLastWin32Error());
+            effectMemory = IntPtr.Zero;
+        }
+        finally
+        {
+            if (opened) CloseClipboard();
+            if (dropMemory != IntPtr.Zero) GlobalFree(dropMemory);
+            if (effectMemory != IntPtr.Zero) GlobalFree(effectMemory);
+        }
     }
 
     private static object Read()

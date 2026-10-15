@@ -19,11 +19,37 @@ const createMediaCacheRuntime = ({
   thumbnailVersion,
   defaultPriority,
   writeLog,
+  waitForThumbnailRetry = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
 }) => {
   let thumbnailService = null;
   let imageThumbnailRuntime = null;
   const indexes = new Map();
   const trackedCopies = new Map();
+  let activeThumbnailWrites = 0;
+  const thumbnailWriteWaiters = [];
+
+  const registerTrackedThumbnail = async pending => {
+    // Thumbnail completions can arrive in large bursts. Keep their database
+    // writes below the shared background worker's admission limit.
+    if (activeThumbnailWrites >= 4) await new Promise(resolve => thumbnailWriteWaiters.push(resolve));
+    else activeThumbnailWrites += 1;
+    try {
+      const retryDelays = [100, 250, 500, 1000, 2000];
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          await versionService.setThumbnail(pending.workspaceRoot, { versionId: pending.versionId, thumbnailPath: pending.targetPath });
+          return;
+        } catch (error) {
+          if (error?.code !== 'DOMAIN_BACKPRESSURE' || attempt >= retryDelays.length) throw error;
+          await waitForThumbnailRetry(retryDelays[attempt]);
+        }
+      }
+    } finally {
+      const next = thumbnailWriteWaiters.shift();
+      if (next) next();
+      else activeThumbnailWrites -= 1;
+    }
+  };
 
   const attach = dependencies => {
     thumbnailService = dependencies.thumbnailService;
@@ -195,7 +221,7 @@ const createMediaCacheRuntime = ({
       if (!buffer) return false;
       await writeThumbnailAtomically(pending.targetPath, buffer);
     }
-    await versionService.setThumbnail(pending.workspaceRoot, { versionId: pending.versionId, thumbnailPath: pending.targetPath });
+    await registerTrackedThumbnail(pending);
     return true;
   };
   const persistTrackedThumbnail = async pending => {

@@ -1,4 +1,6 @@
 {
+  "preview.downloadPlugin": "Download preview plugin",
+  "preview.installPluginToPreview": "Install a preview plugin to view this file",
   "ui.independent.root.version": "Independent root version",
   "ui.independent.root.version.description": "Create a tracking baseline from this folder. Later versions can connect to it.",
   "ui.independent.root.version.option": "Independent root version (no parent)",
@@ -809,6 +811,7 @@
   "ui.replace.and.continue.3fcff1": "Replace and continue",
   "ui.keep.both.56437f": "Keep both",
   "ui.confirm.manual.selection.259189": "Confirm manual selection",
+  "selection.manual.existing-files-skipped": "Added {copiedCount} files; skipped {existingCount} files with names that already exist.",
   "ui.confirm.selection.9bf785": "Confirm selection",
   "ui.deselect.74966e": "Deselect",
   "ui.select.files.or.folders.9cbf39": "Select files or folders",

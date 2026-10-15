@@ -12,6 +12,18 @@ export const componentHostSelectedRelativePaths = (entries: ProjectFileEntry[]) 
 export const WORKSPACE_TOOL_PLACEMENTS = ['workspace.videoTools', 'workspace.imageTools', 'workspace.officeTools'] as const;
 export type WorkspaceToolPlacement = typeof WORKSPACE_TOOL_PLACEMENTS[number];
 export const workspaceToolContributions = (contributions: ComponentContribution[], placement: WorkspaceToolPlacement) => contributions.filter(item => item.placement === placement && ['component.sidePanel', 'project.contextAction'].includes(item.type));
+export const componentContributionAcceptsSelection = (contribution: ComponentContribution, entries: ProjectFileEntry[]) => {
+  const filter = contribution.selection;
+  if (!filter) return true;
+  if (entries.length < (filter.minCount ?? 0) || entries.length > (filter.maxCount ?? 2000)) return false;
+  return entries.every(entry => {
+    const extension = `.${entry.relativePath.replace(/\\/g, '/').split('/').pop()?.split('.').slice(1).pop() || ''}`.toLowerCase();
+    return isSafeComponentHostSelectionEntry(entry) && !entry.readOnly
+      && (!filter.kinds || filter.kinds.includes(entry.kind))
+      && (!filter.extensions || entry.kind !== 'folder' && filter.extensions.includes(extension))
+      && (!filter.excludedExtensions || entry.kind === 'folder' || !filter.excludedExtensions.includes(extension));
+  });
+};
 export type PlacedFullPageAction = { contribution: ComponentContribution; action: ComponentHostAction };
 export const resolvePlacedFullPageAction = (contribution: ComponentContribution, actions: ComponentHostAction[]) => contribution.type === 'project.contextAction' && WORKSPACE_TOOL_PLACEMENTS.some(placement => placement === contribution.placement)
   ? actions.find(action => action.componentId === contribution.componentId && action.pageId === contribution.pageId)

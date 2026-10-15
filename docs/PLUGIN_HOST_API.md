@@ -83,6 +83,12 @@ Tones are info/success/warning/error. Nonempty plain text is limited to 360 char
 
 Success is `{accepted:true,id}`; duplicates return `{accepted:false,deduplicated:true,code:"NOTIFICATION_DEDUPLICATED"}`; failures return `{accepted:false,error:{code,message,retryable}}`, with no version. Main uses a bounded buffer before subscriber readiness and re-handshakes/flushes after reload. Uninstall/upgrade purges component scope. Main preload revalidates events before bounded `useTopToastStack`. All tones share host icons, colors, lifetime, stacking, dismissal, and one live region. A transparent native overlay stays above component Views without changing their bounds; empty regions pass pointer input through, while cards/buttons remain interactive. Long work uses tasks; decisions use dialogs.
 
+### File-menu selection filters
+
+`component.sidePanel` and `project.contextAction` may declare `selection` and `contextMenu`. Selection accepts minCount/maxCount (0–2000), nonempty kinds (folder/image/raw/video/file/shortcut), and lowercase dotted extensions/excludedExtensions (up to 64 each). All selected entries must match. Filename case is ignored; inclusion suffixes exclude folders, exclusion suffixes allow them. Shortcut content and read-only entries do not match.
+
+contextMenu is root, group, or none. Root adds a root context-menu action; none hides the action there. Placement still controls the toolbar group. Folder panels cannot use contextMenu. Filters only affect UI: services must validate inputs and authorization again.
+
 ## Capability contracts
 
 See [preview API](PLUGIN_PREVIEW_API.md) for folder panels, subtitles, and `service.previewDecoders`, including UI-free decoders. See [file resources](PLUGIN_FILE_RESOURCES_API.md) for arbitrary inputs, subscriptions, transfers, and RPC limits. UI reaches service capabilities through declared RPC, except explicitly supported SDK bridges.
@@ -149,10 +155,11 @@ Media process exposes only `video.timelineFrames` and `office.extractImages`, wi
 
 `project.output` actions:
 
-- `stage`: create private stage and return its path to the supervised backend.
+- `stage`: create a private stage and return its backend path. Optional maxBytes accepts an integer from 1 byte to 64 GiB, defaults to 2 GiB, and persists across restart.
 - `write`: register existing stage sourceName, copy an input token, or accept up to 8 MiB inline base64; bind outputRelativePath and return artifact ID.
-- `validate`: reject empty, linked, escaped, missing, or oversized stages. Limits: 2,000 files and 2 GiB per stage.
+- `validate`: reject empty, linked, escaped, missing, or oversized stages. Limits: 2,000 files and the selected byte limit per stage (default 2 GiB, configurable up to 64 GiB).
 - `commit`: require an ID-shaped idempotency key, reject overwrite by default, and atomically publish into the bound project. Multi-file failure rolls back newly created files. Return commit/artifact IDs; same-key retry returns the same result.
+- `status`: read the durable receipt by the original idempotencyKey within the bound component/workspace/project. Recheck current output sizes and digests; return missing, prepared, changed, or committed. Committed results include commitId, idempotencyKey and project-relative output references, with no physical paths. This action never publishes files.
 - `rollback`: recursively delete only the private component stage.
 - `adopt`: one-time migration with project.output.existing.v1. Accept project-relative outputs or absolute sources from old component records only if canonical, regular, non-linked, and within the bound root. Return relative receipts without echoing absolute paths. This is not general filesystem access.
 - `materializeOwned`: verify committed receipts/current digests and copy artifacts into private component storage for migration without retaining project paths.

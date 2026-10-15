@@ -159,6 +159,10 @@ const { pathToFileURL } = require('url');
     'the executable graph projection must preserve supplemental edges instead of relying on a source-string assertion',
   );
   assert.deepStrictEqual(model.selectableVersionParents(semanticNodes, { mediaKind: 'image', relationKind: 'main' }).map(node => node.id), ['raw-semantic', 'legacy-orphan'], 'independent roots can parent later versions');
+  const cameraSelectionNodes = semanticNodes.map(node => node.id === 'camera-jpg'
+    ? { ...node, sourceMetadata: { category: 'original', role: 'companion', parentCapability: 'none' } } : node);
+  assert.strictEqual(model.progressRelationChangeError(cameraSelectionNodes, 'image-selection', 'camera-jpg'), '', 'camera JPG can own an auxiliary selection even when structural parenting is disabled');
+  assert.match(model.progressRelationChangeError(cameraSelectionNodes, 'legacy-orphan', 'camera-jpg'), /不能作为结构父版本/, 'camera JPG remains excluded from the main version chain');
   assert.deepStrictEqual(model.selectableWorkflowInputs([...semanticNodes, genericWorkflow], 'image').map(node => node.id), ['image-selection', 'team-workflow', 'generic-workflow'], 'component workflow inputs are discovered through generic source metadata');
   assert.strictEqual(model.workflowInputLabel(genericWorkflow), '云端校样');
   assert(!model.selectableVersionParents([...semanticNodes, nonParentVersion], { mediaKind: 'image', relationKind: 'main' }).some(node => node.id === 'non-parent'), 'source metadata can forbid a version from becoming a structural parent');

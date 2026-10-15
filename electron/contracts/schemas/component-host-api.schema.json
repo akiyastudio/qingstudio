@@ -1252,7 +1252,8 @@
               "properties": {
                 "action": {
                   "const": "stage"
-                }
+                },
+                "maxBytes": { "type": "integer", "minimum": 1, "maximum": 68719476736 }
               }
             },
             {
@@ -1343,6 +1344,15 @@
                 "idempotencyKey": {
                   "$ref": "#/$defs/id"
                 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["action", "idempotencyKey"],
+              "properties": {
+                "action": { "const": "status" },
+                "idempotencyKey": { "$ref": "#/$defs/id" }
               }
             },
             {

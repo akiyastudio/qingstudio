@@ -759,6 +759,7 @@ const App: React.FC = () => {
           projectCategoryOrder={config.projectCategoryOrder}
           selectedProject={selectedProject}
           onSelectProject={(project, replacePath) => selectSidebarProjectPage(project, replacePath)}
+          onOpenInNewTab={project => openProjectDirectoryPage(project, '')}
           onProjectAction={handleProjectAction}
           onProjectDeleted={closeAllPagesForProject}
           onWorkspacesResolved={workspacePaths => { if (workspacePaths.length) handleConfigUpdate({ ...config, workspacePath: workspacePaths[0], workspacePaths }); }}

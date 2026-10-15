@@ -1,4 +1,6 @@
 {
+  "preview.downloadPlugin": "下载预览插件",
+  "preview.installPluginToPreview": "安装预览插件后可查看此文件",
   "ui.independent.root.version": "独立根版本",
   "ui.independent.root.version.description": "首个版本以当前文件夹建立跟踪基线；后续版本可连接到它。",
   "ui.independent.root.version.option": "独立根版本（无父版本）",
@@ -809,6 +811,7 @@
   "ui.replace.and.continue.3fcff1": "替换并继续",
   "ui.keep.both.56437f": "保留两者",
   "ui.confirm.manual.selection.259189": "确认手动选片",
+  "selection.manual.existing-files-skipped": "已添加 {copiedCount} 个文件，{existingCount} 个同名文件已存在，已跳过。",
   "ui.confirm.selection.9bf785": "确认选片",
   "ui.deselect.74966e": "取消选择",
   "ui.select.files.or.folders.9cbf39": "请选择文件或文件夹",

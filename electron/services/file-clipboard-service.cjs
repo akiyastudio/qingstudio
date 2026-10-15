@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { terminateAndWait } = require('../infrastructure/process-termination.cjs');
+const { createPersistentRenameService } = require('./persistent-rename-service.cjs');
 let clipboardProcessSequence = 0;
 
 const runJson = (command, args, stdin = '', timeoutMs = 12000, processSupervisor = null) => new Promise((resolve, reject) => {
@@ -52,7 +53,7 @@ const runJson = (command, args, stdin = '', timeoutMs = 12000, processSupervisor
   }, timeoutMs);
 });
 
-const createFileClipboardService = ({ app, projectRoot, processSupervisor = null }) => {
+const createFileClipboardService = ({ app, projectRoot, processSupervisor = null, spawnImpl = spawn, timeoutMs = 12000 }) => {
   const executable = () => app.isPackaged
     ? path.join(process.resourcesPath, 'file-clipboard-service.exe')
     : path.join(projectRoot, 'electron', 'bin', 'file-clipboard-service.exe');
@@ -63,6 +64,32 @@ const createFileClipboardService = ({ app, projectRoot, processSupervisor = null
     error.code = 'FILE_CLIPBOARD_SERVICE_MISSING';
     throw error;
   };
+  const worker = createPersistentRenameService({
+    protocol: 'photoflow-clipboard-v1', timeoutMs, maxResponseBytes: 1024 * 1024,
+    // Production helpers live under the application supervisor. Standalone
+    // callers release an idle helper so scripts can exit without an app lifecycle.
+    idleMs: processSupervisor ? 0 : 2000,
+    launch: () => processSupervisor
+      ? processSupervisor.launch({
+        id: `csharp:file-clipboard:${++clipboardProcessSequence}`,
+        kind: 'csharp-helper', command: executable(), args: ['serve'],
+        options: { stdio: ['pipe', 'pipe', 'pipe'] }, ephemeral: true, windowsJob: true,
+      }).child
+      : spawnImpl(executable(), ['serve'], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }),
+  });
+  const request = async values => {
+    try { return await worker.request(values); }
+    catch (error) {
+      if (error.code === 'FILE_PUBLICATION_TIMEOUT') {
+        error.code = 'FILE_CLIPBOARD_TIMEOUT';
+        error.message = '文件剪贴板服务响应超时，操作结果未知';
+      } else if (error.code === 'FILE_PUBLICATION_DISCONNECTED') {
+        error.code = 'FILE_CLIPBOARD_DISCONNECTED';
+        error.message = '文件剪贴板服务连接中断';
+      }
+      throw error;
+    }
+  };
   let mutationQueue = Promise.resolve();
   const queueMutation = operation => {
     const queued = mutationQueue.catch(() => undefined).then(operation);
@@ -71,18 +98,19 @@ const createFileClipboardService = ({ app, projectRoot, processSupervisor = null
   };
   const write = async (sources, operation) => {
     if (!ensureAvailable()) return { success: true, written: false, sources: [...sources], operation, sequence: 0 };
-    return queueMutation(() => runJson(executable(), ['write'], JSON.stringify({ sources, operation }), 12000, processSupervisor));
+    return queueMutation(() => request({ command: 'write', sources, operation }));
   };
   const read = async () => {
     if (!ensureAvailable()) return null;
     await mutationQueue.catch(() => undefined);
-    return runJson(executable(), ['read'], '', 12000, processSupervisor);
+    return request({ command: 'read' });
   };
   const clearIfCurrent = async snapshot => {
     if (!ensureAvailable()) return { success: true, cleared: false, sources: [], operation: 'copy', sequence: 0 };
-    return queueMutation(() => runJson(executable(), ['clear-if-current'], JSON.stringify({ sequence: snapshot.sequence, sources: snapshot.sources }), 12000, processSupervisor));
+    return queueMutation(() => request({ command: 'clear-if-current', sequence: snapshot.sequence, sources: snapshot.sources }));
   };
-  return { write, read, clearIfCurrent, executable, nativeAvailable: () => process.platform === 'win32' && fs.existsSync(executable()) };
+  const warm = async () => { if (ensureAvailable()) await worker.warm(); };
+  return { write, read, clearIfCurrent, warm, stop: () => worker.stop(), executable, nativeAvailable: () => process.platform === 'win32' && fs.existsSync(executable()) };
 };
 
 module.exports = { createFileClipboardService, runJson };

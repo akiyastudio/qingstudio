@@ -166,7 +166,7 @@ LEGACY_MEDIA_WORKFLOW_MIGRATION_KEY = "legacy_media_workflow_graph_migrated_v1"
 LEGACY_SELECTION_INDEPENDENT_KEY_PREFIX = "legacy_selection_independent:"
 SELECTION_MAINLINE_REPAIR_REVISION = "1"
 VERSION_TREE_DEFAULT_LAYOUT_REVISION = "2"
-PROGRESS_PURPOSE_CONSTRAINT_REVISION = "2"
+PROGRESS_PURPOSE_CONSTRAINT_REVISION = "3"
 TRANSCODE_GRAPH_SCHEMA_REVISION = "1"
 LEGACY_PROGRESS_PARENT_REPAIR_REVISION = "1"
 TARGET_SCHEMA_VERSION = 35
@@ -1179,18 +1179,20 @@ def _migration_24(db):
           SELECT 1 FROM progress_folders parent WHERE parent.id=NEW.parent_progress_id
             AND parent.project_id=NEW.project_id AND parent.media_kind=NEW.media_kind
             AND parent.missing_since IS NULL AND (
-              (parent.node_role='original' AND parent.artifact_kind IS NULL)
+              (parent.node_role='original' AND (parent.artifact_kind IS NULL
+                OR (parent.artifact_kind='companion' AND NEW.node_role='selection' AND NEW.relation_kind='auxiliary')))
               OR (parent.node_role='progress' AND parent.parent_progress_id IS NOT NULL AND parent.relation_kind='main')
             )
         ) BEGIN SELECT RAISE(ABORT,'invalid progress parent'); END;
 
         CREATE TRIGGER progress_folders_parent_validate_update
-        BEFORE UPDATE OF project_id,media_kind,parent_progress_id ON progress_folders
+        BEFORE UPDATE OF project_id,media_kind,parent_progress_id,node_role,relation_kind ON progress_folders
         WHEN NEW.parent_progress_id IS NOT NULL AND NOT EXISTS(
           SELECT 1 FROM progress_folders parent WHERE parent.id=NEW.parent_progress_id
             AND parent.project_id=NEW.project_id AND parent.media_kind=NEW.media_kind
             AND parent.missing_since IS NULL AND (
-              (parent.node_role='original' AND parent.artifact_kind IS NULL)
+              (parent.node_role='original' AND (parent.artifact_kind IS NULL
+                OR (parent.artifact_kind='companion' AND NEW.node_role='selection' AND NEW.relation_kind='auxiliary')))
               OR (parent.node_role='progress' AND parent.parent_progress_id IS NOT NULL AND parent.relation_kind='main')
             )
         ) BEGIN SELECT RAISE(ABORT,'invalid progress parent'); END;
@@ -1200,7 +1202,8 @@ def _migration_24(db):
         ON progress_folders WHEN EXISTS(
           SELECT 1 FROM progress_folders child WHERE child.parent_progress_id=OLD.id AND NOT(
             NEW.project_id=child.project_id AND NEW.media_kind=child.media_kind AND (
-              (NEW.node_role='original' AND NEW.artifact_kind IS NULL)
+              (NEW.node_role='original' AND (NEW.artifact_kind IS NULL
+                OR (NEW.artifact_kind='companion' AND child.node_role='selection' AND child.relation_kind='auxiliary')))
               OR (NEW.node_role='progress' AND (NEW.parent_progress_id IS NULL OR NEW.relation_kind='main'))
             )
           )
@@ -1436,15 +1439,17 @@ def _install_progress_purpose_constraints(db):
             BEFORE INSERT ON progress_folders WHEN NEW.parent_progress_id IS NOT NULL AND NOT EXISTS(
               SELECT 1 FROM progress_folders parent WHERE parent.id=NEW.parent_progress_id
                 AND parent.project_id=NEW.project_id AND parent.media_kind=NEW.media_kind
-                AND parent.missing_since IS NULL AND ((parent.node_role='original' AND parent.artifact_kind IS NULL)
+                AND parent.missing_since IS NULL AND ((parent.node_role='original' AND (parent.artifact_kind IS NULL
+                  OR (parent.artifact_kind='companion' AND NEW.node_role='selection' AND NEW.relation_kind='auxiliary')))
                   OR (parent.node_role='progress' AND (parent.parent_progress_id IS NULL OR parent.relation_kind='main')))
             ) BEGIN SELECT RAISE(ABORT,'invalid progress parent'); END;
             CREATE TRIGGER "{quoted_schema}".progress_folders_parent_validate_update
-            BEFORE UPDATE OF project_id,media_kind,parent_progress_id ON progress_folders
+            BEFORE UPDATE OF project_id,media_kind,parent_progress_id,node_role,relation_kind ON progress_folders
             WHEN NEW.parent_progress_id IS NOT NULL AND NOT EXISTS(
               SELECT 1 FROM progress_folders parent WHERE parent.id=NEW.parent_progress_id
                 AND parent.project_id=NEW.project_id AND parent.media_kind=NEW.media_kind
-                AND parent.missing_since IS NULL AND ((parent.node_role='original' AND parent.artifact_kind IS NULL)
+                AND parent.missing_since IS NULL AND ((parent.node_role='original' AND (parent.artifact_kind IS NULL
+                  OR (parent.artifact_kind='companion' AND NEW.node_role='selection' AND NEW.relation_kind='auxiliary')))
                   OR (parent.node_role='progress' AND (parent.parent_progress_id IS NULL OR parent.relation_kind='main')))
             ) BEGIN SELECT RAISE(ABORT,'invalid progress parent'); END;
             CREATE TRIGGER "{quoted_schema}".progress_folders_structural_parent_update
@@ -1452,7 +1457,8 @@ def _install_progress_purpose_constraints(db):
             ON progress_folders WHEN EXISTS(
               SELECT 1 FROM progress_folders child WHERE child.parent_progress_id=OLD.id AND NOT(
                 NEW.project_id=child.project_id AND NEW.media_kind=child.media_kind AND (
-                  (NEW.node_role='original' AND NEW.artifact_kind IS NULL)
+                  (NEW.node_role='original' AND (NEW.artifact_kind IS NULL
+                    OR (NEW.artifact_kind='companion' AND child.node_role='selection' AND child.relation_kind='auxiliary')))
                   OR (NEW.node_role='progress' AND (NEW.parent_progress_id IS NULL OR NEW.relation_kind='main'))
                 )
               )
@@ -1748,6 +1754,10 @@ def _progress_purpose_constraints_current(db):
             "progress_folders_v2_shape_insert", "progress_folders_v2_shape_update",
             "progress_folders_v2_policy_insert", "progress_folders_v2_policy_update",
         )) or "NEW.node_role='progress' AND NEW.parent_progress_id IS NULL AND (NEW.rename_from_parent" not in sql_by_name["progress_folders_v2_policy_insert"]:
+            return False
+        if any("parent.artifact_kind='companion' AND NEW.node_role='selection'" not in sql_by_name[name] for name in (
+            "progress_folders_parent_validate_insert", "progress_folders_parent_validate_update",
+        )) or "NEW.artifact_kind='companion' AND child.node_role='selection'" not in sql_by_name["progress_folders_structural_parent_update"]:
             return False
     return found_progress_table
 
@@ -2079,7 +2089,8 @@ def _check_integrity(db, force: bool = False):
           WHERE child.parent_progress_id IS NOT NULL AND NOT EXISTS(
             SELECT 1 FROM progress_folders parent WHERE parent.id=child.parent_progress_id
               AND parent.project_id=child.project_id AND parent.media_kind=child.media_kind
-              AND ((parent.node_role='original' AND parent.artifact_kind IS NULL)
+              AND ((parent.node_role='original' AND (parent.artifact_kind IS NULL
+                OR (parent.artifact_kind='companion' AND child.node_role='selection' AND child.relation_kind='auxiliary')))
                 OR (parent.node_role='progress' AND (parent.parent_progress_id IS NULL OR parent.relation_kind='main'))))""",
         "version_graph_edges.owner_kind": """SELECT COUNT(*) FROM version_graph_edges edge
           WHERE edge.edge_kind NOT IN ('media_companion','derived_preview','derived_transcode','workflow_input') OR NOT EXISTS(
@@ -3492,6 +3503,13 @@ def _is_valid_structural_parent(row) -> bool:
     )
 
 
+def _is_valid_selection_source(row) -> bool:
+    # Camera JPGs may own selections without joining the main tracking chain.
+    return _is_valid_structural_parent(row) or bool(row) and (
+        row["node_role"] == "original" and row["artifact_kind"] == "companion"
+    )
+
+
 def _assert_no_structural_children(db, progress_id: str, error_code: str = "role_conversion_children_forbidden"):
     if db.execute("SELECT 1 FROM progress_folders WHERE parent_progress_id=? LIMIT 1", (progress_id,)).fetchone():
         raise ValueError(f"{error_code}: 节点仍有结构子节点，不能转换用途或媒体类型")
@@ -3553,7 +3571,8 @@ def progress_register(root: str, db, payload: dict, commit: bool = True, sync_lo
             "SELECT * FROM progress_folders WHERE id=? AND project_id=? AND media_kind=? AND missing_since IS NULL",
             (parent_id, project["id"], media_kind),
         ).fetchone()
-        if not _is_valid_structural_parent(parent):
+        valid_parent = _is_valid_selection_source(parent) if node_role == "selection" else _is_valid_structural_parent(parent)
+        if not valid_parent:
             raise ValueError("父版本进度不存在")
     timestamp = int(time.time() * 1000)
     progress_id = str(payload.get("progressId") or payload.get("takeoverProgressId") or "")
@@ -3885,7 +3904,8 @@ def progress_relation_update(db, payload: dict):
                 raise ValueError("relation_project_mismatch: 父子节点不属于同一项目")
             if parent["media_kind"] != child["media_kind"]:
                 raise ValueError("media_kind_mismatch: 父子节点媒体类型不一致")
-            if not _is_valid_structural_parent(parent):
+            valid_parent = _is_valid_selection_source(parent) if child["node_role"] == "selection" else _is_valid_structural_parent(parent)
+            if not valid_parent:
                 raise ValueError("invalid_parent_role: 不能挂到选片或附属分支下")
             if parent["missing_since"] is not None:
                 raise ValueError("parent_missing: 父节点已经失效")
@@ -5806,7 +5826,7 @@ def _tracking_pending_historical_renames(db, parent, progress, current_files: di
         if not reference_name:
             continue
         target_name = _rename_target_preserving_source_extension(source_name, reference_name)
-        if target_name != source_name:
+        if target_name != source_name and not _is_numbered_batch_target(source_name, reference_name):
             pending[source_name] = {
                 "sourceName": source_name,
                 "referenceName": reference_name,
@@ -6021,6 +6041,17 @@ def _valid_tracking_file_name(value) -> str:
     return value
 
 
+def _tracking_known_photo_conflict(db, session, source_name, reference_name):
+    progress = _progress_row_by_id(db, session["progress_id"])
+    parent = _progress_row_by_id(db, session["parent_progress_id"])
+    source = source_version_row(db, session["project_id"], os.path.join(progress["folder_path"], source_name))
+    reference = source_version_row(db, session["project_id"], os.path.join(parent["folder_path"], reference_name))
+    # An already-linked return has established provenance. An automatic visual
+    # match must not silently move it to a different original photo.
+    return bool(source is not None and reference is not None and source["parent_version_id"]
+                and source["photo_id"] != reference["photo_id"])
+
+
 def tracking_store_preview(db, payload: dict):
     session_id = str(payload.get("sessionId") or "")
     session = db.execute("SELECT * FROM tracking_sessions WHERE id=?", (session_id,)).fetchone()
@@ -6045,13 +6076,18 @@ def tracking_store_preview(db, payload: dict):
         }[kind]
         if status != expected_status:
             raise ValueError("比较结果不能跳过用户确认")
+        confidence = str(item.get("confidence") or "")[:40]
+        if kind == "recognized" and source_name and reference_name \
+                and _tracking_known_photo_conflict(db, session, source_name, reference_name):
+            status = "pending_confirmation"
+            confidence = "已有照片归属不一致，请确认"
         db.execute(
             """INSERT INTO tracking_session_items(
                  id,session_id,item_kind,source_name,reference_name,target_name,status,distance,
                  confidence,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
             (str(uuid.uuid4()), session_id, kind, source_name, reference_name, target_name, status,
              float(item["distance"]) if item.get("distance") is not None else None,
-             str(item.get("confidence") or "")[:40], timestamp, timestamp),
+             confidence, timestamp, timestamp),
         )
     db.execute(
         "UPDATE tracking_sessions SET status='pending_confirm',error='',updated_at=? WHERE id=?",
@@ -6325,9 +6361,12 @@ def tracking_session_decide(root: str, db, payload: dict):
     if decision == "accepted" and item["item_kind"] in ("recognized", "copy_missing") and not reference_name:
         raise ValueError("该确认项目缺少上一版本引用")
     timestamp = int(time.time() * 1000)
+    target_name = item["target_name"]
+    if reference_name != item["reference_name"] and item["source_name"] and reference_name:
+        target_name = _rename_target_preserving_source_extension(item["source_name"], reference_name)
     db.execute(
-        "UPDATE tracking_session_items SET status=?,reference_name=?,updated_at=? WHERE id=?",
-        (decision, reference_name, timestamp, item_id),
+        "UPDATE tracking_session_items SET status=?,reference_name=?,target_name=?,updated_at=? WHERE id=?",
+        (decision, reference_name, target_name, timestamp, item_id),
     )
     db.execute("UPDATE tracking_sessions SET status='pending_confirm',error='',updated_at=? WHERE id=?", (timestamp, session_id))
     db.commit()
@@ -6341,6 +6380,20 @@ def _rename_target_preserving_source_extension(source_name: str, reference_name:
     reference_stem = os.path.splitext(reference_name)[0]
     source_extension = os.path.splitext(source_name)[1]
     return _valid_tracking_file_name(f"{reference_stem}{source_extension}")
+
+
+def _is_numbered_batch_target(source_name, reference_name):
+    target = _rename_target_preserving_source_extension(source_name, reference_name)
+    stem, extension = os.path.splitext(target)
+    return re.fullmatch(re.escape(stem) + r"_\d+" + re.escape(extension), source_name, re.IGNORECASE) is not None
+
+
+def _tracking_rename_target(source_name, reference_name, preview_name):
+    if preview_name and preview_name != source_name:
+        return _rename_target_preserving_source_extension(source_name, preview_name)
+    if _is_numbered_batch_target(source_name, reference_name):
+        return source_name
+    return _rename_target_preserving_source_extension(source_name, reference_name)
 
 
 def _prepared_tracking_base_snapshot(session):
@@ -6544,7 +6597,7 @@ def tracking_commit_plan(root: str, db, payload: dict):
         elif item["reference_name"] and item["source_name"]:
             matches.append({
                 "reference": item["reference_name"], "source": item["source_name"],
-                "target": (_rename_target_preserving_source_extension(item["source_name"], item["reference_name"])
+                "target": (_tracking_rename_target(item["source_name"], item["reference_name"], item["target_name"])
                            if session["rename_from_parent"] else (item["target_name"] or item["source_name"])),
                 "distance": item["distance"] if item["distance"] is not None else 0,
                 "confidence": item["confidence"],
@@ -6552,6 +6605,15 @@ def tracking_commit_plan(root: str, db, payload: dict):
             incremental.append(item["source_name"])
         elif item["source_name"]:
             incremental.append(item["source_name"])
+    if session["rename_from_parent"] and matches:
+        allocated = {source.casefold(): os.path.basename(target)
+                     for source, target in _allocate_batch_rename_targets(progress_path, matches)}
+        for match in matches:
+            match["target"] = allocated[canonical_path(os.path.join(progress_path, match["source"])).casefold()]
+            db.execute(
+                "UPDATE tracking_session_items SET target_name=?,updated_at=? WHERE session_id=? AND source_name=?",
+                (match["target"], int(time.time() * 1000), session_id, match["source"]),
+            )
     existing_copy_operations = _tracking_copy_operations(session)
     conflicting_operations = [operation for operation in existing_copy_operations
                               if str(operation.get("referenceName") or "").casefold() in covered_copy_names]
@@ -6659,7 +6721,7 @@ def tracking_apply_copies(root: str, db, payload: dict):
     }
 
 
-def _prepared_tracking_commit_snapshot(db, session):
+def _prepared_tracking_commit_snapshot(db, session, batch_id=None):
     prepared = _prepared_tracking_base_snapshot(session)
     if prepared is None:
         return None
@@ -6672,6 +6734,19 @@ def _prepared_tracking_commit_snapshot(db, session):
         (session["id"],),
     ).fetchall()
     covered_copy_names = _tracking_covered_copy_names(rows, session["rename_from_parent"])
+    actual_targets = {}
+    if batch_id:
+        operations = db.execute(
+            """SELECT source_path,target_path FROM batch_file_operations
+               WHERE batch_id=? AND status='succeeded' AND updated_at>=?
+               ORDER BY updated_at DESC,created_at DESC,id""",
+            (batch_id, session["created_at"]),
+        ).fetchall()
+        for operation in operations:
+            source_name = os.path.basename(operation["source_path"])
+            if source_name in files and source_name not in actual_targets \
+                    and _tracking_file_matches_snapshot(operation["target_path"], files[source_name]):
+                actual_targets[source_name] = os.path.basename(operation["target_path"])
     for item in rows:
         if item["item_kind"] == "copy_missing":
             name = item["reference_name"]
@@ -6684,11 +6759,15 @@ def _prepared_tracking_commit_snapshot(db, session):
         if not session["rename_from_parent"] or not item["reference_name"] or not item["source_name"]:
             continue
         source_name = item["source_name"]
-        target_name = _rename_target_preserving_source_extension(source_name, item["reference_name"])
+        target_name = actual_targets.get(source_name) or _tracking_rename_target(
+            source_name, item["reference_name"], item["target_name"],
+        )
         if source_name == target_name:
             continue
         if source_name not in files:
             return None
+        if target_name in files:
+            raise ValueError(f"跟踪改名目标重复，拒绝覆盖快照：{target_name}")
         files[target_name] = files.pop(source_name)
     return {"files": files, "parent": parent}
 
@@ -6702,7 +6781,7 @@ def tracking_commit_complete(root: str, db, payload: dict):
         raise ValueError("跟踪会话不存在")
     project_name = db.execute("SELECT name FROM projects WHERE id=?", (session["project_id"],)).fetchone()[0]
     _project, _parent, progress, parent_path, progress_path = _validated_tracking_nodes(root, db, project_name, session["progress_id"])
-    expected_snapshot = _prepared_tracking_commit_snapshot(db, session)
+    expected_snapshot = _prepared_tracking_commit_snapshot(db, session, payload.get("batchId") or session["committed_batch_id"])
     actual_snapshot = {"files": folder_media_snapshot(progress_path), "parent": folder_media_snapshot(parent_path)}
     if expected_snapshot is not None and actual_snapshot != expected_snapshot:
         return _mark_tracking_snapshot_stale(
@@ -6870,14 +6949,14 @@ def progress_main_branch_media(db, payload: dict):
     }
 
 
-def safe_folder_file(folder_path: str, file_name: str):
+def safe_folder_file(folder_path: str, file_name: str, require_exists: bool = True):
     file_name = str(file_name or "")
     if not file_name or os.path.basename(file_name) != file_name:
         raise ValueError("批次匹配包含无效文件名")
     file_path = canonical_path(os.path.join(folder_path, file_name))
     if os.path.dirname(file_path).casefold() != canonical_path(folder_path).casefold():
         raise ValueError("批次匹配文件超出所选文件夹")
-    if not os.path.isfile(file_path) or not media_type(file_path):
+    if require_exists and (not os.path.isfile(file_path) or not media_type(file_path)):
         raise ValueError(f"批次图片不存在或格式不受支持：{file_name}")
     return file_path
 
@@ -7241,22 +7320,137 @@ def set_progress_tracking_state_for_folder(db, project_id: str, folder_path: str
     )
 
 
-def plan_confirmed_batch_renames(db, batch_id: str, folder_path: str, matches: list):
+def _assert_consistent_batch_rename_sources(operations):
+    destinations = {}
+    for source_path, target_path in operations:
+        target_key = canonical_path(target_path).casefold()
+        source_key = canonical_path(source_path).casefold()
+        previous_target = destinations.setdefault(source_key, target_key)
+        if previous_target != target_key:
+            raise ValueError(f"同一张素材使用了不同改名目标，请校正匹配：{os.path.basename(source_path)}")
+
+
+def _assert_consistent_batch_match_references(matches):
+    references = {}
+    for match in matches:
+        if not match.get("reference"):
+            continue
+        source = _valid_tracking_file_name(match.get("source")).casefold()
+        reference = _valid_tracking_file_name(match["reference"]).casefold()
+        if references.setdefault(source, reference) != reference:
+            raise ValueError(f"同一素材匹配到了不同原图，请校正匹配：{match['source']}")
+
+
+def _assert_unique_batch_rename_targets(operations):
+    _assert_consistent_batch_rename_sources(operations)
+    owners = {}
+    for source_path, target_path in operations:
+        target_key, source_key = canonical_path(target_path).casefold(), canonical_path(source_path).casefold()
+        previous = owners.setdefault(target_key, source_key)
+        if previous != source_key:
+            raise ValueError(f"多张素材使用同一个改名目标，请校正匹配：{os.path.basename(target_path)}")
+
+
+def _batch_rename_candidates(folder_path: str, matches: list, require_exists: bool = True, include_unchanged: bool = False):
     folder_path = canonical_path(folder_path)
-    timestamp = int(time.time() * 1000)
+    operations = []
     for match in matches:
         source_name = str(match.get("source") or "")
         target_name = str(match.get("target") or "")
         if target_name:
             target_name = _rename_target_preserving_source_extension(source_name, target_name)
-        if not target_name or target_name == source_name:
+        if not target_name or (target_name == source_name and not include_unchanged):
             continue
-        source_path = safe_folder_file(folder_path, source_name)
+        source_path = safe_folder_file(folder_path, source_name, require_exists=require_exists)
         if os.path.basename(target_name) != target_name:
             raise ValueError("目标文件名无效")
         target_path = canonical_path(os.path.join(folder_path, target_name))
         if os.path.dirname(target_path).casefold() != folder_path.casefold():
             raise ValueError("目标文件超出所选文件夹")
+        operations.append((source_path, target_path))
+    return operations
+
+
+def _allocate_batch_rename_targets(folder_path: str, matches: list, existing=()):
+    _assert_consistent_batch_match_references(matches)
+    candidates = _batch_rename_candidates(folder_path, matches, require_exists=False, include_unchanged=True)
+    _assert_consistent_batch_rename_sources(candidates)
+    _assert_unique_batch_rename_targets(existing)
+    by_source = {source.casefold(): (source, target) for source, target in candidates}
+    families = {}
+    for match in matches:
+        if not match.get("reference") or not match.get("target"):
+            continue
+        key = canonical_path(os.path.join(folder_path, match["source"])).casefold()
+        if key not in by_source:
+            continue
+        source, target = by_source[key]
+        reference_target = canonical_path(os.path.join(folder_path, _rename_target_preserving_source_extension(
+            os.path.basename(source), match["reference"],
+        )))
+        stem, extension = os.path.splitext(reference_target)
+        if target.casefold() == reference_target.casefold() or re.fullmatch(
+                re.escape(stem) + r"_\d+" + re.escape(extension), target, re.IGNORECASE):
+            families[key] = stem
+    previous = {source.casefold(): target for source, target in existing}
+    reserved = {canonical_path(os.path.join(folder_path, name)).casefold() for name in os.listdir(folder_path)}
+    reserved.update(target.casefold() for _source, target in existing)
+    assigned = {}
+    counts = {}
+    for key, (source, target) in by_source.items():
+        if key in previous:
+            planned = previous[key]
+            target_stem, extension = os.path.splitext(target)
+            stem = families.get(key, target_stem)
+            numbered = re.fullmatch(re.escape(stem) + r"_\d+" + re.escape(extension), planned, re.IGNORECASE)
+            if planned.casefold() != target.casefold() and not numbered:
+                raise ValueError(f"同一张素材使用了不同改名目标，请校正匹配：{os.path.basename(source)}")
+            assigned[key] = (source, planned)
+        else:
+            counts[target.casefold()] = counts.get(target.casefold(), 0) + 1
+    # Keep already-correct filenames and distinct preview targets before
+    # allocating suffixes, so a generated name cannot steal another target.
+    ordered = sorted(by_source.items(), key=lambda entry: (
+        entry[0] != entry[1][1].casefold(), counts.get(entry[1][1].casefold(), 0) > 1, entry[0],
+    ))
+    preferred = {target.casefold() for key, (_source, target) in by_source.items() if key not in assigned}
+    for key, (source, target) in ordered:
+        if key in assigned:
+            continue
+        if key == target.casefold():
+            assigned[key] = (source, target)
+            continue
+        if counts[target.casefold()] == 1 and target.casefold() not in reserved:
+            chosen = target
+        else:
+            target_stem, extension = os.path.splitext(target)
+            stem = families.get(key, target_stem)
+            index = 1
+            while True:
+                chosen = f"{stem}_{index}{extension}"
+                _valid_tracking_file_name(os.path.basename(chosen))
+                if chosen.casefold() not in reserved and chosen.casefold() not in preferred:
+                    break
+                index += 1
+        reserved.add(chosen.casefold())
+        assigned[key] = (source, chosen)
+    result = [assigned[key] for key in sorted(assigned)]
+    _assert_unique_batch_rename_targets(list(existing) + result)
+    return result
+
+
+def plan_confirmed_batch_renames(db, batch_id: str, folder_path: str, matches: list):
+    existing = db.execute(
+        "SELECT source_path,target_path FROM batch_file_operations WHERE batch_id=? AND status!='succeeded'",
+        (batch_id,),
+    ).fetchall()
+    operations = _allocate_batch_rename_targets(folder_path, matches, [(row[0], row[1]) for row in existing])
+    timestamp = int(time.time() * 1000)
+    for source_path, target_path in operations:
+        if source_path.casefold() == target_path.casefold():
+            continue
+        safe_folder_file(folder_path, os.path.basename(source_path))
+        source_name, target_name = os.path.basename(source_path), os.path.basename(target_path)
         planning_error = ""
         if os.path.exists(target_path):
             planning_error = f"目标文件已存在：{target_name}"
@@ -7429,6 +7623,13 @@ def batch_commit_compare(root: str, db, payload: dict):
         raise ValueError("批次文件夹不存在")
     if folder_a.casefold() == folder_b.casefold():
         raise ValueError("对照批次的来源和目标不能是同一个文件夹")
+    _assert_consistent_batch_match_references(payload.get("matches") or [])
+    if payload.get("renameSources"):
+        # Structural validation must also work on an idempotent retry whose
+        # sources have already been renamed by a completed commit.
+        _assert_consistent_batch_rename_sources(_batch_rename_candidates(
+            folder_b, payload.get("matches") or [], require_exists=False, include_unchanged=True,
+        ))
     set_progress_tracking_state_for_folder(db, project["id"], folder_b, "committing")
     db.commit()
 
@@ -8552,8 +8753,19 @@ def _clear_preparing_media_operation(database: str, journal: dict) -> None:
 
 
 def _replay_batch_filesystem_journal(database: str, journal: dict) -> dict:
+    operations = journal.get("batchOperations") or []
+    _assert_unique_batch_rename_targets([(item["sourcePath"], item["targetPath"]) for item in operations])
     completed = set(str(value) for value in journal.get("completedBatchOperationIds") or [])
-    for operation in journal.get("batchOperations") or []:
+    # Catch a later collision before any earlier rename changes the filesystem.
+    for operation in operations:
+        if str(operation["id"]) in completed:
+            continue
+        source, target = canonical_path(operation["sourcePath"]), canonical_path(operation["targetPath"])
+        if os.path.exists(source) and os.path.exists(target):
+            raise FileExistsError(f"批次改名源和目标同时存在：{source} -> {target}")
+        if not os.path.exists(source) and not os.path.exists(target):
+            raise FileNotFoundError(f"批次改名源和目标都不存在：{source} -> {target}")
+    for operation in operations:
         operation_id = str(operation["id"])
         if operation_id in completed:
             continue

@@ -15,6 +15,7 @@ import uuid
 import stat
 import queue
 import threading
+import traceback
 from contextlib import contextmanager
 from pathlib import Path
 import gc
@@ -251,13 +252,16 @@ def safe_chunk_copy(src, dst, chunk_size=4 * 1024 * 1024, on_progress=None, coll
     """Copy once, collecting full chunk digests only for destructive-source batches."""
     bytes_copied = 0
     chunk_hashes = [] if collect_digest else None
+    phase = 'open'
     try:
         with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
             while True:
                 ensure_not_cancelled()
+                phase = 'read'
                 buf = fsrc.read(chunk_size)
                 if not buf:
                     break
+                phase = 'write'
                 fdst.write(buf)
                 if chunk_hashes is not None:
                     chunk_hashes.append(hashlib.sha256(buf).hexdigest())
@@ -265,21 +269,25 @@ def safe_chunk_copy(src, dst, chunk_size=4 * 1024 * 1024, on_progress=None, coll
                 if on_progress:
                     on_progress(bytes_copied)
             if collect_digest or durable:
+                phase = 'flush'
                 fdst.flush()
                 os.fsync(fdst.fileno())
-
+        phase = 'metadata'
         shutil.copystat(src, dst)
         if chunk_hashes is not None:
             return {'algorithm': 'sha256', 'chunkSize': int(chunk_size), 'chunks': chunk_hashes}
         return None
     except Exception as e:
+        if isinstance(e, OSError):
+            e.import_copy_context = {'sourcePath': str(src), 'targetPath': str(dst),
+                                     'phase': phase, 'bytesCopied': bytes_copied}
         # 如果中途出错（比如读卡器突然拔出），with open 会确保文件句柄被立即强制关闭
         # 避免 Windows 内核锁死
         try:
             os.remove(dst)
         except OSError:
             pass
-        raise e
+        raise
 
 
 def _real_path_inside(root, path):
@@ -1908,7 +1916,11 @@ def stage_plan_import(sd_path, dest_path, projects_json, import_type='work', spl
     try:
         staged_import = stage_media_to_safety_temp(sd_path, dest_path, direct_source, source_paths, import_session, progress_end=75, date_filter=date_filter, verify_copy=delete_source)
     except OSError as error:
-        log_error(f'导入失败，源设备可能已断开，请重新连接后重试：{error}')
+        emit('error', f'导入未完成，请检查来源是否可读、目标空间和权限后重试：{error}', data={
+            'code': 'IMPORT_STAGING_FAILED', 'sourcePath': str(sd_path), 'targetPath': str(dest_path),
+            'errno': error.errno, 'winerror': getattr(error, 'winerror', None),
+            'copyContext': getattr(error, 'import_copy_context', None), 'stack': traceback.format_exc(),
+        })
         return
     base_sd = staged_import['baseSource']
     files = staged_import['stagedFiles']

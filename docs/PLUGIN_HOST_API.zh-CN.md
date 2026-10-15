@@ -85,6 +85,12 @@ Host API 清单可选声明 `application.settingsPage`，其 `id`、`label`、�
 
 结果不带版本号：成功为 `{accepted:true,id}`，重复为 `{accepted:false,deduplicated:true,code:"NOTIFICATION_DEDUPLICATED"}`，失败包含 `{accepted:false,error:{code,message,retryable}}`。主进程在 React subscriber 完成 ready 握手前使用有界缓冲，reload 后重新握手并 flush；卸载/升级发送组件作用域 purge。事件经主 preload 再校验后进入有总量上限的现有 `useTopToastStack`，四种 tone 与宿主普通 Toast 共用图标、颜色、生命周期、去重/堆叠、关闭及单层 live-region 策略；error 始终保持到手动关闭，其余 tone 使用宿主统一自动消失时间。Toast 由宿主透明原生 overlay 窗口呈现，始终位于 project 与 settings 的组件 `WebContentsView` 之上，组件 View bounds 不会因 Toast 改变。overlay 空白区域鼠标穿透，卡片与按钮可交互。长任务继续使用 `tasks`；需要用户决定继续使用 `dialogs`。
 
+### 文件菜单筛选
+
+component.sidePanel 与 project.contextAction 可声明 selection 和 contextMenu。selection 支持 minCount/maxCount（0–2000）、非空 kinds（folder/image/raw/video/file/shortcut）及小写点开头的 extensions/excludedExtensions（各最多 64 项）。完整选择须匹配；文件名后缀忽略大小写，包含后缀规则不匹配目录，排除后缀规则允许目录。快捷方式内容和只读条目不匹配。
+
+contextMenu 可为 root、group 或 none，控制右键根入口、分组或隐藏；placement 仍决定工具栏分组。常驻文件夹面板不能使用 contextMenu。筛选仅影响 UI，服务仍须验证输入和权限。
+
 ## 能力合约
 
 文件夹内并排面板、字幕播放联动和任意输入格式的预览解码器见 [预览扩展 API](PLUGIN_PREVIEW_API.zh-CN.md)。解码器由 `service.previewDecoders` 注册，也支持无 UI 的纯解码组件。
@@ -160,10 +166,11 @@ undo 本身同样使用逐项 intent/applied 日志。move undo 复核原 mutati
 
 `project.output` 动作：
 
-- `stage`：创建私有 stage，并把路径返回给受监管后端。
+- `stage`：创建私有 stage，并把路径返回给受监管后端。可选 maxBytes 接受 1 字节至 64 GiB 的安全整数，默认 2 GiB；限制持久保存，重启恢复时仍生效。
 - `write`：登记 stage 下已有 `sourceName`、复制输入令牌，或接收最大 8 MiB 内联 base64；绑定 `outputRelativePath` 并返回 artifact ID。
-- `validate`：拒绝空、链接、越界、缺失或超限 stage。单 stage 最多 2,000 文件、2 GiB。
+- `validate`：拒绝空、链接、越界、缺失或超限 stage。单 stage 最多 2,000 文件，容量按 maxBytes 校验（默认 2 GiB，最大 64 GiB）。
 - `commit`：要求 ID 形状幂等键，默认拒绝覆盖，原子发布绑定项目下文件；多文件失败会回滚已创建文件，并返回 commit/artifact ID。相同键重试返回原结果。
+- `status`：按原幂等键查询绑定组件、工作区和项目的持久收据，重新校验当前输出大小和摘要。返回 missing、prepared、changed 或 committed；已提交结果只含 commitId、idempotencyKey 和项目相对输出引用，不回显物理路径，也不触发发布。
 - `rollback`：只递归删除组件私有 stage，可安全清理放弃任务。
 - `adopt`：仅供一次性迁移。声明 `project.output.existing.v1` adoption grant 后，可提交项目相对输出或组件旧记录中的绝对来源。宿主只接受规范路径位于绑定项目根内、非符号链接的普通文件，并返回不回显绝对路径的项目相对收据。这不是通用文件系统 API。
 - `materializeOwned`：校验已提交输出收据和当前摘要，将制品复制到组件私有存储，使组件迁移结构时无需保留项目路径。

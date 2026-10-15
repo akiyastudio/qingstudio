@@ -5,14 +5,18 @@ const { createToastHostIpc } = require('./toast-host-ipc.cjs');
 
 const createApplicationWindowRuntime = ({ app, BrowserWindow, WebContentsView, View, Menu, screen, ipcMain, electronIpcMain,
   electronDirectory, rendererEntryFile, toastViewRendererFile, developmentRendererUrl, smokeTestEnabled,
-  configureWindowSecurity, isDevelopmentRenderer, getQuitState, getComponentViewManager, getVideoPlaybackService, getTelemetryService, writeLog }) => {
+  configureWindowSecurity, isDevelopmentRenderer, getQuitState, getComponentViewManager, getVideoPlaybackService, getTelemetryService, taskbarProgress, writeLog }) => {
   Menu.setApplicationMenu(null);
   const preferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, webviewTag: false, ...(smokeTestEnabled ? { offscreen: true } : {}) };
   const pagePreferences = { ...preferences, preload: path.join(electronDirectory, 'preload.cjs') };
-  const createNativeWindow = (bounds, webPreferences = preferences) => new BrowserWindow({
-    ...bounds, show: false, frame: false, thickFrame: true, backgroundColor: '#f8fafc',
-    icon: app.isPackaged ? undefined : path.join(electronDirectory, '../packaging/icon.ico'), webPreferences,
-  });
+  const createNativeWindow = (bounds, webPreferences = preferences) => {
+    const window = new BrowserWindow({
+      ...bounds, show: false, frame: false, thickFrame: true, backgroundColor: '#f8fafc',
+      icon: app.isPackaged ? undefined : path.join(electronDirectory, '../packaging/icon.ico'), webPreferences,
+    });
+    taskbarProgress?.attach(window);
+    return window;
+  };
   const mainWindow = createNativeWindow({ width: 1280, height: 800 }, pagePreferences);
   const loadRenderer = contents => isDevelopmentRenderer() ? contents.loadURL(developmentRendererUrl) : contents.loadFile(rendererEntryFile);
   const configureRenderer = host => {

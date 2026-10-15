@@ -1,7 +1,22 @@
 const { randomBytes } = require('crypto');
+const { createMediaRatingCache } = require('./media-rating-cache.cjs');
 
-const createMediaRatingService = ({ exiftool, fs, path, imageExtensions, rawExtensions, releaseWorkspaceWatchPath, suppressWorkspaceWatchPath, versionService, getRegisteredProjectRoots = async () => [], writeLog, pendingRatingsPath = '', onInvalidate = () => undefined, retryDelayMs = 30000, checkedRetryDelayMs = 250, checkedRetryDeadlineMs = 30000, now = () => Date.now() }) => {
-  const cache = new Map();
+const createMediaRatingService = ({ exiftool, fs, path, imageExtensions, rawExtensions, releaseWorkspaceWatchPath, suppressWorkspaceWatchPath, versionService, getRegisteredProjectRoots = async () => [], writeLog, pendingRatingsPath = '', ratingCachePath = '', onInvalidate = () => undefined, retryDelayMs = 30000, checkedRetryDelayMs = 250, checkedRetryDeadlineMs = 30000, now = () => Date.now() }) => {
+  const cache = createMediaRatingCache({ fs, path, cachePath: ratingCachePath, writeLog });
+  const ratingReads = new Map();
+  const readWaiters = [];
+  let activeReads = 0;
+  // Thumbnails, previews and filters share one bounded pool and one in-flight
+  // read per file instead of independently filling ExifTool's task queue.
+  const readMetadata = async filePath => {
+    if (activeReads >= 6) await new Promise(resolve => readWaiters.push(resolve));
+    else activeReads += 1;
+    try { return await exiftool.readRaw(filePath, ['-G1', '-Rating#', '-RatingPercent#', '-n', '-api', 'largefilesupport=1']); }
+    finally {
+      if (readWaiters.length) readWaiters.shift()();
+      else activeReads -= 1;
+    }
+  };
   const pendingFile = pendingRatingsPath ? path.resolve(pendingRatingsPath) : '';
   const backupFile = pendingFile ? `${pendingFile}.backup` : '';
   const pathKey = value => process.platform === 'win32' ? path.resolve(value).toLocaleLowerCase() : path.resolve(value);
@@ -152,21 +167,36 @@ const createMediaRatingService = ({ exiftool, fs, path, imageExtensions, rawExte
     return 5;
   };
   const read = async (filePath, knownUpdatedAt) => {
-    const optimistic = optimisticRatings.get(pathKey(filePath));
+    const key = pathKey(filePath);
+    const optimistic = optimisticRatings.get(key);
     if (optimistic !== undefined) return optimistic;
-    const stat = await fs.promises.stat(filePath);
     void knownUpdatedAt;
-    const cacheKey = `${path.resolve(filePath)}|${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
-    if (cache.has(cacheKey)) return cache.get(cacheKey);
-    const tags = await exiftool.readRaw(filePath, ['-G1', '-Rating#', '-RatingPercent#', '-n', '-api', 'largefilesupport=1']);
-    const rating = fromTags(tags);
-    if (cache.size >= 4000) cache.delete(cache.keys().next().value);
-    cache.set(cacheKey, rating);
-    return rating;
+    if (ratingReads.has(key)) return ratingReads.get(key);
+    const signature = stat => `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
+    const operation = (async () => {
+      await cache.ready;
+      const revision = signature(await fs.promises.stat(filePath));
+      const current = optimisticRatings.get(key);
+      if (current !== undefined) return current;
+      const cached = cache.get(key, revision);
+      if (cached !== undefined) return cached;
+      const tags = await readMetadata(filePath);
+      const rating = fromTags(tags);
+      const latest = optimisticRatings.get(key);
+      if (latest !== undefined) return latest;
+      // Never persist a read spanning a replacement, edit or rating mutation.
+      const latestRevision = signature(await fs.promises.stat(filePath));
+      if (ratingReads.get(key) === operation && revision === latestRevision && !optimisticRatings.has(key)) cache.set(key, revision, rating);
+      return optimisticRatings.get(key) ?? rating;
+    })();
+    ratingReads.set(key, operation);
+    try { return await operation; }
+    finally { if (ratingReads.get(key) === operation) ratingReads.delete(key); }
   };
   const invalidate = filePath => {
-    const prefix = `${path.resolve(filePath)}|`;
-    for (const key of cache.keys()) if (key.startsWith(prefix)) cache.delete(key);
+    const key = pathKey(filePath);
+    cache.delete(key);
+    ratingReads.delete(key);
     onInvalidate(filePath);
   };
   const itemAttemptStarts = new Map();
@@ -872,7 +902,7 @@ const createMediaRatingService = ({ exiftool, fs, path, imageExtensions, rawExte
   };
   const summarizeProject = async (projectPath, options = {}) => scanProject(projectPath, options, false);
   for (const key of pendingRatings.keys()) ensureFileDrain(key);
-  return { invalidate, listProject, summarizeProject, normalize, read, write, writeChecked };
+  return { invalidate, listProject, summarizeProject, normalize, read, write, writeChecked, flushRatingCache: cache.flush };
 };
 
 module.exports = { createMediaRatingService };

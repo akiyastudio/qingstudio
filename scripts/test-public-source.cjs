@@ -12,6 +12,10 @@ assert.equal(service.hasCoreConsent(), true);
 assert.equal(service.hasFaceRecognitionConsent(), false);
 assert.equal(service.getState().experienceProgramGranted, false);
 (async () => {
+  let catalogRequests = 0;
+  const catalog = require('../electron/services/cloud-plugin-catalog-service.cjs').createCloudPluginCatalogService({ apiBaseUrl: require('../electron/cloud-config.cjs').apiBaseUrl, fetchImpl: async () => { catalogRequests += 1; throw new Error('Unexpected network request'); } });
+  assert.deepEqual(await catalog.list(), { success: false, plugins: [] });
+  assert.equal(catalogRequests, 0, 'default public catalog stays offline');
   await assert.rejects(service.saveConsent({ faceRecognitionGranted: true }));
   assert.equal((await service.openLegalDocument('privacy')).success, false);
   assert.equal((await service.openLegalDocument('open-source')).success, true);

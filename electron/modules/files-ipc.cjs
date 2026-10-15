@@ -1098,7 +1098,20 @@ const registerFileOperationsIpc = context => {
           }
           const sourceStatsByPath = new Map(requestedItems.map(item => [pathKey(item.source), item.sourceStat]));
 
-          const pasteConflicts = requestedItems.filter(item => item.conflict).map(item => ({ source: item.source, destination: item.desiredDestination, isDirectory: Boolean(item.conflictIdentity.directory) }));
+          const destinationGroups = new Map();
+          for (const item of requestedItems) {
+            const key = pathKey(item.desiredDestination);
+            const group = destinationGroups.get(key) || [];
+            group.push(item);
+            destinationGroups.set(key, group);
+          }
+          const batchConflicts = [...destinationGroups.values()].filter(group => group.length > 1);
+          const pasteConflicts = [...destinationGroups.values()].filter(group => group.length > 1 || group.some(item => item.conflict)).map(group => ({
+            destination: group[0].desiredDestination,
+            isDirectory: group.some(item => item.conflict)
+              ? group.some(item => item.conflictIdentity?.directory)
+              : group.some(item => item.sourceStat.isDirectory()),
+          }));
           let replaceConflicts = false;
           if (pasteConflicts.length) {
             const names = pasteConflicts.slice(0, 6).map(item => `“${path.basename(item.destination)}”`).join('、');
@@ -1107,6 +1120,9 @@ const registerFileOperationsIpc = context => {
             const conflictSummary = [fileCount ? `${fileCount} 个文件` : '', folderCount ? `${folderCount} 个文件夹` : ''].filter(Boolean).join('和');
             const more = pasteConflicts.length > 6 ? ` 等 ${conflictSummary}` : '';
             let conflictPolicy = ['replace', 'keep-both'].includes(options?.pasteConflictPolicy) ? options.pasteConflictPolicy : '';
+            // Multiple sources have no unambiguous replacement winner. Require
+            // keep-both confirmation before allocating any numbered targets.
+            if (batchConflicts.length && conflictPolicy === 'replace') conflictPolicy = '';
             const decisionKey = `${pasteProjectKey}\u0000${clipboardPathKey(destinationDir)}`;
             const snapshot = {
               operation: clipboardSnapshot.operation,
@@ -1155,11 +1171,16 @@ const registerFileOperationsIpc = context => {
                 requiresDecision: {
                   kind: 'paste-conflict',
                   decisionToken,
+                  allowReplace: batchConflicts.length === 0,
                   names: pasteConflicts.slice(0, 6).map(item => path.basename(item.destination)),
                   fileCount,
                   folderCount,
-                  message: `目标位置已有 ${names}${more}`,
-                  detail: `发现 ${conflictSummary}。选择替换后，仅在新内容准备完成时替换旧项目；选择保留两者时，新项目会自动重命名。`,
+                  message: batchConflicts.length
+                    ? `本次粘贴发现同名冲突：${names}${more}`
+                    : `目标位置已有 ${names}${more}`,
+                  detail: batchConflicts.length
+                    ? '多个源项目需要粘贴到同一位置。选择保留两者后，新项目会自动添加编号，目标位置已有的内容也会保留；取消则不会粘贴。'
+                    : `发现 ${conflictSummary}。选择替换后，仅在新内容准备完成时替换旧项目；选择保留两者时，新项目会自动重命名。`,
                 },
               };
             }

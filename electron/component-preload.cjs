@@ -83,7 +83,10 @@ contextBridge.exposeInMainWorld('photoFlowComponent', Object.freeze({
   },
   notify,
   dialog: payload => ipcRenderer.invoke('component-sdk:dialog', payload),
-  rpc: (method, payload) => ipcRenderer.invoke('component-sdk:rpc', String(method || ''), payload),
+  rpc: (method, payload) => ipcRenderer.invoke('component-sdk:rpc', String(method || ''), payload).then(result => {
+    if (result?.__photoflowComponentError?.code === 'COMPONENT_VIEW_CLOSED') throw Object.assign(new Error(result.__photoflowComponentError.message), { code: 'COMPONENT_VIEW_CLOSED' });
+    return result;
+  }),
   onEvent: (topic, callback) => {
     const normalizedTopic = String(topic || '');
     if (typeof callback !== 'function') throw new TypeError('Component event callback must be a function');

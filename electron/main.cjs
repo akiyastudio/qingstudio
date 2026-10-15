@@ -13,6 +13,7 @@ const { createComponentRegistry } = require('./component-registry.cjs'); const {
 const { ComponentViewManager } = require('./services/component-view-manager.cjs'); const { createComponentHostCapabilityRuntime } = require('./services/component-host-capability-runtime.cjs');
 const { createComponentContentBinding } = require('./services/component-content-binding.cjs');
 const { createApplicationWindowRuntime } = require('./services/application-window-runtime.cjs');
+const { createTaskbarProgressService } = require('./services/taskbar-progress-service.cjs');
 const { ComponentServiceManager } = require('./services/component-service-manager.cjs'); const { createConfigMutationService, readConfigFileWithRecovery, registerConfigDrainBeforeQuit } = require('./services/config-mutation-service.cjs');
 const { createWorkspaceStorageKeyService } = require('./services/workspace-storage-key-service.cjs');
 const { createComponentRpcIpcProxy } = require('./component-rpc-contract.cjs');
@@ -398,6 +399,7 @@ const backgroundTasks = createBackgroundTaskService({
   persistencePath: path.join(app.getPath('userData'), 'background-tasks.json'),
 });
 eventBus.on('background-task:persistence-error', details => writeLog('error', 'Background task persistence failed', details));
+const taskbarProgress = createTaskbarProgressService({ backgroundTasks, writeLog });
 const domainCommandJournal = createDomainCommandJournal({
   filePath: path.join(app.getPath('userData'), 'domain-command-journal.json'),
   writeLog,
@@ -588,7 +590,7 @@ function createWindow(loadRenderer = true) {
     app, BrowserWindow, WebContentsView, View, Menu, screen, ipcMain, electronIpcMain, electronDirectory: __dirname,
     rendererEntryFile, toastViewRendererFile, developmentRendererUrl, smokeTestEnabled, configureWindowSecurity, isDevelopmentRenderer,
     getQuitState: () => getApplicationQuitState(), getComponentViewManager: () => componentViewManager,
-    getVideoPlaybackService: () => videoPlaybackService, getTelemetryService: () => telemetryService, writeLog,
+    getVideoPlaybackService: () => videoPlaybackService, getTelemetryService: () => telemetryService, taskbarProgress, writeLog,
   }));
   if (loadRenderer) loadMainWindowRenderer();
 }
@@ -988,6 +990,7 @@ const mediaRatingService = createMediaRatingService({
     try { return [getProjectPath(root, project.status, project.name)]; } catch { return []; }
   }), writeLog,
   pendingRatingsPath: path.join(app.getPath('userData'), 'pending-media-ratings.json'),
+  ratingCachePath: path.join(app.getPath('userData'), 'media-rating-cache.json'),
   onInvalidate: filePath => {
     const prefix = `${path.resolve(filePath)}|`;
     for (const key of mediaMetadataCache.keys()) if (key.startsWith(prefix)) mediaMetadataCache.delete(key);
@@ -1314,6 +1317,9 @@ app.whenReady().then(async () => {
   setTimeout(checkForUpdates, 3000);
   if (!smokeTestEnabled) {
     const shellNewWarmup = setTimeout(() => { void shellNewService.warm().catch(() => undefined); }, 3000);
+    const fileClipboardWarmup = setTimeout(() => { void fileClipboardService.warm().catch(() => undefined); }, 1000);
+    fileClipboardWarmup.unref?.();
+    app.once('before-quit', () => clearTimeout(fileClipboardWarmup));
     shellNewWarmup.unref?.();
     app.once('before-quit', () => clearTimeout(shellNewWarmup));
   }
@@ -1393,6 +1399,7 @@ getApplicationQuitState = registerConfigDrainBeforeQuit({
         () => imageThumbnailRuntime.stop(),
         () => thumbnailService?.stop({ discardAccessTimes: true }),
         () => videoPlaybackService?.dispose(),
+        () => mediaRatingService.flushRatingCache(),
         () => exiftool.end(false),
       ],
       teardown: [() => componentServiceManager?.destroy(), () => componentViewManager?.destroy(), () => eventBus.clear()],
@@ -1418,6 +1425,7 @@ getApplicationQuitState = registerConfigDrainBeforeQuit({
   },
 });
 app.on('will-quit', () => {
+  taskbarProgress.dispose();
   if (applicationQuitDeadlineTimer) clearTimeout(applicationQuitDeadlineTimer);
   applicationQuitDeadlineTimer = null;
   destroyToastViewManager();

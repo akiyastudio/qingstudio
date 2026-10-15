@@ -13,6 +13,12 @@ const MAX_INPUT_TOKENS = 2000;
 const MAX_SETTINGS_BYTES = 256 * 1024;
 const MAX_INLINE_WRITE_BYTES = 8 * 1024 * 1024;
 const MAX_STAGE_BYTES = 2 * 1024 * 1024 * 1024;
+const MAX_REQUESTED_STAGE_BYTES = 64 * 1024 * 1024 * 1024;
+const stageByteLimit = value => {
+  if (value === undefined) return MAX_STAGE_BYTES;
+  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_REQUESTED_STAGE_BYTES) throw hostError(CODES.INVALID_REQUEST, 'Output stage maxBytes must be between 1 byte and 64 GiB');
+  return value;
+};
 const MAX_INPUT_ENTRIES = 20_000;
 const MAX_INPUT_DEPTH = 64;
 const INPUT_TOKEN_TTL_MS = 10 * 60 * 1000;
@@ -491,7 +497,7 @@ const registerComponentProjectCapabilities = ({
   const stageMetadataPath = stage => path.join(stage.root, 'stage.json');
   const persistStage = stage => replaceJson({ fs, crypto, filePath: stageMetadataPath(stage), value: {
     schemaVersion: STAGE_SCHEMA_VERSION, id: stage.id, componentId: stage.componentId, projectId: stage.projectId,
-    scopeDigest: stage.scopeDigest, createdAt: stage.createdAt, expiresAt: stage.expiresAt,
+    scopeDigest: stage.scopeDigest, createdAt: stage.createdAt, expiresAt: stage.expiresAt, maxBytes: stage.maxBytes,
     files: stage.files.map(file => ({ artifactId: file.artifactId, sourceName: file.sourceName, outputRelativePath: file.outputRelativePath, ...(file.replacement ? { replacement: file.replacement } : {}) })),
   } });
   const cleanupStage = async stage => {
@@ -516,7 +522,7 @@ const registerComponentProjectCapabilities = ({
         || metadata.projectId !== String(scope.project.id) || metadata.scopeDigest !== scopeDigest(scope) || !files
         || !Number.isSafeInteger(metadata.createdAt) || !Number.isSafeInteger(metadata.expiresAt)
         || Number.parseInt(id.split('-')[0], 16) !== metadata.createdAt || metadata.expiresAt !== metadata.createdAt + STAGE_TTL_MS) throw hostError(CODES.PERMISSION_DENIED, 'Output stage metadata is invalid or belongs to another scope');
-      stage = { id, scope: scope.key, scopeDigest: metadata.scopeDigest, root, payloadRoot: path.join(root, 'payload'), projectRoot: scope.projectRoot, componentRoot: scope.componentRoot, componentId: descriptor.componentId, projectId: String(scope.project.id), createdAt: metadata.createdAt, expiresAt: metadata.expiresAt, files };
+      stage = { id, scope: scope.key, scopeDigest: metadata.scopeDigest, root, payloadRoot: path.join(root, 'payload'), projectRoot: scope.projectRoot, componentRoot: scope.componentRoot, componentId: descriptor.componentId, projectId: String(scope.project.id), createdAt: metadata.createdAt, expiresAt: metadata.expiresAt, maxBytes: stageByteLimit(metadata.maxBytes), files };
       outputStages.set(id, stage);
     }
     if (stage.scope !== scope.key || stage.scopeDigest !== scopeDigest(scope)) throw hostError(CODES.TOKEN_SCOPE, 'Output stage belongs to another component or project');
@@ -539,7 +545,7 @@ const registerComponentProjectCapabilities = ({
       const realFile = await fs.promises.realpath(stagePath);
       if (!inside(path, realPayloadRoot, realFile)) throw hostError(CODES.PERMISSION_DENIED, 'Output stage escapes through a linked directory');
       totalBytes += stat.size;
-      if (totalBytes > MAX_STAGE_BYTES) throw hostError(CODES.LIMIT_EXCEEDED, 'Output stage is too large');
+      if (totalBytes > stageByteLimit(stage.maxBytes)) throw hostError(CODES.LIMIT_EXCEEDED, 'Output stage is too large');
       files.push({ ...file, stagePath, size: stat.size, sha256: await sha256File(fs, crypto, stagePath) });
     }
     return { fileCount: files.length, totalBytes, files };
@@ -634,8 +640,13 @@ const registerComponentProjectCapabilities = ({
     const entries = (await fs.promises.readdir(directory, { withFileTypes: true }).catch(() => [])).filter(item => item.isFile() && /^[a-f0-9-]{36}\.json$/i.test(item.name)).slice(0, 2000);
     for (const entry of entries) {
       const commitId = entry.name.slice(0, -5);
-      const receipt = await loadCommitReceipt(scope, commitId);
-      if (!receipt || receipt.state !== 'prepared' || receipt.stageId !== stageId) continue;
+      const candidate = await readJson(fs, commitReceiptPath(scope, commitId));
+      // The receipt directory is shared by projects. Validate only receipts
+      // belonging to this rollback; unrelated project receipts must stay untouched.
+      if (!candidate || candidate.state !== 'prepared' || candidate.stageId !== stageId
+        || candidate.projectId !== String(scope.project.id) || candidate.componentId !== scope.componentId
+        || candidate.scopeDigest !== scopeDigest(scope)) continue;
+      const receipt = validateCommitReceipt(candidate, scope, commitId);
       const targets=await acquireOutputTargets(scope,receipt.outputs);let preserved;try{preserved=await rollbackReceiptOutputs(scope,receipt,relativePath=>targets.assert(relativePath));}finally{targets.release();}
       if (preserved.length) throw hostError(CODES.CONFLICT, `Prepared output changed and was preserved: ${preserved.join(', ')}`);
       await fs.promises.rm(commitReceiptPath(scope, commitId), { force: true });
@@ -792,6 +803,18 @@ const registerComponentProjectCapabilities = ({
   };
   broker.register('project.output', async (payload, context, descriptor) => {
     const scope = { ...bound(context, descriptor), componentId: descriptor.componentId };
+    if (payload.action === 'status') {
+      const idempotencyKey = String(payload.idempotencyKey || '');
+      if (!ID.test(idempotencyKey)) throw hostError(CODES.INVALID_REQUEST, 'A stable idempotencyKey is required');
+      const commitId = stableUuid(crypto, `component-output\0${scope.key}\0${idempotencyKey}`);
+      // Read the durable receipt and current files, rather than a cached reply.
+      // This distinguishes a committed result from an old/replaced subtitle.
+      const receipt = await loadCommitReceipt(scope, commitId, idempotencyKey);
+      if (!receipt) return { state: 'missing' };
+      if (receipt.state !== 'committed') return { state: 'prepared' };
+      for (const output of receipt.outputs) if (!await outputMatches(scope, output)) return { state: 'changed' };
+      return { state: 'committed', ...commitResponse(scope, receipt, { includePhysicalPath: false }) };
+    }
     if (payload.action === 'adopt') {
       if (!descriptor.adoptionGrants?.includes('project.output.existing.v1')) throw hostError(CODES.PERMISSION_DENIED, 'Output adoption is not granted to this component');
       const receipt = await adoptExistingOutput({ fs, path, crypto, componentRoot: scope.componentRoot, componentId: descriptor.componentId, projectId: String(scope.project.id), scopeDigest: scopeDigest(scope), projectRoot: scope.projectRoot, migrationId: payload.migrationId, outputs: payload.outputs });
@@ -814,8 +837,12 @@ const registerComponentProjectCapabilities = ({
       const releaseTarget = await acquireOutputTargets(scope, [output]);
       try {
         if (!await fileMatchesDigest(destination, output.size, expectedDigest)) throw hostError(CODES.CONFLICT, 'Controlled deletion target changed');
-        const trashRoot = path.join(scope.componentRoot, 'staging', 'deletions'); await fs.promises.mkdir(trashRoot, { recursive: true });
-        const backup = path.join(trashRoot, deletionId);await releaseTarget.assert(output.relativePath); await fs.promises.rename(destination, backup);
+        // Rename must stay on the target volume when workspace and app data
+        // live on different drives. Preserve any previous recovery evidence.
+        const backup = path.join(path.dirname(destination), `.photoflow-delete-${deletionId}.tmp`);
+        const legacyBackup = path.join(scope.componentRoot, 'staging', 'deletions', deletionId);
+        if (fs.existsSync(backup) || fs.existsSync(legacyBackup)) throw hostError(CODES.CONFLICT, 'Pending controlled deletion backup was preserved; recovery is required');
+        await releaseTarget.assert(output.relativePath); await fs.promises.rename(destination, backup);
         try { await replaceJson({ fs, crypto, filePath: deletionReceiptPath, value: { schemaVersion: RECEIPT_SCHEMA_VERSION, kind: 'component-output-deletion', state: 'committed', deletionId, idempotencyKey, componentId: descriptor.componentId, projectId: String(scope.project.id), scopeDigest: scopeDigest(scope), previousCommitId, previousArtifactId, relativePath: output.relativePath, sha256: expectedDigest, deletedAt: Date.now() } }); await fs.promises.rm(backup, { force: true }); }
         catch (error) { if (!fs.existsSync(destination)) {await releaseTarget.assert(output.relativePath);await fs.promises.rename(backup, destination).catch(() => undefined);} throw error; }
       } finally { releaseTarget.release(); }
@@ -855,10 +882,11 @@ const registerComponentProjectCapabilities = ({
       return { importId, privatePath, byteLength: output.size, sha256: output.sha256, outputRef: { commitId, artifactId } };
     }
     if (payload.action === 'stage') {
+      const maxBytes = stageByteLimit(payload.maxBytes);
       const createdAt = now(); const stageId = `${createdAt.toString(16)}-${crypto.randomUUID()}`;
       const root = stageRootFor(scope, stageId); const payloadRoot = path.join(root, 'payload');
       await fs.promises.mkdir(payloadRoot, { recursive: true });
-      const stage = { id: stageId, scope: scope.key, scopeDigest: scopeDigest(scope), root, payloadRoot, projectRoot: scope.projectRoot, componentRoot: scope.componentRoot, componentId: descriptor.componentId, projectId: String(scope.project.id), createdAt, expiresAt: createdAt + STAGE_TTL_MS, files: [] };
+      const stage = { id: stageId, scope: scope.key, scopeDigest: scopeDigest(scope), root, payloadRoot, projectRoot: scope.projectRoot, componentRoot: scope.componentRoot, componentId: descriptor.componentId, projectId: String(scope.project.id), createdAt, expiresAt: createdAt + STAGE_TTL_MS, maxBytes, files: [] };
       await persistStage(stage); outputStages.set(stageId, stage);
       return { stageId, privatePath: payloadRoot, expiresAt: stage.expiresAt };
     }
@@ -1054,9 +1082,14 @@ const registerComponentProjectCapabilities = ({
     const key = `${scopeKey(descriptor, context)}\0${operationId}`;
     let handle = componentTaskHandles.get(key);
     if (['start', 'resume'].includes(payload.action)) {
-      if (!handle || handle.isFinished()) {
+      const taskId = `component:${descriptor.componentId}:${context.projectId}:${operationId}`;
+      const previous = backgroundTasks.get(taskId);
+      if (!handle || handle.isFinished() || previous?.state === 'interrupted') {
+        // After an app restart only a history row remains, with no runnable
+        // handle. The component restores its own checkpoint before resuming.
+        if (payload.action === 'resume' && previous?.state === 'interrupted' && !backgroundTasks.dismiss(taskId)) throw hostError(CODES.INTERNAL, 'Interrupted component task could not be resumed');
         handle = backgroundTasks.create({
-          id: `component:${descriptor.componentId}:${context.projectId}:${operationId}`,
+          id: taskId,
           type: 'component-operation', title: String(payload.title || '组件任务').slice(0, 120), message: String(payload.message || '').slice(0, 500),
           cancellable: true, resumable: true, resumePolicy: 'checkpoint', checkpoint: payload.checkpoint,
           metadata: {

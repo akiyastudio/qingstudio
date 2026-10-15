@@ -1149,6 +1149,90 @@ def test_folder_purposes_and_legacy_orphan_survive_reload(root: Path) -> None:
         reopened.close()
 
 
+def test_camera_jpg_selection_source(root: Path) -> None:
+    for detached in (False, True):
+        workspace = root / f"jpg-selection-{detached}"
+        project = workspace / "Project"
+        for name in ("RAW", "jpg", "jpg_选片", "Version"):
+            (project / name).mkdir(parents=True)
+        database = root / f"jpg-selection-{detached}.sqlite3"
+        connection_options = {"include_domains": True if detached else ()}
+        db = workspace_db.connect(str(workspace), str(database), **connection_options)
+        now = int(time.time() * 1000)
+        db.execute(
+            "INSERT INTO projects(id,name,status,relative_path,created_at,updated_at) VALUES('jpg-project','Project','后期中','Project',?,?)",
+            (now, now),
+        )
+        db.commit()
+        try:
+            nodes = workspace_db.progress_list(str(workspace), db, {"projectName": "Project"})["progressFolders"]
+            raw = next(node for node in nodes if node["displayName"].lower() == "raw")
+            jpg = next(node for node in nodes if node["displayName"].lower() == "jpg")
+            assert jpg["nodeRole"] == "original" and jpg["artifactKind"] == "companion"
+            # Reopen a database with the old parent guard to exercise upgrades
+            # in both the core and the detached versioning database.
+            owner = "versioning" if detached else "main"
+            trigger_name = "progress_folders_parent_validate_insert"
+            trigger_sql = db.execute(
+                f'SELECT sql FROM "{owner}".sqlite_master WHERE name=?', (trigger_name,),
+            ).fetchone()[0]
+            old_trigger_sql = trigger_sql.replace(
+                "parent.artifact_kind='companion' AND NEW.node_role='selection'", "0 AND NEW.node_role='selection'",
+            )
+            db.execute(f'DROP TRIGGER "{owner}".{trigger_name}')
+            db.execute(old_trigger_sql.replace("CREATE TRIGGER ", f'CREATE TRIGGER "{owner}".', 1))
+            workspace_db._set_meta(db, "progress_purpose_constraint_revision", "2")
+            db.commit()
+            assert not workspace_db._progress_purpose_constraints_current(db)
+            db.close()
+            db = workspace_db.connect(str(workspace), str(database), **connection_options)
+            assert workspace_db._progress_purpose_constraints_current(db)
+            assert workspace_db._meta_value(db, "progress_purpose_constraint_revision") == workspace_db.PROGRESS_PURPOSE_CONSTRAINT_REVISION
+            selection_payload = {
+                "projectName": "Project", "mediaKind": "image", "versionKey": f"selection-{jpg['id']}",
+                "displayName": "jpg_选片", "folderPath": str(project / "jpg_选片"),
+                "nodeRole": "selection", "relationKind": "auxiliary", "parentProgressId": jpg["id"],
+                "trackingEnabled": False,
+            }
+            selection = workspace_db.progress_register(str(workspace), db, selection_payload)["progressFolder"]
+            repeated = workspace_db.progress_register(str(workspace), db, {
+                **selection_payload, "progressId": selection["id"],
+            })["progressFolder"]
+            assert repeated["id"] == selection["id"] and repeated["parentProgressId"] == jpg["id"]
+            assert not repeated["trackingEnabled"] and repeated["trackingState"] == "disabled"
+            try:
+                db.execute("UPDATE progress_folders SET node_role='progress',relation_kind='main',version_key='1' WHERE id=?", (selection["id"],))
+                raise AssertionError("SQL role updates must not turn a companion selection into a main version")
+            except sqlite3.IntegrityError as error:
+                assert "invalid progress parent" in str(error)
+            for parent_id in (raw["id"], jpg["id"]):
+                changed = workspace_db.progress_relation_update(db, {
+                    "childProgressId": selection["id"], "parentProgressId": parent_id,
+                })["progressFolder"]
+                assert changed["parentProgressId"] == parent_id and changed["relationKind"] == "auxiliary"
+            try:
+                workspace_db.progress_register(str(workspace), db, {
+                    "projectName": "Project", "mediaKind": "image", "versionKey": "1",
+                    "displayName": "Version", "folderPath": str(project / "Version"),
+                    "nodeRole": "progress", "relationKind": "main", "parentProgressId": jpg["id"],
+                })
+                raise AssertionError("camera JPG must not become a main version parent")
+            except ValueError as error:
+                assert "父版本进度不存在" in str(error)
+            workspace_db._check_integrity(db, force=True)
+        finally:
+            db.close()
+        reopened = workspace_db.connect(str(workspace), str(database), **connection_options)
+        try:
+            nodes = workspace_db.progress_list(str(workspace), reopened, {"projectName": "Project"})["progressFolders"]
+            by_id = {node["id"]: node for node in nodes}
+            assert by_id[selection["id"]]["parentProgressId"] == jpg["id"]
+            assert by_id[jpg["id"]]["artifactKind"] == "companion"
+            workspace_db._check_integrity(reopened, force=True)
+        finally:
+            reopened.close()
+
+
 def test_detached_missing_progress_cleanup_is_atomic(root: Path) -> None:
     workspace = root / "detached-cleanup-workspace"
     project = workspace / "Project"
@@ -1571,6 +1655,7 @@ def main() -> None:
         test_version_tree_layout_persistence(temp_root)
         test_external_link_payload_cannot_authorize_outside_folder(temp_root)
         test_folder_purposes_and_legacy_orphan_survive_reload(temp_root)
+        test_camera_jpg_selection_source(temp_root)
         test_detached_missing_progress_cleanup_is_atomic(temp_root)
         test_detached_reconcile_repairs_legacy_dangling_projections(temp_root)
         test_component_host_v6_cas_mutations(temp_root)

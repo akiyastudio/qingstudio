@@ -4,11 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowUpRight, File, FileImage, Folder, FolderInput } from 'lucide-react';
 import type { AppConfig, ProjectFileEntry } from '../../types';
 import { projectWorkspaceClient } from '../../platform/project-workspace-client';
-import { folderCoverEntryAfterLoad } from './directory-preview-cache-model';
+import { loadFolderCoverSelection, type DirectoryPreviewLoadResult, type FolderCoverSelection } from './folder-cover-selection-model';
 import { FOLDER_COVER_MAX_CONSECUTIVE_LOAD_FAILURES, createFolderCoverMediaState, folderCoverMediaSourceKey, folderCoverRequestKey, reduceFolderCoverMediaState, type FolderCoverMediaState } from './folder-cover-media-model';
 import { forgetMediaThumbnailPreviews, getMediaThumbnailPreview, mediaThumbnailPreviewKey, rememberMediaThumbnailPreview, useThumbnailUpdates } from './useProjectThumbnail';
-
-type DirectoryPreviewLoadResult = { entries: ProjectFileEntry[]; authoritative: boolean };
 
 const FOLDER_COVER_THUMBNAIL_RETRY_DELAYS_MS = [1500, 4000] as const;
 
@@ -130,7 +128,7 @@ export const FolderCover = ({ entry, cacheConfig, requestedSize, queueOrder, lar
   loadEntries: (entry: ProjectFileEntry) => Promise<DirectoryPreviewLoadResult>;
 }) => {
   const container = useRef<HTMLSpanElement>(null);
-  const [coverEntry, setCoverEntry] = useState<ProjectFileEntry>();
+  const [cover, setCover] = useState<FolderCoverSelection>({ entries: [], collage: false, authoritative: false });
   const pendingRename = Boolean((entry as ProjectFileEntry & { pendingSourceRelativePath?: string }).pendingSourceRelativePath);
   useEffect(() => {
     const node = container.current;
@@ -139,27 +137,35 @@ export const FolderCover = ({ entry, cacheConfig, requestedSize, queueOrder, lar
     const observer = new IntersectionObserver(([item]) => {
       if (!item.isIntersecting) return;
       observer.disconnect();
-      void loadEntries(entry).then(result => {
+      void loadFolderCoverSelection(entry, loadEntries, () => active, pendingRename).then(result => {
         if (!active) return;
-        setCoverEntry(previous => folderCoverEntryAfterLoad(previous, result.entries, pendingRename || !result.authoritative));
+        setCover(previous => !result.entries.length && (pendingRename || !result.authoritative) ? previous : result);
       });
     }, { rootMargin: '180px' });
     observer.observe(node);
     return () => { active = false; observer.disconnect(); };
   }, [entry.path, entry.updatedAt, pendingRename, loadEntries]);
 
+  const coverEntry = cover.entries[0];
   const isMedia = coverEntry && (coverEntry.kind === 'image' || coverEntry.kind === 'raw' || coverEntry.kind === 'video');
   const iconSize = large ? '100%' : 27;
   // Enlarge only the artwork so folder covers cannot push grid labels below file labels.
   return <span ref={container} aria-hidden style={large ? undefined : { width: 27, height: 27 }} className={`relative isolate block shrink-0 text-blue-500 ${large ? 'h-full w-full scale-[1.14]' : ''}`}>
     <Folder size={iconSize} strokeWidth={1.5} fill="currentColor" className="absolute inset-0"/>
-    {coverEntry && <span className="absolute bottom-[20%] left-[11%] right-[11%] top-[31%] z-10 flex items-center justify-center overflow-hidden rounded-[5%] bg-slate-100">
-      {isMedia
+    {coverEntry && <span className={`absolute ${cover.collage ? 'bottom-[35%]' : 'bottom-[20%]'} left-[11%] right-[11%] top-[31%] z-10 flex items-center justify-center overflow-hidden rounded-[5%] bg-slate-100`}>
+      {cover.collage
+        ? <span className="grid h-full w-full grid-cols-2 grid-rows-2 gap-px bg-slate-200" data-folder-cover-collage>
+          {Array.from({ length: 4 }, (_, index) => <span key={index} className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden bg-slate-100" data-folder-cover-cell>
+            {cover.entries[index] && <FolderCoverMedia entry={cover.entries[index]} cacheConfig={cacheConfig} requestedSize={requestedSize} queueOrder={queueOrder + index} pendingRename={pendingRename}/>}
+          </span>)}
+        </span>
+        : isMedia
         ? <FolderCoverMedia entry={coverEntry} cacheConfig={cacheConfig} requestedSize={requestedSize} queueOrder={queueOrder} pendingRename={pendingRename}/>
         : <SystemFileIcon filePath={coverEntry.path} size={large ? 40 : 11}/>}
     </span>}
     {coverEntry && <>
       <span
+        data-folder-cover-front
         className="pointer-events-none absolute bottom-[17%] left-[8.3%] right-[8.3%] z-20 h-[18%] bg-blue-500 shadow-[0_-1px_0_rgba(255,255,255,0.32)]"
         style={{ clipPath: 'polygon(0 18%, 39% 18%, 46% 0, 100% 0, 100% 100%, 0 100%)' }}
       />

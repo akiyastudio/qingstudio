@@ -1,4 +1,5 @@
 import type { ToastViewAction, ToastViewApi, ToastViewPresentation, ToastViewSnapshot } from './features/app/toast-view-contract';
+import type { CatalogPlugin } from './contracts/plugin-catalog';
 
 export interface LogEntry {
   timestamp: string;
@@ -791,7 +792,8 @@ export interface ComponentPageOpenScope {
   contentKind?: 'project' | 'inspiration';
 }
 export type ComponentContributionType = 'component.sidePanel' | 'media.contextAction' | 'project.contextAction' | 'project.importProvider' | 'project.exportProvider' | 'application.command' | 'application.homeCard';
-export interface ComponentContribution { componentId: string; componentVersion: string; contributionId: string; type: ComponentContributionType; label: string; title: string; description?: string; pageId: string; rpcMethods: string[]; /** folderPanel is limited to component.sidePanel. */ placement?: 'workspace.videoTools' | 'workspace.folderPanel'; iconUrl?: string }
+export interface ComponentSelectionFilter { minCount?: number; maxCount?: number; kinds?: ProjectFileEntry['kind'][]; extensions?: string[]; excludedExtensions?: string[] }
+export interface ComponentContribution { componentId: string; componentVersion: string; contributionId: string; type: ComponentContributionType; label: string; title: string; description?: string; pageId: string; rpcMethods: string[]; /** folderPanel is limited to component.sidePanel. */ placement?: 'workspace.videoTools' | 'workspace.imageTools' | 'workspace.officeTools' | 'workspace.folderPanel'; contextMenu?: 'root' | 'group' | 'none'; selection?: ComponentSelectionFilter; iconUrl?: string }
 
 export interface ComponentPageInstance {
   identity: string;
@@ -1047,6 +1049,7 @@ export interface IElectronAPI {
   getUserPath: () => Promise<string>;
   onUpdateAvailable: (callback: (info: AppUpdateInfo) => void) => () => void;
   openExternal: (url: string) => void;
+  getPluginCatalog: () => Promise<{ success: boolean; plugins: CatalogPlugin[] }>;
   checkForUpdates: () => Promise<{ success: boolean; updateAvailable?: boolean; currentVersion?: string; latestVersion?: string; url?: string; notes?: string; sha256?: string; mandatory?: boolean; error?: string }>;
   submitFeedback: (message: string) => Promise<{ success: boolean; error?: string }>;
   getComponents: (force?: boolean) => Promise<{ success: boolean; components: ComponentStatus[]; installPath: string; error?: string }>;
@@ -1267,7 +1270,7 @@ export interface IElectronAPI {
   onAppError: (callback: (message: string) => void) => () => void;
   onComponentNotification: (callback: (value: { type: 'notification'; id: string; componentId: string; surface: 'project' | 'application.settings' | ComponentContributionType; notification: { tone: 'info' | 'success' | 'warning' | 'error'; message: string; dedupeKey?: string } } | { type: 'purge'; componentId: string }) => void) => () => void;
   getRawPreview: (filePath: string, cacheConfig?: AppConfig['mediaCache']) => Promise<{ success: boolean; previewUrl?: string; error?: string }>;
-  projectFileOperation: (workspacePath: string, status: ProjectStatus, projectName: string, operation: 'trash' | 'copy' | 'cut' | 'paste' | 'rename' | 'select' | 'move' | 'import' | 'import-url' | 'import-data', paths: string[], targetRelativePath?: string, nextName?: string, options?: { sourceFolderRelativePath?: string; imageDestFolderName?: string; videoDestFolderName?: string; renameNames?: string[]; pasteConflictPolicy?: 'replace' | 'keep-both'; droppedImageFiles?: Array<{ name: string; type: string; bytes: ArrayBuffer }> }) => Promise<{ success: boolean; cancelled?: boolean; count?: number; permanentCount?: number; imageCount?: number; videoCount?: number; operationId?: string; taskNotificationOwned?: boolean; clipboardGeneration?: number; consumedCutClipboard?: boolean; affectedDirectories?: string[]; moves?: Array<{ sourceRelativePath: string; destinationRelativePath: string }>; movedItems?: Array<{ sourceRelativePath: string; destinationRelativePath: string; copied?: boolean }>; createdItems?: Array<{ name: string; relativePath: string; isDirectory: boolean }>; replacedCount?: number; replacedNames?: string[]; replacedPermanentCount?: number; replacedRetainedCount?: number; requiresDecision?: { kind: 'paste-conflict'; names: string[]; fileCount: number; folderCount: number; message: string; detail: string }; undoUnavailable?: boolean; warning?: string; error?: string; errorCode?: string }>;
+  projectFileOperation: (workspacePath: string, status: ProjectStatus, projectName: string, operation: 'trash' | 'copy' | 'cut' | 'paste' | 'rename' | 'select' | 'move' | 'import' | 'import-url' | 'import-data', paths: string[], targetRelativePath?: string, nextName?: string, options?: { sourceFolderRelativePath?: string; imageDestFolderName?: string; videoDestFolderName?: string; renameNames?: string[]; pasteConflictPolicy?: 'replace' | 'keep-both'; decisionToken?: string; droppedImageFiles?: Array<{ name: string; type: string; bytes: ArrayBuffer }> }) => Promise<{ success: boolean; cancelled?: boolean; count?: number; permanentCount?: number; imageCount?: number; videoCount?: number; operationId?: string; taskNotificationOwned?: boolean; clipboardGeneration?: number; consumedCutClipboard?: boolean; affectedDirectories?: string[]; moves?: Array<{ sourceRelativePath: string; destinationRelativePath: string }>; movedItems?: Array<{ sourceRelativePath: string; destinationRelativePath: string; copied?: boolean }>; createdItems?: Array<{ name: string; relativePath: string; isDirectory: boolean }>; replacedCount?: number; replacedNames?: string[]; replacedPermanentCount?: number; replacedRetainedCount?: number; requiresDecision?: { kind: 'paste-conflict'; decisionToken: string; allowReplace?: boolean; names: string[]; fileCount: number; folderCount: number; message: string; detail: string }; undoUnavailable?: boolean; warning?: string; error?: string; errorCode?: string }>;
   getProjectFileClipboardStatus: () => Promise<{ success: boolean; hasFiles: boolean; error?: string }>;
   cancelProjectFileCut: (workspacePath: string, status: ProjectStatus, projectName: string, paths: string[]) => Promise<{ success: boolean; cleared: boolean; hasFiles: boolean; error?: string }>;
   getPathForFile: (file: File) => string;

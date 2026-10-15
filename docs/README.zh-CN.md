@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | 项目概述 | [Read](../README.md) | [阅读](../README.zh-CN.md) |
 | 插件开发 | [Read](PLUGIN_DEVELOPMENT.md) | [阅读](PLUGIN_DEVELOPMENT.zh-CN.md) |
+| Cloud plugin catalog / 云端插件目录 | [Read](PLUGIN_CATALOG_API.md) | [阅读](PLUGIN_CATALOG_API.zh-CN.md) |
 | Host API | [Read](PLUGIN_HOST_API.md) | [阅读](PLUGIN_HOST_API.zh-CN.md) |
 | 文件资源与传输 | [Read](PLUGIN_FILE_RESOURCES_API.md) | [阅读](PLUGIN_FILE_RESOURCES_API.zh-CN.md) |
 | 面板与预览 | [Read](PLUGIN_PREVIEW_API.md) | [阅读](PLUGIN_PREVIEW_API.zh-CN.md) |

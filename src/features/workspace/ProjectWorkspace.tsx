@@ -8,6 +8,7 @@ import { workspaceWindowContext, type WorkspaceWindowSeed } from '../../platform
 import { type ProjectFileFilter, type ProjectRatingFilter } from './project-file-filter-options';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { usePageState, usePageTransferParticipant, useRestorePageTransferState } from '../../platform/page-transfer-state';
+import { createBatchRenamePart, readBatchRenameParts, writeBatchRenameParts, type BatchRenamePart, type BatchRenameToken } from './batch-rename-preferences';
 import { createPortal } from 'react-dom';
 import { FolderInput, FolderPlus, Folder, Image as ImageIcon, GalleryVerticalEnd, Play, Trash2, Edit, X, Plus, Loader2, CheckCircle2, ExternalLink, Video, ChevronDown, File, FileImage, MemoryStick, LayoutList, Grid2X2, FileText, Copy, Scissors as Cut, ClipboardPaste, CheckSquare, ArrowLeft, ArrowRight, Gauge, PanelLeftOpen, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Search, Filter as Funnel, Info, GripVertical, GitBranch, RefreshCw, Crop } from 'lucide-react';
 import { VersionManager } from '../../components/VersionManager';
@@ -28,6 +29,8 @@ import type { FileBrowserContext } from '../file-browser/browser-context';
 import { FolderCover, ShortcutEntryIcon, SystemFileIcon } from './FileEntryVisuals';
 import { MediaPreviewPane, type PreviewImageCropAnalysis, type PreviewTechnicalMetadata } from './MediaPreviewPane';
 import { usePreviewDecoders, decoderForFile } from './usePreviewDecoders';
+import { useCloudPluginCatalog } from './useCloudPluginCatalog';
+import { previewPluginForFile } from './preview-plugin-prompt-model';
 import { ComponentFolderPanelSurface } from '../components/ComponentFolderPanelSurface';
 import { useComponentFolderPanelState } from '../components/useComponentFolderPanelState';
 import { WORKSPACE_PANEL_IDS, componentWorkspacePanelId } from '../../contracts/workspace-panels';
@@ -45,6 +48,7 @@ import { PROJECT_BACKGROUND_LOAD_DELAYS_MS, PROJECT_BACKGROUND_RECHECK_MS, PROJE
 import { createDirectoryRefreshQueue } from './directory-refresh-queue';
 import { applyShortcutPreviewState } from './shortcut-preview-state-model';
 import { directoryEntryToRevealOnReturn, fileEntryClickIntent, fileEntryDragPaths, fileEntryPointerModifiers, mediaRatingCacheKey, mergeRefreshedEntryMetadata, mergeRefreshedRecursiveDirectoryEntries, mutatedEntryCanBeRevealed, mutatedEntryFiltersNeedReset, ratingMutationPreviewIsCurrent, remapEntryAfterProgressFolderMove, renamedEntryDestinationPath, retainStableGroupOrder, type ProgressFolderEntryLocation } from './file-entry-interaction-model';
+import { loadProjectFilterRatings, PROJECT_RATING_CACHE_LIMIT } from './project-rating-filter-model';
 import { nativeFileDragDecisionDetails, nativeFileDragOwnerIdentity, nativeFileDragSessionMustReset, nativeFileDragTargetFromElement, tryStartNativeFileDrag } from './native-file-drag-session-model';
 import { extractBrowserImageUrls, hasImportableExternalDragData, readBrowserProvidedImageFiles, type DroppedBrowserImageFile } from './browser-image-drop-model';
 import { FOLDER_ALPHABET_FILTER_THRESHOLD, FOLDER_ALPHABET_KEYS, availableFolderAlphabetKeys, folderAlphabetKey } from './folder-alphabet-filter-model';
@@ -79,7 +83,7 @@ import { PhotoshopIcon } from './PhotoshopIcon';
 import { useUserFacingToast, type ToastActivityHandle } from '../app/useUserFacingToast';
 import { ComponentContributionDock } from '../components/ComponentContributionDock';
 import { ComponentIcon } from '../../components/ComponentIcon';
-import { componentHostSelectedRelativePaths as safeComponentHostSelectedRelativePaths, mediaContributionScope, resolvePlacedFullPageAction, projectContributionScope, visibleComponentToolbarActions, workspaceToolContributions, type WorkspaceToolPlacement } from '../components/component-contribution-scope-model';
+import { componentContributionAcceptsSelection, componentHostSelectedRelativePaths as safeComponentHostSelectedRelativePaths, mediaContributionScope, resolvePlacedFullPageAction, projectContributionScope, visibleComponentToolbarActions, workspaceToolContributions, type WorkspaceToolPlacement } from '../components/component-contribution-scope-model';
 import { mayCommitAsyncOperationResult } from '../file-operation-identity-model';
 import type { SelectionEntryDetails } from './multi-selection-metadata-model';
 import { FileMetadataPane } from './FileMetadataPane';
@@ -155,33 +159,6 @@ const buildProgressCompareListItems = (compare: ProgressCompareConfirmation, fil
 };
 const EMPTY_PREVIEW_TECHNICAL_METADATA: PreviewTechnicalMetadata = {};
 type ProjectEntryDetails = { size: number; createdAt: number; updatedAt: number; fileCount: number; folderCount: number };
-type BatchRenameToken = 'text' | 'original' | 'sequence' | 'letter' | 'datetime' | 'replace';
-type BatchRenamePart = {
-  id: string;
-  type: BatchRenameToken;
-  value: string;
-  caseMode: 'preserve' | 'upper' | 'lower';
-  sequenceStart: number;
-  sequenceDigits: number;
-  letterCase: 'upper' | 'lower';
-  dateSource: 'created' | 'modified';
-  dateFormat: string;
-  find: string;
-  replace: string;
-};
-const createBatchRenamePart = (type: BatchRenameToken = 'text'): BatchRenamePart => ({
-  id: `rename-part-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  type,
-  value: '',
-  caseMode: 'preserve',
-  sequenceStart: 1,
-  sequenceDigits: 2,
-  letterCase: 'upper',
-  dateSource: 'modified',
-  dateFormat: 'YYYYMMDD_HHmmss',
-  find: '',
-  replace: ''
-});
 const formatBatchRenameDate = (date: Date, pattern: string) => {
   const values: Record<string, string> = {
     YYYY: String(date.getFullYear()),
@@ -393,7 +370,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     trim(optimisticDirectoryEntriesCacheRef.current, 96);
     trim(directoryPrefetchesRef.current, 96);
     trim(shortcutPreviewStatesRef.current, 512);
-    trim(previewRatingCacheRef.current, 400);
+    trim(previewRatingCacheRef.current, PROJECT_RATING_CACHE_LIMIT);
     trim(previewRatingRequestsRef.current, 200);
   };
   useEffect(boundWorkspaceCaches);
@@ -538,6 +515,9 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
   const [batchExtensionMode, setBatchExtensionMode] = usePageState<'preserve' | 'replace'>(pageId, "batchExtensionMode", 'preserve');
   const [batchExtensionValue, setBatchExtensionValue] = usePageState(pageId, "batchExtensionValue", '');
   const [draggedBatchRenamePartId, setDraggedBatchRenamePartId] = useState('');
+  useEffect(() => {
+    if (active && batchRenameOpen) writeBatchRenameParts(batchRenameParts);
+  }, [active, batchRenameOpen, batchRenameParts]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [panel, setPanel] = usePageState<ProjectPanel>(pageId, "panel", initialPanel);
   const [mountedPanels, setMountedPanels] = usePageState<Set<MountedProjectPanel>>(pageId, "mountedPanels", () => new Set(initialPanel ? [initialPanel] : []));
@@ -1679,42 +1659,17 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       return;
     }
     const ratingEntries = activeFileEntries.filter(entry => (!entry.viaShortcut) && (entry.kind === 'image' || entry.kind === 'raw'));
-    const cachedRatings: Record<string, number> = {};
-    const pending = ratingEntries.filter(entry => {
-      if (typeof entry.rating === 'number') {
-        cachedRatings[entry.path] = entry.rating;
-        return false;
-      }
-      const cacheKey = mediaRatingCacheKey(entry.path, entry.updatedAt || 0);
-      const cached = previewRatingCacheRef.current.get(cacheKey);
-      if (cached === undefined) return true;
-      cachedRatings[entry.path] = cached;
-      return false;
-    });
-    setFilterRatings(cachedRatings);
-    setFilterRatingsCheckedCount(Object.keys(cachedRatings).length);
-    if (!pending.length) {
-      setFilterRatingsLoading(false);
-      return;
-    }
     setFilterRatingsLoading(true);
-    const readPendingRatings = async () => {
-      const collected = { ...cachedRatings };
-      for (let offset = 0; offset < pending.length; offset += 200) {
-        const batch = pending.slice(offset, offset + 200);
-        const result = await projectWorkspaceClient.getMediaRatings(batch.map(entry => ({ path: entry.path, updatedAt: entry.updatedAt || 0 })));
-        if (sequence !== filterRatingSequenceRef.current) return;
-        for (const item of result.results || []) {
-          const rating = item.success ? item.rating : 0;
-          previewRatingCacheRef.current.set(mediaRatingCacheKey(item.path, item.updatedAt || 0), rating);
-          collected[item.path] = rating;
-        }
-        setFilterRatings({ ...collected });
-        setFilterRatingsCheckedCount(Object.keys(collected).length);
-      }
-    };
-    void readPendingRatings().catch(() => {
-      if (sequence === filterRatingSequenceRef.current) setFilterRatings(cachedRatings);
+    void loadProjectFilterRatings({
+      entries: ratingEntries,
+      readBatch: entries => projectWorkspaceClient.getMediaRatings(entries),
+      getCachedRating: entry => previewRatingCacheRef.current.get(mediaRatingCacheKey(entry.path, entry.updatedAt || 0)),
+      cacheRating: (entry, rating) => previewRatingCacheRef.current.set(mediaRatingCacheKey(entry.path, entry.updatedAt || 0), rating),
+      onProgress: (ratings, checked) => {
+        setFilterRatings(ratings);
+        setFilterRatingsCheckedCount(checked);
+      },
+      isCurrent: () => sequence === filterRatingSequenceRef.current,
     }).finally(() => {
       if (sequence === filterRatingSequenceRef.current) setFilterRatingsLoading(false);
     });
@@ -2571,10 +2526,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       return;
     }
     if (targetPaths !== selectedPaths) setSelectedPaths(targetPaths);
-    setBatchRenameParts([
-      createBatchRenamePart('text'),
-      createBatchRenamePart('sequence')
-    ]);
+    setBatchRenameParts(readBatchRenameParts());
     setBatchExtensionMode('preserve');
     setBatchExtensionValue('');
     setBatchRenameOpen(true);
@@ -2939,7 +2891,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     }
   };
   const openProjectEntriesInPhotoshop = async (entries: ProjectFileEntry[]) => {
-    const imagePaths = entries.filter(entry => entry.kind === 'image' || entry.kind === 'raw').map(entry => entry.relativePath);
+    const imagePaths = entries.filter(isPhotoshopOpenEntry).map(entry => entry.relativePath);
     if (!imagePaths.length) return;
     const result = await projectWorkspaceClient.openProjectEntriesInPhotoshop(workspacePath, project.status, project.name, imagePaths);
     if (!result.success) onNotice(`用 Photoshop 打开失败：${result.error || '无法打开文件'}`);
@@ -3262,13 +3214,13 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     try {
       result = await projectWorkspaceClient.projectFileOperation(workspacePath, project.status, project.name, operation, targetPaths, normalizedDestination, nextName);
       if (discardStaleProjectOperation(requestedProjectPath, pendingOperation)) return;
-      if (result.requiresDecision?.kind === 'paste-conflict') {
+      while (result.requiresDecision?.kind === 'paste-conflict') {
         const policy = await appDialog.choice({
           title: localizedMessage("ui.a.project.with.this.name.exists.4e07fe"),
           message: result.requiresDecision.message,
           detail: result.requiresDecision.detail,
           choices: [
-            { value: 'replace', label: localizedMessage("ui.replace.and.continue.3fcff1"), tone: 'danger' },
+            ...(result.requiresDecision.allowReplace === false ? [] : [{ value: 'replace', label: localizedMessage("ui.replace.and.continue.3fcff1"), tone: 'danger' as const }]),
             { value: 'keep-both', label: localizedMessage("ui.keep.both.56437f") },
           ],
           defaultValue: 'keep-both',
@@ -3279,7 +3231,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
           if (discardStaleProjectOperation(requestedProjectPath, pendingOperation)) return;
           onNotice('粘贴已取消'); refresh(); return;
         }
-        result = await projectWorkspaceClient.projectFileOperation(workspacePath, project.status, project.name, operation, targetPaths, normalizedDestination, nextName, { pasteConflictPolicy: policy });
+        result = await projectWorkspaceClient.projectFileOperation(workspacePath, project.status, project.name, operation, targetPaths, normalizedDestination, nextName, { pasteConflictPolicy: policy, decisionToken: result.requiresDecision.decisionToken });
         if (discardStaleProjectOperation(requestedProjectPath, pendingOperation)) return;
       }
     } catch (error) {
@@ -3498,7 +3450,14 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     return () => { active = false; };
   }, [selectedEntries, workspacePath, project.status, project.name]);
   const previewDecoders = usePreviewDecoders();
-  const canPreviewEntry = (entry: ProjectFileEntry) => entry.kind === 'image' || entry.kind === 'raw' || entry.kind === 'video' || entry.kind === 'file' && Boolean(decoderForFile(previewDecoders, entry.name));
+  const cloudPlugins = useCloudPluginCatalog(active);
+  const previewPluginForEntry = (entry: ProjectFileEntry) => entry.viaShortcut ? undefined : previewPluginForFile(cloudPlugins, entry.name, previewDecoders, _installedComponentIds);
+  const canPreviewEntry = (entry: ProjectFileEntry) => entry.kind === 'image' || entry.kind === 'raw' || entry.kind === 'video' || entry.kind === 'file' && Boolean(decoderForFile(previewDecoders, entry.name) || previewPluginForEntry(entry));
+  const focusedPreviewPlugin = focusedEntry ? previewPluginForEntry(focusedEntry) : undefined;
+  useEffect(() => {
+    // A directory selection can arrive before the network catalog does.
+    if (previewPaneOpen && !previewMediaPath && focusedEntry?.kind === 'file' && focusedPreviewPlugin) setPreviewMediaPath(focusedEntry.relativePath);
+  }, [previewPaneOpen, previewMediaPath, focusedEntry, focusedPreviewPlugin]);
   const listedPreviewEntry = activeFileEntries.find(entry => entry.relativePath === previewMediaPath && canPreviewEntry(entry));
   const previewEntry = postTrimPreviewEntry?.relativePath === previewMediaPath ? postTrimPreviewEntry : listedPreviewEntry;
   previewRatingIdentityRef.current = previewEntry ? mediaRatingCacheKey(previewEntry.path, previewEntry.updatedAt) : '';
@@ -3533,7 +3492,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     const current = previewRatingCacheRef.current.get(key);
     if (current !== undefined) return current;
     if (!result.success) return undefined;
-    if (previewRatingCacheRef.current.size >= 400) previewRatingCacheRef.current.delete(previewRatingCacheRef.current.keys().next().value as string);
+    if (previewRatingCacheRef.current.size >= PROJECT_RATING_CACHE_LIMIT) previewRatingCacheRef.current.delete(previewRatingCacheRef.current.keys().next().value as string);
     previewRatingCacheRef.current.set(key, result.rating);
     return result.rating;
   }, []);
@@ -3582,7 +3541,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       return;
     }
     if (previewIsCurrent) setPreviewRating(result.rating);
-    if (previewRatingCacheRef.current.size >= 400 && !previewRatingCacheRef.current.has(targetIdentity)) previewRatingCacheRef.current.delete(previewRatingCacheRef.current.keys().next().value as string);
+    if (previewRatingCacheRef.current.size >= PROJECT_RATING_CACHE_LIMIT && !previewRatingCacheRef.current.has(targetIdentity)) previewRatingCacheRef.current.delete(previewRatingCacheRef.current.keys().next().value as string);
     previewRatingCacheRef.current.set(targetIdentity, result.rating);
     setFilterRatings(current => ({ ...current, [targetEntry.path]: result.rating }));
     const applyRating = (entries: ProjectFileEntry[]) => entries.map(entry => entry.path === targetEntry.path ? { ...entry, rating: result.rating } : entry);
@@ -4022,16 +3981,6 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     const sourceFolderRelativePath = [...sourceFolders][0] || '';
     const preflight = await projectWorkspaceClient.preflightManualSelection(project.path, { sourceFolderRelativePath, relativePaths: targetPaths });
     if (!preflight.success || !preflight.signature) { onNotice(`选片预检失败：${preflight.error || '未知错误'}`); return; }
-    const decision = await appDialog.choice({
-      title: localizedMessage("ui.confirm.manual.selection.259189"),
-      message: `${preflight.sourceFolderRelativePath || '项目根目录'} → ${preflight.targetFolderRelativePath || preflight.outputFolderName || '选片输出'}`,
-      detail: localizedMessage("ui.matched.value0.existing.value1.conflicts.value2.d9ce36", { value0: preflight.matchedCount || targetPaths.length, value1: preflight.existingCount || 0, value2: preflight.conflictCount || 0, value3: preflight.missingCount || 0 }),
-      choices: [{ value: 'execute', label: localizedMessage("ui.confirm.selection.9bf785") }],
-      defaultValue: 'execute',
-      cancelLabel: localizedMessage("common.cancel"),
-      cancelDefault: true,
-    });
-    if (decision !== 'execute') return;
     let result: Awaited<ReturnType<typeof projectWorkspaceClient.executeManualSelection>>;
     try {
       result = await projectWorkspaceClient.executeManualSelection(project.path, { sourceFolderRelativePath, relativePaths: targetPaths, expectedSignature: preflight.signature, operationId: crypto.randomUUID() });
@@ -4043,7 +3992,9 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       if (pageOwnsFileOperationNotification(result)) onNotice(`选片失败：${result.error || (result.cancelled ? '已取消并回滚本次创建内容' : '未知错误')}`);
       return;
     }
-    if (pageOwnsFileOperationNotification(result)) onNotice(`已向“${result.targetFolderRelativePath || result.outputFolderName || '选片输出'}”追加 ${result.copiedCount || 0} 个媒体；附属节点已登记。`);
+    if (result.existingCount) {
+      onNotice(t('selection.manual.existing-files-skipped', { copiedCount: result.copiedCount || 0, existingCount: result.existingCount }));
+    } else if (pageOwnsFileOperationNotification(result)) onNotice(`已向“${result.targetFolderRelativePath || result.outputFolderName || '选片输出'}”追加 ${result.copiedCount || 0} 个媒体；附属节点已登记。`);
     setSelectedPaths([]);
     await loadProgressFolders();
     directoryEntriesCacheRef.current.clear();
@@ -4639,9 +4590,9 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
     .filter(item => item !== videoTranscodeContribution && item !== videoSplitContribution);
   const toolbarHasSafeToolSelection = componentHostSelectedRelativePaths.length > 0 && componentHostSelectedRelativePaths.length === selectedEntries.length;
   const fileMenuHasSafeToolSelection = fileMenuEntries.length > 0 && fileMenuEntries.length === fileMenuTargetPaths.length && !fileMenuContainsShortcutContent;
-  const fileMenuHasPlacedToolAction = (placement: WorkspaceToolPlacement) => fileMenuHasSafeToolSelection && menuContributions(placement).length > 0;
-  const renderPlacedToolActions = (placement: WorkspaceToolPlacement, contextMenu = false) => menuContributions(placement).map(contribution => {
-    const available = contextMenu ? fileMenuHasSafeToolSelection : toolbarHasSafeToolSelection || (!selectedEntries.length && contribution.type === 'project.contextAction');
+  const fileMenuHasPlacedToolAction = (placement: WorkspaceToolPlacement) => fileMenuHasSafeToolSelection && menuContributions(placement).some(item => item.contextMenu !== 'none' && item.contextMenu !== 'root' && componentContributionAcceptsSelection(item, fileMenuEntries));
+  const renderPlacedToolActions = (placement: WorkspaceToolPlacement, contextMenu = false) => menuContributions(placement).filter(item => !contextMenu || item.contextMenu !== 'root' && item.contextMenu !== 'none' && componentContributionAcceptsSelection(item, fileMenuEntries)).map(contribution => {
+    const available = !finalViewOpen && (contextMenu ? fileMenuHasSafeToolSelection : toolbarHasSafeToolSelection || (!selectedEntries.length && contribution.type === 'project.contextAction')) && componentContributionAcceptsSelection(contribution, contextMenu ? fileMenuEntries : selectedEntries);
     return <button key={`${contribution.componentId}:${contribution.contributionId}`} type="button" disabled={!available} title={available ? contribution.title : t("ui.select.files.or.folders.9cbf39")} className="project-menu-item" onClick={event => {
       event.stopPropagation();
       const scope = projectContributionScope(currentRelativePath, pageId, contextMenu ? fileMenuTargetPaths : componentHostSelectedRelativePaths, componentContentKind);
@@ -4741,7 +4692,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
         {projectWorkflows && canSelectFileMenuMedia && <><button className="project-menu-item" onClick={() => { const targets = fileMenuTargetPaths; setFileMenu(null); selectMediaFiles(targets); }}><CheckCircle2 size={14}/>{t("ui.selection.8c8db6")}</button><div className="my-1 border-t border-slate-100"/></>}
         {(fileMenu.entry.kind === 'image' || fileMenu.entry.kind === 'raw' || fileMenu.entry.kind === 'video') && <button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; const restoreSelection = fileMenuSelectionWasImplicitRef.current ? fileMenuSelectionSnapshotRef.current : null; setFileMenu(null); if (restoreSelection) { selectionAnchorPathRef.current = fileMenuSelectionAnchorSnapshotRef.current; setSelectedPaths(restoreSelection); } openPreviewFromMenu(entry); }}><PanelLeftOpen size={14}/>{t("ui.preview.13d61f")}</button>}
         {mediaContributionScope(fileMenuEntries, fileMenu.entry, pageId, componentContentKind) && componentContributions.filter(item => item.type === 'media.contextAction').map(item => <button key={`${item.componentId}:${item.contributionId}`} className="project-menu-item" onClick={() => { const scope = mediaContributionScope(fileMenuEntries, fileMenu.entry, pageId, componentContentKind)!; setFileMenu(null); window.dispatchEvent(new CustomEvent('photoflow:open-component-contribution', { detail: { contribution: item, scope } })); }}><Plus size={14}/>{item.label}</button>)}
-        {componentContributions.filter(item => item.type === 'project.contextAction' && !item.placement).map(item => <button key={`${item.componentId}:${item.contributionId}`} className="project-menu-item" onClick={() => { const scope = projectContributionScope(currentRelativePath, pageId, fileMenuEntries.map(entry => entry.relativePath), componentContentKind); setFileMenu(null); window.dispatchEvent(new CustomEvent('photoflow:open-component-contribution', { detail: { contribution: item, scope } })); }}><Plus size={14}/>{item.label}</button>)}
+        {componentContributions.filter(item => (item.type === 'project.contextAction' && !item.placement || item.type === 'component.sidePanel' && item.contextMenu === 'root') && item.contextMenu !== 'none' && !finalViewOpen && fileMenuHasSafeToolSelection && componentContributionAcceptsSelection(item, fileMenuEntries)).map(item => <button key={`${item.componentId}:${item.contributionId}`} className="project-menu-item" onClick={() => { const scope = projectContributionScope(currentRelativePath, pageId, fileMenuEntries.map(entry => entry.relativePath), componentContentKind); setFileMenu(null); window.dispatchEvent(new CustomEvent('photoflow:open-component-contribution', { detail: { contribution: item, scope } })); }}><Plus size={14}/>{item.label}</button>)}
         {!isFolderLikeEntry(fileMenu.entry) && <button className="project-menu-item" onClick={() => { const entry = fileMenu.entry; setFileMenu(null); void openProjectEntry(entry); }}><ExternalLink size={14}/>{fileMenu.entry.kind === 'shortcut' ? t("ui.open.shortcut.7219d6") : t("ui.open.with.default.application.765f99")}</button>}
 
 
@@ -4770,7 +4721,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
       {surfaceMenu && createPortal(<ViewportContextMenu x={surfaceMenu.x} y={surfaceMenu.y} widthClass="w-56" allowSubmenus>
         {surfaceMenu.kind === 'version-tree-layout' && <><button type="button" title={t("ui.reset.version.tree.layout.025556")} className="project-menu-item" onClick={() => void restoreStandardVersionTreeLayout()}><RefreshCw size={14}/>{t("ui.refresh.aee887")}</button><div className="my-1 border-t border-slate-100"/></>}
         <p className="truncate px-2 py-1 text-[11px] font-bold text-slate-400" title={surfaceMenu.targetLabel}>{t("message.2e7b7dc0ffed", { value0: surfaceMenu.targetLabel })}</p>
-        {componentContributions.filter(item => item.type === 'project.contextAction' && !item.placement).map(item => <button key={`${item.componentId}:${item.contributionId}`} className="project-menu-item" onClick={() => { const scope = projectContributionScope(surfaceMenu.targetRelativePath, pageId, [], componentContentKind); setSurfaceMenu(null); window.dispatchEvent(new CustomEvent('photoflow:open-component-contribution', { detail: { contribution: item, scope } })); }}><Plus size={14}/>{item.label}</button>)}
+        {componentContributions.filter(item => item.type === 'project.contextAction' && !item.placement && item.contextMenu !== 'none' && componentContributionAcceptsSelection(item, [])).map(item => <button key={`${item.componentId}:${item.contributionId}`} className="project-menu-item" onClick={() => { const scope = projectContributionScope(surfaceMenu.targetRelativePath, pageId, [], componentContentKind); setSurfaceMenu(null); window.dispatchEvent(new CustomEvent('photoflow:open-component-contribution', { detail: { contribution: item, scope } })); }}><Plus size={14}/>{item.label}</button>)}
         <ViewportSubmenu><button aria-haspopup="menu" aria-expanded={false} className="project-menu-item w-full"><FolderPlus size={14}/>{t("ui.new.50ef2f")}<span className="ml-auto">›</span></button><div className="z-[302] w-72 rounded-lg border border-slate-200 bg-white p-1 shadow-xl transition">{projectWorkflows && !recursiveFlatOpen && <button className="project-menu-item" onClick={() => { setSurfaceMenu(null); void openProgressSetup('create'); }}><FolderPlus size={14}/>{t("ui.new.progress.49a246")}</button>}<button className="project-menu-item" onClick={() => { const target = surfaceMenu.targetRelativePath; setSurfaceMenu(null); void createFolder(target); }}><Folder size={14}/>{t("ui.new.folder.84244a")}</button><div className="my-1 border-t border-slate-100"/><div className="flex items-center justify-between px-2 pb-1 pt-1"><p className="text-[11px] font-bold text-slate-400">{t("ui.windows.file.types.1a54aa")}</p><button type="button" title={t("ui.rescan.windows.new.file.types.37255a")} disabled={shellNewTypesLoading} onClick={() => void loadShellNewTypes(true)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><RefreshCw size={12} className={shellNewTypesLoading ? 'animate-spin' : ''}/></button></div><div className="max-h-72 overflow-y-auto">{shellNewTypesLoading && <p className="px-2 py-2 text-xs text-slate-400">{t("ui.loading.the.system.new.menu.fa28a4")}</p>}{!shellNewTypesLoading && shellNewTypes.map(type => <button key={type.id} className="project-menu-item" onClick={() => { const target = surfaceMenu.targetRelativePath; setSurfaceMenu(null); void createShellNewFile(type, target); }}>{type.iconDataUrl ? <img src={type.iconDataUrl} alt="" className="h-4 w-4 shrink-0 object-contain"/> : <File size={14} className="shrink-0"/>}<span className="min-w-0 flex-1 truncate">{type.label}</span><span className="ml-auto shrink-0 font-mono text-[10px] text-slate-400">{type.extension}</span></button>)}{!shellNewTypesLoading && shellNewTypesLoaded && !shellNewTypes.length && <p className="px-2 py-2 text-xs text-slate-400">{t("ui.no.new.file.types.are.available.83a126")}</p>}</div></div></ViewportSubmenu>
         <ViewportSubmenu><button aria-haspopup="menu" aria-expanded={false} className="project-menu-item w-full"><FolderInput size={14}/>{t("ui.import.576d81")}<span className="ml-auto">›</span></button><div className="z-[302] w-52 rounded-lg border border-slate-200 bg-white p-1 shadow-xl transition">{projectWorkflows && <button className="project-menu-item" onClick={() => { setSurfaceMenu(null); setPanel('import'); }}><MemoryStick size={14}/>{t("ui.import.from.sd.card.48ca18")}</button>}<button className="project-menu-item" onClick={() => { const target = surfaceMenu.targetRelativePath; setSurfaceMenu(null); openManualImport(projectWorkflows ? 'original' : 'files', [], target); }}><FolderInput size={14}/>{t("ui.import.576d81")}</button>{componentContributions.filter(item => item.type === 'project.importProvider').map(item => <button key={`${item.componentId}:${item.contributionId}`} className="project-menu-item" onClick={() => { const scopeRelativePath = surfaceMenu.targetRelativePath; setSurfaceMenu(null); window.dispatchEvent(new CustomEvent('photoflow:open-component-contribution', { detail: { contribution: item, scope: { scopeRelativePath, selectedRelativePaths: [], sourcePageId: pageId, contentKind: componentContentKind } } })); }}><FolderInput size={14}/>{item.label}</button>)}</div></ViewportSubmenu>
         {componentContributions.filter(item => item.type === 'project.exportProvider').map(item => <button key={`${item.componentId}:${item.contributionId}`} className="project-menu-item" onClick={() => { const scopeRelativePath = surfaceMenu.targetRelativePath; setSurfaceMenu(null); window.dispatchEvent(new CustomEvent('photoflow:open-component-contribution', { detail: { contribution: item, scope: { scopeRelativePath, selectedRelativePaths: [], sourcePageId: pageId, contentKind: componentContentKind } } })); }}><ExternalLink size={14}/>{item.label}</button>)}
@@ -4799,7 +4750,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
           {projectWorkflows && <ProjectStatusMenu open={showStatusMenu && active && !(versionTreeOpen && versionTreeHeaderCollapsed)} status={project.status} statuses={projectStatuses} onOpenChange={setShowStatusMenu} onSelect={moveStatus}/>}
         </div>
         <WorkspacePanelDragSpace id="files" label={t("ui.folder.7c7802")}/>
-        <div className="flex items-center gap-2"><button onClick={() => openFolder()} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><ExternalLink size={16}/>{t("message.544115d7220f", { value0: browserContext.title })}</button>{projectWorkflows && <button onClick={() => setConfirmDelete(true)} title={t("ui.delete.project.f6dc6a")} className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 text-red-500 hover:bg-red-50"><Trash2 size={16}/></button>}</div>
+        <div className="flex items-center gap-2"><button type="button" onClick={() => openFolder()} title={t("message.544115d7220f", { value0: browserContext.title })} aria-label={t("message.544115d7220f", { value0: browserContext.title })} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"><ExternalLink size={16} aria-hidden="true"/></button>{projectWorkflows && <button onClick={() => setConfirmDelete(true)} title={t("ui.delete.project.f6dc6a")} className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 text-red-500 hover:bg-red-50"><Trash2 size={16}/></button>}</div>
       </div>
       </div>
       </div>
@@ -5243,7 +5194,7 @@ const FileBrowserWorkspace = ({ pageId, active, activeView, project, workspacePa
 
       </div>
       {componentPanels.panels.map(contribution => { const id = componentWorkspacePanelId(contribution.componentId, contribution.contributionId); const control = componentPanels.controls[id]!; return <ComponentFolderPanelSurface key={id} contribution={contribution} project={project} workspacePath={componentWorkspacePath} scope={{ scopeRelativePath: currentRelativePath, selectedRelativePaths, sourcePageId: pageId, contentKind: componentContentKind }} active={active && activeView === 'project'} open={control.open} pinned={control.pinned} width={displayedColumnWidths[id]} order={panelOrder.indexOf(id) * 2} onClose={() => control.setOpen(false)} onTogglePinned={() => control.setPinned(!control.pinned)}/>; })}
-      {previewPaneOpen && active && activeView === 'project' && <><MediaPreviewPane previewContext={{ workspacePath: componentWorkspacePath, projectId: project.id, projectName: project.name, projectStatus: project.status, scopeRelativePath: currentRelativePath, sourcePageId: pageId, contentKind: componentContentKind }} decoder={previewEntry ? decoderForFile(previewDecoders, previewEntry.name) : undefined} panelOrder={panelOrder.indexOf('preview') * 2} onSelectImage={() => void selectPreviewImage()} selectionAvailable={previewSelectionAvailable} selectionBusy={previewSelectionBusy} entry={previewEntry} cacheConfig={mediaCacheConfig} width={displayedColumnWidths.preview} pinned={previewPanePinned} keyboardSettings={videoPlaybackSettings} videoTrimExportMode={videoTools.trim.exportMode} videoTrimAvailable={videoToolsAvailable && advancedVideoPlaybackAvailable} photoshopAvailable={photoshopAvailable} ratingAvailable={previewCanMarkFinal} rating={previewRating} ratingMode={favoriteDisplayMode} ratingLoading={previewRatingLoading} ratingBusy={previewRatingBusy} onChangeRating={rating => void updatePreviewRating(rating)} onTogglePinned={togglePreviewPanePinned} onTechnicalMetadata={setPreviewTechnicalMetadata} onNavigate={navigatePreviewMedia} onContextMenu={event => previewEntry && openFileMenu(event, previewEntry, false)} onContextMenuAt={(x, y) => previewEntry && openFileMenuAt(x, y, previewEntry, false)} onAnalyzeImageCrop={analyzePreviewImageCrop} onConfirmImageCrop={savePreviewImageCrop} onTrimVideo={trimPreviewVideo} onLoadVideoTimelineFrames={loadPreviewVideoTimelineFrames} onOpen={() => previewEntry && openProjectEntry(previewEntry)} onOpenInPhotoshop={() => previewEntry && openProjectEntriesInPhotoshop([previewEntry])} onClose={closePreviewPaneByUser}/></>}
+      {previewPaneOpen && active && activeView === 'project' && <><MediaPreviewPane previewPlugin={previewEntry ? previewPluginForEntry(previewEntry) : undefined} previewContext={{ workspacePath: componentWorkspacePath, projectId: project.id, projectName: project.name, projectStatus: project.status, scopeRelativePath: currentRelativePath, sourcePageId: pageId, contentKind: componentContentKind }} decoder={previewEntry ? decoderForFile(previewDecoders, previewEntry.name) : undefined} panelOrder={panelOrder.indexOf('preview') * 2} onSelectImage={() => void selectPreviewImage()} selectionAvailable={previewSelectionAvailable} selectionBusy={previewSelectionBusy} entry={previewEntry} cacheConfig={mediaCacheConfig} width={displayedColumnWidths.preview} pinned={previewPanePinned} keyboardSettings={videoPlaybackSettings} videoTrimExportMode={videoTools.trim.exportMode} videoTrimAvailable={videoToolsAvailable && advancedVideoPlaybackAvailable} photoshopAvailable={photoshopAvailable} ratingAvailable={previewCanMarkFinal} rating={previewRating} ratingMode={favoriteDisplayMode} ratingLoading={previewRatingLoading} ratingBusy={previewRatingBusy} onChangeRating={rating => void updatePreviewRating(rating)} onTogglePinned={togglePreviewPanePinned} onTechnicalMetadata={setPreviewTechnicalMetadata} onNavigate={navigatePreviewMedia} onContextMenu={event => previewEntry && openFileMenu(event, previewEntry, false)} onContextMenuAt={(x, y) => previewEntry && openFileMenuAt(x, y, previewEntry, false)} onAnalyzeImageCrop={analyzePreviewImageCrop} onConfirmImageCrop={savePreviewImageCrop} onTrimVideo={trimPreviewVideo} onLoadVideoTimelineFrames={loadPreviewVideoTimelineFrames} onOpen={() => previewEntry && openProjectEntry(previewEntry)} onOpenInPhotoshop={() => previewEntry && openProjectEntriesInPhotoshop([previewEntry])} onClose={closePreviewPaneByUser}/></>}
       {metadataPaneOpen && <><FileMetadataPane panelOrder={panelOrder.indexOf('metadata') * 2} entry={focusedEntry} selectedEntries={selectedEntries} selectionEntryDetails={selectionEntryDetails} selectionEntryDetailsLoading={selectionEntryDetailsLoading} entryDetails={previewEntryDetails} metadataFields={currentPreviewMetadataFields} metadataLoading={currentPreviewMetadataLoading} metadataError={currentPreviewMetadataError} technicalMetadata={focusedEntry?.relativePath === previewEntry?.relativePath ? previewTechnicalMetadata : EMPTY_PREVIEW_TECHNICAL_METADATA} formatFileSize={formatFileSize} width={displayedColumnWidths.metadata} pinned={metadataPanePinned} onTogglePinned={toggleMetadataPanePinned} onOpen={() => focusedEntry && openProjectEntry(focusedEntry, true)} onCopyPath={() => copyEntryPaths(selectedEntries.length > 1 ? selectedEntries : focusedEntry ? [focusedEntry] : [])} onClose={closeMetadataPaneByUser}/></>}
       </WorkspaceDockLayout>
 

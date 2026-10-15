@@ -625,6 +625,17 @@
                   "pageId": {
                     "$ref": "#/$defs/id"
                   },
+                  "contextMenu": { "enum": ["root", "group", "none"] },
+                  "selection": {
+                    "type": "object", "additionalProperties": false,
+                    "properties": {
+                      "minCount": { "type": "integer", "minimum": 0, "maximum": 2000 },
+                      "maxCount": { "type": "integer", "minimum": 0, "maximum": 2000 },
+                      "kinds": { "type": "array", "minItems": 1, "maxItems": 6, "uniqueItems": true, "items": { "enum": ["folder", "image", "raw", "video", "file", "shortcut"] } },
+                      "extensions": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "pattern": "^\\.[a-z0-9]{1,16}$" } },
+                      "excludedExtensions": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "pattern": "^\\.[a-z0-9]{1,16}$" } }
+                    }
+                  },
                   "placement": {
                     "enum": [
                       "workspace.videoTools",

@@ -155,6 +155,7 @@ class ComponentViewManager {
     this.instancesById = new Map();
     this.panelWindows = new Map();
     this.senderBindings = new Map();
+    this.closingSenders = new WeakSet();
     this.rpcMethods = new Map();
     this.resolvedTheme = 'light';
     this.resolvedLocale = applicationLocalization.getLocale();
@@ -226,6 +227,9 @@ class ComponentViewManager {
     });
     this.ipcMain.handle('component-sdk:rpc', (event, method, payload) => {
       const instance = this.senderBindings.get(event.sender.id);
+      // Teardown may send a final player-stop RPC after close revoked the binding.
+      // Return a cancellation to that exact former sender without running a service.
+      if (!instance && this.closingSenders.has(event.sender)) return { __photoflowComponentError: { code: 'COMPONENT_VIEW_CLOSED', message: '组件页面已关闭' } };
       if (!instance || instance.view.webContents !== event.sender) throw new Error('Unauthorized component sender');
       const normalizedMethod = String(method || '');
       if (instance.context.surface === 'application.settings') {
@@ -355,7 +359,7 @@ class ComponentViewManager {
     const result = await this.capabilityBroker.invoke(descriptor, 'component.settings', { action: 'merge', settings: patch }, this.declarativeSettingsContext(descriptor));
     return { revision: Number(result.revision) || 0, values: normalizeComponentSettingsFormValues(contribution.form, result.settings) };
   }
-  listContributions() { return this.registry.list().flatMap(item => (item.contributions || []).map(contribution => ({ componentId: item.componentId, componentVersion: item.componentVersion, contributionId: contribution.id, type: contribution.type, label: contribution.label, title: contribution.title, ...(contribution.description ? { description: contribution.description } : {}), pageId: contribution.pageId, rpcMethods: contribution.rpcMethods, ...(contribution.placement ? { placement: contribution.placement } : {}), ...(item.icon ? { iconUrl: `photoflow-component://icon/${encodeURIComponent(item.componentId)}?v=${encodeURIComponent(item.componentVersion)}` } : {}) }))); }
+  listContributions() { return this.registry.list().flatMap(item => (item.contributions || []).map(contribution => ({ componentId: item.componentId, componentVersion: item.componentVersion, contributionId: contribution.id, type: contribution.type, label: contribution.label, title: contribution.title, ...(contribution.description ? { description: contribution.description } : {}), pageId: contribution.pageId, rpcMethods: contribution.rpcMethods, ...(contribution.placement ? { placement: contribution.placement } : {}), ...(contribution.selection ? { selection: contribution.selection } : {}), ...(contribution.contextMenu ? { contextMenu: contribution.contextMenu } : {}), ...(item.icon ? { iconUrl: `photoflow-component://icon/${encodeURIComponent(item.componentId)}?v=${encodeURIComponent(item.componentVersion)}` } : {}) }))); }
 
   async open(request) {
     return this.openSurface(request, 'project');
@@ -848,6 +852,7 @@ class ComponentViewManager {
     if (this.instances.get(instance.key) === instance) this.instances.delete(instance.key);
     if (this.instancesById.get(instanceId) === instance) this.instancesById.delete(instanceId);
     if (instance.hostState.activeInstanceId === instanceId) instance.hostState.activeInstanceId = '';
+    this.closingSenders.add(instance.view.webContents);
     this.senderBindings.delete(instance.view.webContents.id);
     try { instance.host.contentView.removeChildView(instance.view); } catch { /* already detached */ }
     if (!instance.view.webContents.isDestroyed()) instance.view.webContents.close({ waitForBeforeUnload: false });

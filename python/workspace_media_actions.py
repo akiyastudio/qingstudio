@@ -44,7 +44,13 @@ def directory_identity(path: str):
 def canonical_path(value: str) -> str:
     # Preserve the user's path casing for display. Case-insensitive matching is
     # handled separately by `file_path_key`, never by the visible path value.
-    return os.path.normpath(os.path.abspath(value))
+    normalized = os.path.normpath(os.path.abspath(value))
+    if os.name == "nt":
+        if normalized.casefold().startswith("\\\\?\\unc\\"):
+            normalized = "\\\\" + normalized[8:]
+        elif normalized.startswith("\\\\?\\") and len(normalized) >= 7 and normalized[5:7] == ":\\":
+            normalized = normalized[4:]
+    return normalized
 
 def is_project_descendant(candidate_path: str, project_path: str) -> bool:
     """Return True only for an existing path strictly inside the project."""

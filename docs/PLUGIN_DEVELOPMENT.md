@@ -4,6 +4,9 @@ English | [简体中文](PLUGIN_DEVELOPMENT.zh-CN.md)
 
 PhotoFlow calls optional extension packages **components**. This filename retains “Plugin” for discoverability. New packages use Component Host V2 and must not import the host React renderer or Electron main-process code.
 
+
+See the Host API [selection filters](PLUGIN_HOST_API.md#file-menu-selection-filters) for selection/contextMenu. Stage maxBytes accepts 1 byte–64 GiB (default 2 GiB). After interruption, query project.output status with the original idempotencyKey before recovering or retrying.
+
 ## Quick start
 
 For persistent subtitle panels, tracking current video, subtitle seeking, or previews of arbitrary extensions, use the [preview API](PLUGIN_PREVIEW_API.md). A non-media file with an installed matching decoder opens in the preview pane on ordinary click.

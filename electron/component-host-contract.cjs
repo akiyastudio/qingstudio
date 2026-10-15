@@ -267,15 +267,27 @@ const parseComponentHostManifest = (manifest, componentRoot, developmentFiles = 
       }
       settingsForms.push(Object.freeze({ type: raw.type, id, label, title: raw.title === undefined ? label : requiredExactStringText(raw.title, 'settings form title'), form: parseComponentSettingsForm(raw.form), customPage }));
     } else {
-      rejectUnknownFields(raw, ['type', 'id', 'label', 'title', 'description', 'pageId', 'rpcMethods', 'placement'], `${raw.type} contribution`);
+      rejectUnknownFields(raw, ['type', 'id', 'label', 'title', 'description', 'pageId', 'rpcMethods', 'placement', 'selection', 'contextMenu'], `${raw.type} contribution`);
       const label = requiredExactStringText(raw.label, `${raw.type} label`, 80); const pageId = requiredExactId(raw.pageId, `${raw.type} pageId`);
       const description = raw.description === undefined ? '' : requiredExactStringText(raw.description, `${raw.type} description`, 240);
       const placement = raw.placement === undefined ? '' : requiredExactStringText(raw.placement, `${raw.type} placement`, 80);
       if (placement && !(['workspace.videoTools', 'workspace.imageTools', 'workspace.officeTools'].includes(placement) && ['component.sidePanel', 'project.contextAction'].includes(raw.type) || placement === 'workspace.folderPanel' && raw.type === 'component.sidePanel')) throw new Error(`Invalid ${raw.type} placement`);
+      if (raw.contextMenu !== undefined && (!['root', 'group', 'none'].includes(raw.contextMenu) || !['component.sidePanel', 'project.contextAction'].includes(raw.type) || placement === 'workspace.folderPanel')) throw new Error('Invalid contribution contextMenu');
+      let selection;
+      if (raw.selection !== undefined) {
+        const filter = raw.selection;
+        if (!filter || typeof filter !== 'object' || Array.isArray(filter)) throw new Error('Invalid contribution selection');
+        rejectUnknownFields(filter, ['minCount', 'maxCount', 'kinds', 'extensions', 'excludedExtensions'], 'contribution selection');
+        for (const field of ['minCount', 'maxCount']) if (filter[field] !== undefined && (!Number.isInteger(filter[field]) || filter[field] < 0 || filter[field] > 2000)) throw new Error('Invalid selection count');
+        if ((filter.minCount ?? 0) > (filter.maxCount ?? 2000)) throw new Error('Invalid selection count range');
+        if (filter.kinds !== undefined && (!Array.isArray(filter.kinds) || !filter.kinds.length || filter.kinds.length > 7 || filter.kinds.some(kind => !['folder', 'image', 'raw', 'video', 'file', 'shortcut'].includes(kind)) || new Set(filter.kinds).size !== filter.kinds.length)) throw new Error('Invalid selection kinds');
+        for (const field of ['extensions', 'excludedExtensions']) if (filter[field] !== undefined && (!Array.isArray(filter[field]) || !filter[field].length || filter[field].length > 64 || filter[field].some(extension => typeof extension !== 'string' || !/^\.[a-z0-9]{1,16}$/.test(extension)) || new Set(filter[field]).size !== filter[field].length)) throw new Error('Invalid selection extensions');
+        selection = Object.freeze({ ...filter });
+      }
       if (!Array.isArray(raw.rpcMethods) || raw.rpcMethods.length < 1 || raw.rpcMethods.length > 128) throw new Error(`${raw.type} RPC methods must be a bounded allowlist (1-128)`);
       const rpcMethods = raw.rpcMethods.map(method => requiredExactStringText(method, `${raw.type} RPC method`, 128));
       if (new Set(rpcMethods).size !== rpcMethods.length || rpcMethods.some(method => !VERSIONED_METHOD.test(method))) throw new Error(`${raw.type} RPC methods must be unique versioned methods`);
-      hostContributions.push(Object.freeze({ type: raw.type, id, label, title: raw.title === undefined ? label : requiredExactStringText(raw.title, `${raw.type} title`, 160), ...(description ? { description } : {}), pageId, rpcMethods: Object.freeze(rpcMethods), ...(placement ? { placement } : {}) }));
+      hostContributions.push(Object.freeze({ type: raw.type, id, label, title: raw.title === undefined ? label : requiredExactStringText(raw.title, `${raw.type} title`, 160), ...(description ? { description } : {}), pageId, rpcMethods: Object.freeze(rpcMethods), ...(placement ? { placement } : {}), ...(selection ? { selection } : {}), ...(raw.contextMenu ? { contextMenu: raw.contextMenu } : {}) }));
     }
   }
   if (settingsPages.length + settingsForms.length > 16) throw new Error('Component settings contributions must be bounded');

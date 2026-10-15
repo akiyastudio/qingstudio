@@ -4,6 +4,9 @@
 
 PhotoFlow 把可选扩展包称为 **组件（Component）**。文件名保留“Plugin”便于检索；新包必须使用 Component Host V2，并且不能导入 PhotoFlow 的 React 渲染层或 Electron 主进程代码。
 
+
+菜单的 selection/contextMenu 见 [Host API 文件菜单筛选](PLUGIN_HOST_API.zh-CN.md#文件菜单筛选)。stage 可设置 maxBytes（1 字节至 64 GiB，默认 2 GiB）；中断后先用原幂等键查询 project.output status，再恢复或重试。
+
 ## 快速开始
 
 需要字幕常驻面板、跟随当前视频、点击字幕跳转，或为任意后缀文件提供预览时，使用 [预览扩展 API](PLUGIN_PREVIEW_API.zh-CN.md)。非媒体文件安装匹配解码器后，普通点击会进入预览窗口。

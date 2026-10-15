@@ -401,7 +401,8 @@ export const progressRelationChangeError = (folders: ProgressFolder[], childId: 
   if (childId === parentId) return '节点不能连接到自己';
   if (parent.mediaKind !== child.mediaKind) return '父子节点媒体类型不一致';
   if (parent.nodeRole === 'selection' || parent.relationKind === 'auxiliary') return '不能挂到选片或附属分支下';
-  if (versionSourceMetadata(parent).parentCapability !== 'structural') return '所选来源不能作为结构父版本';
+  const companionSelectionSource = child.nodeRole === 'selection' && parent.nodeRole === 'original' && parent.artifactKind === 'companion';
+  if (!companionSelectionSource && versionSourceMetadata(parent).parentCapability !== 'structural') return '所选来源不能作为结构父版本';
   let cursor: ProgressFolder | undefined = parent;
   const visited = new Set<string>();
   while (cursor?.parentProgressId && !visited.has(cursor.id)) {

@@ -17,6 +17,7 @@ const { PLUGIN_DEFINITIONS } = require('../plugins/plugin-catalog.cjs');
 const { validateComponentPackageInspection } = require('../component-registry.cjs');
 const { requestAppConfirmation } = require('../services/app-dialog-confirmation.cjs');
 const { requestComponentInstallConfirmation } = require('../services/component-install-confirmation.cjs');
+const { createCloudPluginCatalogService } = require('../services/cloud-plugin-catalog-service.cjs');
 
 const normalizeSdImportAutoMove = value => value !== false;
 const copyComponentIntoStaging = async (fsApi, pathApi, source, staging) => {
@@ -829,6 +830,8 @@ const registerSystemIpc = context => {
   });
 
   ipcMain.handle('check-for-updates', async () => checkForUpdates());
+  const cloudPluginCatalog = createCloudPluginCatalogService(require('../cloud-config.cjs'));
+  ipcMain.handle('get-plugin-catalog', async () => cloudPluginCatalog.list());
   ipcMain.handle('submit-feedback', async (_event, message) => telemetryService.submitFeedback(message));
 
   ipcMain.handle('set-theme', async (_event, theme) => {

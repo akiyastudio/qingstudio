@@ -138,6 +138,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   openExternal: (url) => ipcRenderer.send('open-external', url),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  getPluginCatalog: () => ipcRenderer.invoke('get-plugin-catalog'),
   submitFeedback: (message) => ipcRenderer.invoke('submit-feedback', message),
   getComponents: (force = false) => ipcRenderer.invoke('components-list', force),
   getComponentHostActions: () => ipcRenderer.invoke('component-host-list'),

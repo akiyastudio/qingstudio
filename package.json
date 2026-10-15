@@ -3,7 +3,7 @@
   "productName": "照片流开源版",
   "private": true,
   "license": "Apache-2.0",
-  "version": "26.10.10.1",
+  "version": "26.10.15.1",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -27,7 +27,7 @@
     "preelectron:dev": "node scripts/build-host-player.cjs && node scripts/prepare-development-python.cjs && npm run prepare:components:dev",
     "build:native": "npm run build:shell-thumbnail && npm run build:recycle-bin-service && npm run build:file-clipboard-service && npm run build:file-publication-service && npm run build:video-surface-host && npm run build:job-object-launcher",
     "electron:build": "npm run generate:icon && npm run build && npm run build:python && npm run build:native && node scripts/build-electron.cjs",
-    "test": "node scripts/test-public-source.cjs && node scripts/test-file-publication-platform.cjs && node scripts/test-component-status-refresh-policy.cjs && npm run test:examples && npm run test:recent",
+    "test": "node scripts/test-public-source.cjs && node scripts/test-file-publication-platform.cjs && node scripts/test-component-status-refresh-policy.cjs && npm run test:examples && npm run test:recent && npm run test:updates",
     "test:smoke": "node scripts/test-public-smoke.cjs",
     "test:examples": "node scripts/test-component-examples.cjs && node scripts/mock-component-service.cjs examples/hello-component/service.cjs",
     "prepare:components:dev": "node scripts/prepare-development-components.cjs",
@@ -35,7 +35,9 @@
     "test:preview": "node scripts/test-component-preview-api.cjs && node scripts/test-component-dynamic-preview.cjs && node scripts/test-live-photo-playback.mjs",
     "test:host-player": "node scripts/build-host-player.cjs && node scripts/test-component-media-protocol.cjs && node node_modules/electron/cli.js scripts/test-host-player-ui.cjs",
     "test:recent": "node scripts/test-component-panel-window.cjs && node scripts/test-directory-refresh.cjs && node scripts/test-parentless-version-panel.cjs && node scripts/test-remove-project-reference.cjs && node scripts/test-selection-project-paths.cjs && node scripts/test-tool-modal-busy-session.cjs && node scripts/test-watch-file-root-watcher-service.cjs && node scripts/test-versioning-v2-model.cjs && node scripts/test-video-transcode-model.mjs",
-    "test:database": ".venv\\Scripts\\python.exe scripts/test-versioning-v2-db.py && .venv\\Scripts\\python.exe scripts/test-external-project-catalog.py && .venv\\Scripts\\python.exe scripts/test-data-maintenance.py"
+    "test:database": ".venv\\Scripts\\python.exe scripts/test-versioning-v2-db.py && .venv\\Scripts\\python.exe scripts/test-external-project-catalog.py && .venv\\Scripts\\python.exe scripts/test-data-maintenance.py && .venv\\Scripts\\python.exe scripts/test-batch-numbered-workflow.py && .venv\\Scripts\\python.exe scripts/test-batch-rename-conflicts.py",
+    "test:updates": "node scripts/test-component-host-api.cjs && node scripts/test-component-selection-menu.cjs && node scripts/test-component-output-rollback-scope.cjs && node scripts/test-component-rpc-close.cjs && node scripts/test-cloud-plugin-catalog.cjs && node scripts/test-taskbar-progress.cjs && node scripts/test-project-rating-filter-model.cjs && node scripts/test-folder-cover-selection.cjs && node scripts/test-batch-rename-preferences.cjs && node scripts/test-media-rating-performance.cjs && node scripts/test-media-rating-exiftool.cjs && node scripts/test-paste-batch-conflicts.cjs && node scripts/test-photoshop-open.cjs && node scripts/test-version-tree-layout-model.cjs",
+    "test:clipboard": "npm run build:file-clipboard-service && node scripts/test-file-clipboard-service.cjs && node scripts/test-file-clipboard-lifecycle.cjs"
   },
   "build": {
     "appId": "cn.qingstudio.opensource",
